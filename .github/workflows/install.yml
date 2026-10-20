@@ -12,6 +12,7 @@ on:
       - "tools/ci/install.py"
       - "tools/ci/gen_resource_hash.py"
       - "tools/ci/mine_apk_version.py"
+      - "tools/ci/iqoo16_manifest.py"
       - "agent/**"
       - "resource/**"
       - "tasks/**"
@@ -29,6 +30,7 @@ on:
       - "tools/ci/install.py"
       - "tools/ci/gen_resource_hash.py"
       - "tools/ci/mine_apk_version.py"
+      - "tools/ci/iqoo16_manifest.py"
       - "agent/**"
       - "resource/**"
       - "tasks/**"
@@ -538,6 +540,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    concurrency:
+      group: mine-apk-${{ needs.meta.outputs.tag }}
+      cancel-in-progress: false
     steps:
       - uses: actions/download-artifact@v7
         with:
@@ -563,6 +568,72 @@ jobs:
           make_latest: false
           files: android-dist/*.apk
           fail_on_unmatched_files: true
+          # https://github.com/softprops/action-gh-release#inputs — a rerun must
+          # reuse the published bytes; changing them would invalidate an existing Pages digest.
+          overwrite_files: false
+
+  iqoo16_pages:
+    name: Deploy iQOO 16 update manifest
+    if: ${{ github.repository == 'nivranic/MAA_Punish' && github.ref == 'refs/heads/mine' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    needs: [meta, mine_apk_release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    # The group covers collection through deployment. Each run chooses the highest
+    # published version again, so a late old build cannot replace a newer manifest.
+    concurrency:
+      group: iqoo16-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Collect authenticated Release metadata and generate manifest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUIRED_TAG: mine-${{ needs.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp \
+            "/repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            > "$RUNNER_TEMP/iqoo16-releases.json"
+          status=$(curl --silent --show-error --location --max-time 60 \
+            --header 'Cache-Control: no-cache' \
+            --output "$RUNNER_TEMP/iqoo16-previous.json" --write-out '%{http_code}' \
+            "https://nivranic.github.io/MAA_Punish/iqoo16/latest.json?run=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT")
+          previous=()
+          if [[ "$status" == '200' ]]; then
+            previous=(--previous "$RUNNER_TEMP/iqoo16-previous.json")
+          elif [[ "$status" != '404' ]]; then
+            echo "Cannot verify the previous Pages manifest (HTTP $status); preserving the existing deployment." >&2
+            exit 1
+          fi
+          python tools/ci/iqoo16_manifest.py \
+            --releases "$RUNNER_TEMP/iqoo16-releases.json" \
+            --required-tag "$REQUIRED_TAG" "${previous[@]}" \
+            --output pages-dist/iqoo16/latest.json
+
+      # Official Pages OIDC workflow: permissions and github-pages environment are required.
+      # https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: pages-dist
+
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 
   release:
     if: ${{ needs.meta.outputs.is_release == 'true' }}

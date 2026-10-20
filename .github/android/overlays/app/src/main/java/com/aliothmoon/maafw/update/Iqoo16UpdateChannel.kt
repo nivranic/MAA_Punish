@@ -3,6 +3,8 @@ package com.aliothmoon.maafw.update
 import io.github.z4kn4fein.semver.Version
 
 internal const val IQOO16_GITHUB_REPOSITORY = "nivranic/MAA_Punish"
+internal const val IQOO16_MANIFEST_URL = "https://nivranic.github.io/MAA_Punish/iqoo16/latest.json"
+internal const val IQOO16_APPLICATION_ID = "com.overflow65537.maafw.punish"
 
 /** Keep the stored source for the original channels; the fork uses GitHub exclusively. */
 internal fun UpdateChannel.effectiveSource(selected: UpdateSource): UpdateSource =
@@ -24,13 +26,7 @@ internal fun UpdateResolveRequest.forSelectedChannel(): UpdateResolveRequest =
     ) else this
 
 // Historical date/SHA tags did not describe the APK version and cannot be compared safely.
-private val IQOO16_TAG = Regex("""^mine-v\d+\.\d+\.\d+-iqoo\.[1-9]\d*$""")
+private val IQOO16_TAG = Regex("""^mine-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-iqoo\.[1-9][0-9]*$""")
 
 internal fun iqoo16ReleaseVersion(tag: String): Version? =
     tag.takeIf(IQOO16_TAG::matches)?.removePrefix("mine-")?.let(UpdateVersion::parse)
-
-/** Match the selected release, never another APK or desktop asset in the same release. */
-internal fun String.isIqoo16ApkFor(tag: String): Boolean {
-    val base = "MPA-android-${tag.removePrefix("mine-")}"
-    return this == "$base.apk" || this == "$base-debug.apk"
-}

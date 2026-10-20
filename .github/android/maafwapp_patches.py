@@ -21,13 +21,23 @@ PATCHES = (
     ),
     (
         KOTLIN + "update/UpdateService.kt",
+        "    clients: Collection<UpdateSourceClient>,\n",
+        "    clients: Collection<UpdateSourceClient>,\n    private val iqoo16Client: UpdateSourceClient? = null,\n",
+    ),
+    (
+        KOTLIN + "update/UpdateService.kt",
         '        val source = request.source\n        Timber.tag("UpdateCheck").i(',
         '        val selected = request.forSelectedChannel()\n        val source = selected.source\n        Timber.tag("UpdateCheck").i(',
     ),
     (
         KOTLIN + "update/UpdateService.kt",
         "return clientsBySource.getValue(source).check(request)",
-        "return clientsBySource.getValue(source).check(selected)",
+        """return if (selected.channel == UpdateChannel.IQOO16) {
+            iqoo16Client?.check(selected)
+                ?: UpdateCheckResult.SourceFailed(source, UpdateCheckFailure.MISSING_CONFIGURATION)
+        } else {
+            clientsBySource.getValue(source).check(selected)
+        }""",
     ),
     (
         KOTLIN + "update/UpdateService.kt",
@@ -35,36 +45,27 @@ PATCHES = (
         return clientsBySource.getValue(request.source).resolve(request)''',
         '''        val selected = request.forSelectedChannel()
         Timber.tag("UpdateResolve").i("source=%s channel=%s", selected.source, selected.channel)
-        return clientsBySource.getValue(selected.source).resolve(selected)''',
+        return if (selected.channel == UpdateChannel.IQOO16) {
+            iqoo16Client?.resolve(selected)
+                ?: UpdateResolveResult.Failed(selected.source, UpdateCheckFailure.MISSING_CONFIGURATION)
+        } else {
+            clientsBySource.getValue(selected.source).resolve(selected)
+        }''',
     ),
     (
-        KOTLIN + "update/GitHubUpdate.kt",
-        '''                val version = UpdateVersion.parse(candidate.tag) ?: return@mapNotNull null
-                if (!version.allowedFor(channel)) return@mapNotNull null
-                if (channel == UpdateChannel.STABLE && candidate.prerelease) return@mapNotNull null
-                val asset = selectAsset(candidate.assets, abi) ?: return@mapNotNull null''',
-        '''                val version = if (channel == UpdateChannel.IQOO16) {
-                    iqoo16ReleaseVersion(candidate.tag)
-                } else {
-                    UpdateVersion.parse(candidate.tag)
-                } ?: return@mapNotNull null
-                if (!version.allowedFor(channel)) return@mapNotNull null
-                if (channel == UpdateChannel.STABLE && candidate.prerelease) return@mapNotNull null
-                val assets = if (channel == UpdateChannel.IQOO16) {
-                    candidate.assets.filter { it.name.isIqoo16ApkFor(candidate.tag) }
-                } else {
-                    candidate.assets
-                }
-                val asset = selectAsset(assets, abi) ?: return@mapNotNull null''',
+        "app/src/main/java/com/aliothmoon/maafw/di/UpdateModule.kt",
+        "import com.aliothmoon.maafw.update.GitHubUpdateClient\n",
+        "import com.aliothmoon.maafw.update.GitHubUpdateClient\nimport com.aliothmoon.maafw.update.Iqoo16StaticUpdateClient\n",
     ),
     (
-        KOTLIN + "update/GitHubUpdate.kt",
-        '''    ): Pair<MirrorChyanLatestApi.Latest, Version>? {
-        val latest = mirrorRelease(rid, channel, abi, currentVersion) ?: return null''',
-        '''    ): Pair<MirrorChyanLatestApi.Latest, Version>? {
-        // The fork channel must never pin itself to the upstream MirrorChyan RID.
-        if (channel == UpdateChannel.IQOO16) return null
-        val latest = mirrorRelease(rid, channel, abi, currentVersion) ?: return null''',
+        "app/src/main/java/com/aliothmoon/maafw/di/UpdateModule.kt",
+        "    single { GitHubReleasesApi(get()) }\n",
+        "    single { GitHubReleasesApi(get()) }\n    single { Iqoo16StaticUpdateClient(get()) }\n",
+    ),
+    (
+        "app/src/main/java/com/aliothmoon/maafw/di/UpdateModule.kt",
+        "                get<GitHubUpdateClient>(),\n            ),\n",
+        "                get<GitHubUpdateClient>(),\n            ),\n            iqoo16Client = get<Iqoo16StaticUpdateClient>(),\n",
     ),
     (
         KOTLIN + "settings/SettingsViewModel.kt",

@@ -1,15 +1,16 @@
 package com.aliothmoon.maafw.update
 
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
+import org.junit.Assert.*
 import org.junit.Test
+import java.io.IOException
+import kotlin.coroutines.cancellation.CancellationException
 
 class Iqoo16UpdateChannelTest {
-    private val oldTag = "mine-v3.12.6-iqoo.2185"
-    private val newTag = "mine-v3.12.6-iqoo.2186"
+    private val newTag = "mine-v3.12.6-iqoo.2190"
+    private val apk = "https://github.com/nivranic/MAA_Punish/releases/download/$newTag/MPA-android-v3.12.6-iqoo.2190.apk"
 
     @Test
     fun `stored channel names and legacy requests retain their meaning`() {
@@ -26,7 +27,7 @@ class Iqoo16UpdateChannelTest {
     }
 
     @Test
-    fun `fork routing discards upstream rid and cdk without mutating original request`() {
+    fun `fork routing discards upstream rid and cdk without mutating persisted source`() {
         val check = checkRequest()
         val effective = check.forSelectedChannel()
         assertEquals(UpdateSource.GITHUB, effective.source)
@@ -35,100 +36,127 @@ class Iqoo16UpdateChannelTest {
         assertEquals(UpdateSource.MIRRORCHYAN, check.source)
         val resolved = resolveRequest().forSelectedChannel()
         assertEquals(UpdateSource.GITHUB, resolved.source)
-        assertEquals(IQOO16_GITHUB_REPOSITORY, resolved.githubRepository)
         assertNull(resolved.mirrorchyanRid)
         assertNull(resolved.mirrorchyanCdk)
     }
 
     @Test
-    fun `only the comparable mine tag format is accepted and commit identifiers order numerically`() {
-        val next = iqoo16ReleaseVersion("mine-v3.12.6-iqoo.2190")!!
+    fun `strict mine tags use real SemVer numeric ordering`() {
+        val next = iqoo16ReleaseVersion(newTag)!!
         assertTrue(next > iqoo16ReleaseVersion("mine-v3.12.6-iqoo.2189")!!)
         assertTrue(iqoo16ReleaseVersion("mine-v3.12.7-iqoo.2191")!! > next)
-        assertTrue(iqoo16ReleaseVersion(newTag)!! > UpdateVersion.parse("3.12.6-alpha.7")!!)
-        listOf("mine-v0.0.0-ci.261020-cb3acf9c", "v3.12.6-iqoo.2186", "mine-v3.12.6-iqoo.0", "mine-v3.12.6-iqoo.02186").forEach {
-            assertNull(it, iqoo16ReleaseVersion(it))
+        for (tag in listOf("mine-v0.0.0-ci.261020-cb3acf9c", "v3.12.6-iqoo.2190", "mine-v3.12.6-iqoo.0", "mine-v3.12.6-iqoo.02190", "mine-v03.12.6-iqoo.2190")) {
+            assertNull(tag, iqoo16ReleaseVersion(tag))
         }
-        assertNull(UpdateVersion.parse(newTag))
-        assertNull(UpdateVersion.parse("cb3acf9c"))
     }
 
     @Test
-    fun `check and resolve use fork releases without consulting mirror and select the exact apk`() = runBlocking {
-        val body = """[
-            ${release("v999.0.0", "unrelated.apk")},
-            ${release("mine-v0.0.0-ci.261020-cb3acf9c", "legacy.apk")},
-            ${release(newTag, "MPA-android-${newTag.removePrefix("mine-")}.apk")},
-            ${release(oldTag, "MPA-android-${oldTag.removePrefix("mine-")}-debug.apk")}
-        ]"""
-        val gateway = RecordingHttpClientHelper(FakeHttpResponse(200, body), FakeHttpResponse(200, body))
-        val github = GitHubUpdateClient(GitHubReleasesApi(gateway.mock)) { _, _, _, _ ->
-            error("iQOO 16 must not consult MirrorChyan")
-        }
-        val service = UpdateService(listOf(github))
+    fun `check and resolve use only Pages with mandatory digest and exact release apk`() = runBlocking {
+        val gateway = RecordingHttpClientHelper(FakeHttpResponse(200, manifest()), FakeHttpResponse(200, manifest()))
+        val service = UpdateService(emptyList(), Iqoo16StaticUpdateClient(gateway.mock, 2189))
         val result = service.check(checkRequest()) as UpdateCheckResult.UpdateAvailable
         assertEquals(UpdateSource.GITHUB, result.source)
         assertEquals(newTag, result.info.version)
+        assertEquals("https://github.com/nivranic/MAA_Punish/releases/tag/$newTag", result.info.releaseNotesUrl)
         val resolved = service.resolve(resolveRequest()) as UpdateResolveResult.Resolved
         assertEquals(newTag, resolved.update.version)
-        assertEquals("https://example.com/MPA-android-v3.12.6-iqoo.2186.apk", resolved.update.downloadUrl)
+        assertEquals(apk, resolved.update.downloadUrl)
         assertEquals("sha256:" + "a".repeat(64), resolved.update.sha256)
-        assertTrue(gateway.requests.all { it.first.startsWith("https://api.github.com/repos/nivranic/MAA_Punish/releases?") })
-        assertTrue(gateway.requests.all { "Authorization" !in it.second })
+        assertEquals(2, gateway.requests.size)
+        assertTrue(gateway.requests.all { it.first.startsWith("$IQOO16_MANIFEST_URL?t=") })
+        assertTrue(gateway.requests.all { it.second["Cache-Control"] == "no-cache" && "Authorization" !in it.second })
     }
 
     @Test
-    fun `current version and newer installed builds are not offered an older release`() = runBlocking {
-        val body = "[${release(newTag, "MPA-android-v3.12.6-iqoo.2186.apk")}]"
-        for (current in listOf("3.12.6-iqoo.2186", "3.12.6-iqoo.2187", "3.12.7-iqoo.2190")) {
-            val gateway = RecordingHttpClientHelper(FakeHttpResponse(200, body))
-            val client = GitHubUpdateClient(GitHubReleasesApi(gateway.mock))
-            assertTrue(client.check(checkRequest().forSelectedChannel().copy(currentVersion = current)) is UpdateCheckResult.UpToDate)
+    fun `missing static client and failed Pages never fall back to github or mirror`() = runBlocking {
+        val unused = object : UpdateSourceClient {
+            override val source = UpdateSource.GITHUB
+            override suspend fun check(request: UpdateCheckRequest): UpdateCheckResult = error("No REST fallback")
+            override suspend fun resolve(request: UpdateResolveRequest): UpdateResolveResult = error("No REST fallback")
+        }
+        val unconfigured = UpdateService(listOf(unused))
+        assertEquals(UpdateCheckFailure.MISSING_CONFIGURATION, (unconfigured.check(checkRequest()) as UpdateCheckResult.SourceFailed).reason)
+        assertEquals(UpdateCheckFailure.MISSING_CONFIGURATION, (unconfigured.resolve(resolveRequest()) as UpdateResolveResult.Failed).reason)
+        val gateway = RecordingHttpClientHelper(FakeHttpResponse(503, "unavailable"), FakeHttpResponse(404, "missing"))
+        val service = UpdateService(listOf(unused), Iqoo16StaticUpdateClient(gateway.mock, 2189))
+        assertEquals(UpdateCheckFailure.HTTP, (service.check(checkRequest()) as UpdateCheckResult.SourceFailed).reason)
+        assertEquals(UpdateCheckFailure.HTTP, (service.resolve(resolveRequest()) as UpdateResolveResult.Failed).reason)
+        assertEquals(2, gateway.requests.size)
+    }
+
+    @Test
+    fun `same newer or incompatible Android version code cannot download a downgrade`() = runBlocking {
+        for ((current, code) in listOf("3.12.6-iqoo.2190" to 2190, "3.12.6-iqoo.2191" to 2191, "3.12.7-iqoo.2192" to 2192, "3.12.5-iqoo.2189" to 2190)) {
+            val gateway = RecordingHttpClientHelper(FakeHttpResponse(200, manifest()), FakeHttpResponse(200, manifest()))
+            val client = Iqoo16StaticUpdateClient(gateway.mock, code)
+            assertTrue(current, client.check(checkRequest().copy(currentVersion = current)) is UpdateCheckResult.UpToDate)
+            assertTrue(current, client.resolve(resolveRequest().copy(currentVersion = current)) is UpdateResolveResult.Failed)
         }
     }
 
     @Test
-    fun `legacy hash version is rejected rather than treated as zero`() = runBlocking {
+    fun `hash current version and accidental legacy channel fail before network`() = runBlocking {
         val gateway = RecordingHttpClientHelper()
-        val result = GitHubUpdateClient(GitHubReleasesApi(gateway.mock)).check(
-            checkRequest().forSelectedChannel().copy(currentVersion = "cb3acf9c"),
-        ) as UpdateCheckResult.SourceFailed
-        assertEquals(UpdateCheckFailure.VERSION_INVALID, result.reason)
+        val client = Iqoo16StaticUpdateClient(gateway.mock, 2189)
+        assertEquals(UpdateCheckFailure.VERSION_INVALID, (client.check(checkRequest().copy(currentVersion = "cb3acf9c")) as UpdateCheckResult.SourceFailed).reason)
+        assertEquals(UpdateCheckFailure.VERSION_INVALID, (client.resolve(resolveRequest().copy(currentVersion = "cb3acf9c")) as UpdateResolveResult.Failed).reason)
+        assertEquals(UpdateCheckFailure.MISSING_CONFIGURATION, (client.check(checkRequest().copy(channel = UpdateChannel.STABLE)) as UpdateCheckResult.SourceFailed).reason)
         assertTrue(gateway.requests.isEmpty())
     }
 
     @Test
-    fun `unrelated and ambiguous apks are rejected`() {
-        val api = GitHubReleasesApi(RecordingHttpClientHelper().mock)
-        fun asset(name: String) = GitHubReleasesApi.Asset(name, "https://example.com/$name", null)
-        val wrong = GitHubReleasesApi.Release(newTag, null, null, listOf(asset("other.apk")), true)
-        assertNull(api.latestEligible(listOf(wrong), UpdateChannel.IQOO16, AndroidAbi.UNIVERSAL))
-        val ambiguous = wrong.copy(assets = listOf(asset("MPA-android-v3.12.6-iqoo.2186.apk"), asset("MPA-android-v3.12.6-iqoo.2186-debug.apk")))
-        assertNull(api.latestEligible(listOf(ambiguous), UpdateChannel.IQOO16, AndroidAbi.UNIVERSAL))
-        assertFalse("MPA-android-v3.12.6-iqoo.2185.apk".isIqoo16ApkFor(newTag))
+    fun `malformed schema package versions urls and digest fail as invalid response`() = runBlocking {
+        val good = manifest()
+        val invalid = listOf(
+            "null", "[]", "{", "<html>404</html>",
+            good.replace("\"schema_version\":1", "\"schema_version\":2"),
+            good.replace("\"schema_version\":1", "\"schema_version\":\"1\""),
+            good.replace("\"channel\":\"IQOO16\"", "\"channel\":\"BETA\""),
+            good.replace(IQOO16_APPLICATION_ID, "other.package"),
+            good.replace("\"version_code\":2190", "\"version_code\":2189"),
+            good.replace("\"version_code\":2190", "\"version_code\":\"2190\""),
+            good.replace("\"version_name\":\"3.12.6-iqoo.2190\"", "\"version_name\":\"3.12.7-iqoo.2190\""),
+            good.replace(apk, apk.replace("https:", "http:")),
+            good.replace(apk, "$apk?token=secret"),
+            good.replace(apk, apk.replace("nivranic", "someone")),
+            good.replace(apk, apk.replace(".apk", "-debug.apk")),
+            good.replace("releases/tag/", "releases/other/"),
+            good.replace("a".repeat(64), ""),
+            good.replace("a".repeat(64), "z".repeat(64)),
+            good.replace("a".repeat(64), "sha256:" + "a".repeat(64)),
+        )
+        for (body in invalid) {
+            val gateway = RecordingHttpClientHelper(FakeHttpResponse(200, body), FakeHttpResponse(200, body))
+            val client = Iqoo16StaticUpdateClient(gateway.mock, 2189)
+            assertEquals(body, UpdateCheckFailure.INVALID_RESPONSE, (client.check(checkRequest()) as UpdateCheckResult.SourceFailed).reason)
+            assertEquals(body, UpdateCheckFailure.INVALID_RESPONSE, (client.resolve(resolveRequest()) as UpdateResolveResult.Failed).reason)
+        }
     }
 
-    private fun checkRequest() = UpdateCheckRequest(
-        source = UpdateSource.MIRRORCHYAN,
-        currentVersion = "3.12.6-iqoo.2185",
-        abi = AndroidAbi.UNIVERSAL,
-        channel = UpdateChannel.IQOO16,
-        mirrorchyanRid = "upstream-rid",
-        githubRepository = "overflow65537/MAA_Punish",
-    )
+    @Test
+    fun `network errors are structured but coroutine cancellation propagates`() = runBlocking {
+        val gateway = mockk<com.aliothmoon.maafw.util.HttpClientHelper>()
+        val client = Iqoo16StaticUpdateClient(gateway, 2189)
+        coEvery { gateway.get(any(), any(), any()) } throws IOException("offline")
+        assertEquals(UpdateCheckFailure.NETWORK, (client.check(checkRequest()) as UpdateCheckResult.SourceFailed).reason)
+        assertEquals(UpdateCheckFailure.NETWORK, (client.resolve(resolveRequest()) as UpdateResolveResult.Failed).reason)
+        coEvery { gateway.get(any(), any(), any()) } throws CancellationException("cancel")
+        for (resolve in listOf(false, true)) {
+            try {
+                if (resolve) client.resolve(resolveRequest()) else client.check(checkRequest())
+                fail("Cancellation must propagate")
+            } catch (_: CancellationException) {
+                // Expected, not converted to a network error.
+            }
+        }
+    }
 
-    private fun resolveRequest() = UpdateResolveRequest(
-        source = UpdateSource.MIRRORCHYAN,
-        currentVersion = "3.12.6-iqoo.2185",
-        abi = AndroidAbi.UNIVERSAL,
-        channel = UpdateChannel.IQOO16,
-        mirrorchyanRid = "upstream-rid",
-        mirrorchyanCdk = "must-not-leak",
-        githubRepository = "overflow65537/MAA_Punish",
-    )
-
-    private fun release(tag: String, apk: String): String = """{
-      "tag_name":"$tag", "prerelease":true,
-      "assets":[{"name":"$apk","state":"uploaded","browser_download_url":"https://example.com/$apk","digest":"sha256:${"a".repeat(64)}"}]
+    private fun checkRequest() = UpdateCheckRequest(UpdateSource.MIRRORCHYAN, "3.12.6-iqoo.2189", AndroidAbi.UNIVERSAL, UpdateChannel.IQOO16, "upstream-rid", "overflow65537/MAA_Punish")
+    private fun resolveRequest() = UpdateResolveRequest(UpdateSource.MIRRORCHYAN, AndroidAbi.UNIVERSAL, "3.12.6-iqoo.2189", UpdateChannel.IQOO16, "upstream-rid", "must-not-leak", "overflow65537/MAA_Punish")
+    private fun manifest() = """{
+      "schema_version":1,"channel":"IQOO16","application_id":"$IQOO16_APPLICATION_ID",
+      "version_name":"3.12.6-iqoo.2190","version_code":2190,"release_tag":"$newTag",
+      "apk_url":"$apk","sha256":"${"a".repeat(64)}",
+      "release_url":"https://github.com/nivranic/MAA_Punish/releases/tag/$newTag"
     }"""
 }
