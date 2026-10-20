@@ -55,13 +55,47 @@ def check_badging(badging: str, expected_version: str, expected_code: int) -> No
     )
 
 
+def check_signer_output(output: str, expected_digest: str) -> str:
+    """校验 apksigner 已验证的全部签名者；不把公钥或 Source Stamp 摘要当作包签名。"""
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", expected_digest):
+        raise ValueError("期望签名证书 SHA-256 必须是 64 位十六进制")
+    # ApkSignerTool.verify: v3/v3.1 names signers by SDK range; older schemes use #N.
+    # https://android.googlesource.com/platform/tools/apksig/+/refs/heads/main/src/apksigner/java/com/android/apksigner/ApkSignerTool.java
+    signer_line = re.compile(
+        r"Signer (?:#[1-9]\d*|\(minSdkVersion=\d+(?: \(dev release=true\))?, maxSdkVersion=\d+\)(?: #[1-9]\d*)?)"
+        r" certificate SHA-256 digest: ([0-9a-fA-F]{64})"
+    )
+    digests: set[str] = set()
+    for line in output.splitlines():
+        line = line.strip()
+        if not line.startswith("Signer ") or " certificate SHA-256 digest:" not in line:
+            continue
+        match = signer_line.fullmatch(line)
+        if not match:
+            raise ValueError(f"无法严格解析 APK 签名证书摘要: {line}")
+        digests.add(match[1].lower())
+    if not digests:
+        raise ValueError("apksigner 未输出可校验的 APK 签名证书 SHA-256")
+    if digests != {expected_digest.lower()}:
+        raise ValueError(f"APK 签名证书与专用更新密钥不一致: {', '.join(sorted(digests))}")
+    return next(iter(digests))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--check-metadata", type=Path)
     parser.add_argument("--check-badging", type=Path)
+    parser.add_argument("--check-signer", type=Path)
+    parser.add_argument("--expected-signer")
     args = parser.parse_args()
     try:
+        if args.check_signer:
+            if not args.expected_signer:
+                parser.error("--check-signer 需要 --expected-signer")
+            signer = check_signer_output(args.check_signer.read_text(encoding="utf-8"), args.expected_signer)
+            print(f"Verified APK signer SHA-256: {signer}")
+            return 0
         version = version_for_repo(args.repo)
         if args.check_metadata or args.check_badging:
             expected_code = int(version.rsplit(".", 1)[1])

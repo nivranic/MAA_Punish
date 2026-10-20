@@ -516,12 +516,12 @@ jobs:
             build_tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
             "$build_tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/mine-apk-badging.txt"
             python "$GITHUB_WORKSPACE/tools/ci/mine_apk_version.py" --check-badging "$RUNNER_TEMP/mine-apk-badging.txt"
-            signer=$("$build_tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
-            if [[ "$GITHUB_REPOSITORY" == 'nivranic/MAA_Punish' && "$variant" == 'release' && "$signer" != 'a4eb8265896986293c8a746324c9ed25a79af0aee81e3ef77f249f31037db9a6' ]]; then
-              echo "APK signer does not match the iQOO 16 update key." >&2
-              exit 1
+            "$build_tools/apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/mine-apk-certs.txt"
+            if [[ "$GITHUB_REPOSITORY" == 'nivranic/MAA_Punish' && "$variant" == 'release' ]]; then
+              python "$GITHUB_WORKSPACE/tools/ci/mine_apk_version.py" \
+                --check-signer "$RUNNER_TEMP/mine-apk-certs.txt" \
+                --expected-signer 'a4eb8265896986293c8a746324c9ed25a79af0aee81e3ef77f249f31037db9a6'
             fi
-            echo "Verified APK signer SHA-256: $signer"
           fi
           mkdir -p "$GITHUB_WORKSPACE/android-dist"
           cp "$apk" "$GITHUB_WORKSPACE/android-dist/MPA-android-${{ needs.meta.outputs.tag }}${{ steps.signing.outputs.suffix }}.apk"

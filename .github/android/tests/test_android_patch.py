@@ -108,6 +108,39 @@ class MineVersionTest(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 version_module.check_badging(invalid, expected, 2185)
 
+    def test_signer_output_accepts_numbered_and_sdk_range_certificates(self):
+        digest = "a" * 64
+        for prefix in (
+            "Signer #1",
+            "Signer (minSdkVersion=28, maxSdkVersion=2147483647)",
+            "Signer (minSdkVersion=33 (dev release=true), maxSdkVersion=2147483647)",
+            "Signer (minSdkVersion=28, maxSdkVersion=32) #1",
+        ):
+            output = f"{prefix} certificate SHA-256 digest: {digest.upper()}\n"
+            with self.subTest(prefix=prefix):
+                self.assertEqual(digest, version_module.check_signer_output(output, digest))
+        repeated = (
+            f"Signer (minSdkVersion=28, maxSdkVersion=32) certificate SHA-256 digest: {digest}\n"
+            f"Signer (minSdkVersion=33, maxSdkVersion=2147483647) certificate SHA-256 digest: {digest}\n"
+            f"Signer #1 public key SHA-256 digest: {'b' * 64}\n"
+            f"Source Stamp Signer certificate SHA-256 digest: {'b' * 64}\n"
+        )
+        self.assertEqual(digest, version_module.check_signer_output(repeated, digest))
+
+    def test_signer_output_rejects_missing_malformed_other_or_multiple_certificates(self):
+        digest = "a" * 64
+        good = f"Signer #1 certificate SHA-256 digest: {digest}\n"
+        for output in (
+            "",
+            f"Signer #1 public key SHA-256 digest: {digest}\n",
+            good.replace(digest, "b" * 64),
+            good + f"Signer #2 certificate SHA-256 digest: {'b' * 64}\n",
+            good + "Signer #2 certificate SHA-256 digest: malformed\n",
+            good + f"Signer unknown certificate SHA-256 digest: {digest}\n",
+        ):
+            with self.subTest(output=output), self.assertRaises(ValueError):
+                version_module.check_signer_output(output, digest)
+
 
 if __name__ == "__main__":
     unittest.main()
