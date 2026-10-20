@@ -369,6 +369,9 @@ jobs:
       MAAFWAPP_REF: bc55dac4c8231ab73e7ee42bd38c43e322838b14
       MAAFRAMEWORK_TAG: v5.14.2
       PI_PROFILE: ${{ github.workspace }}/.github/android/pi-profile.yaml
+      # Only this fork's mine builds use the coexisting package; official tags retain their identity.
+      MAA_PUNISH_APP_ID: ${{ github.repository == 'nivranic/MAA_Punish' && github.ref == 'refs/heads/mine' && 'punish.iqoo16' || 'punish' }}
+      MAA_PUNISH_APP_LABEL: ${{ github.repository == 'nivranic/MAA_Punish' && github.ref == 'refs/heads/mine' && 'MAA Punish iqoo16' || 'MAA Punish' }}
       # Blank preserves other branches/tags. mine must embed the exact comparable release version.
       BUILD_VERSION_NAME: ${{ github.ref == 'refs/heads/mine' && needs.meta.outputs.version_name || '' }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -514,10 +517,13 @@ jobs:
           test -n "$apk"
           if [[ "$GITHUB_REF" == 'refs/heads/mine' ]]; then
             python "$GITHUB_WORKSPACE/tools/ci/mine_apk_version.py" --check-metadata \
-              "app/build/outputs/apk/$variant/output-metadata.json"
+              "app/build/outputs/apk/$variant/output-metadata.json" \
+              --application-id "com.overflow65537.maafw.$MAA_PUNISH_APP_ID"
             build_tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
             "$build_tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/mine-apk-badging.txt"
-            python "$GITHUB_WORKSPACE/tools/ci/mine_apk_version.py" --check-badging "$RUNNER_TEMP/mine-apk-badging.txt"
+            python "$GITHUB_WORKSPACE/tools/ci/mine_apk_version.py" --check-badging "$RUNNER_TEMP/mine-apk-badging.txt" \
+              --application-id "com.overflow65537.maafw.$MAA_PUNISH_APP_ID" \
+              --application-label "$MAA_PUNISH_APP_LABEL"
             "$build_tools/apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/mine-apk-certs.txt"
             if [[ "$GITHUB_REPOSITORY" == 'nivranic/MAA_Punish' && "$variant" == 'release' ]]; then
               python "$GITHUB_WORKSPACE/tools/ci/mine_apk_version.py" \
@@ -526,7 +532,11 @@ jobs:
             fi
           fi
           mkdir -p "$GITHUB_WORKSPACE/android-dist"
-          cp "$apk" "$GITHUB_WORKSPACE/android-dist/MPA-android-${{ needs.meta.outputs.tag }}${{ steps.signing.outputs.suffix }}.apk"
+          prefix=MPA-android
+          if [[ "$MAA_PUNISH_APP_ID" == 'punish.iqoo16' ]]; then
+            prefix=MPA-android-iqoo16
+          fi
+          cp "$apk" "$GITHUB_WORKSPACE/android-dist/$prefix-${{ needs.meta.outputs.tag }}${{ steps.signing.outputs.suffix }}.apk"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -561,6 +571,8 @@ jobs:
             - 源码提交：`${{ github.sha }}`
             - 构建记录：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             - APK 签名类型：`${{ needs.android.outputs.variant }}`
+
+            文件名含 `MPA-android-iqoo16-` 的专版名称为 `MAA Punish iqoo16`，独立包名为 `com.overflow65537.maafw.punish.iqoo16`，可与官方版共存。安装专版无需卸载官方版，两版数据和权限各自独立。
 
             下载本页 Assets 中的 `.apk` 文件。
           draft: false
@@ -607,21 +619,31 @@ jobs:
           gh api --paginate --slurp \
             "/repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             > "$RUNNER_TEMP/iqoo16-releases.json"
-          status=$(curl --silent --show-error --location --max-time 60 \
-            --header 'Cache-Control: no-cache' \
-            --output "$RUNNER_TEMP/iqoo16-previous.json" --write-out '%{http_code}' \
-            "https://nivranic.github.io/MAA_Punish/iqoo16/latest.json?run=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT")
-          previous=()
-          if [[ "$status" == '200' ]]; then
-            previous=(--previous "$RUNNER_TEMP/iqoo16-previous.json")
-          elif [[ "$status" != '404' ]]; then
-            echo "Cannot verify the previous Pages manifest (HTTP $status); preserving the existing deployment." >&2
-            exit 1
-          fi
-          python tools/ci/iqoo16_manifest.py \
-            --releases "$RUNNER_TEMP/iqoo16-releases.json" \
-            --required-tag "$REQUIRED_TAG" "${previous[@]}" \
-            --output pages-dist/iqoo16/latest.json
+          # Deploy the entire site with both identities. An old installed client must never
+          # see the standalone package, and failure in either feed preserves the last site.
+          for feed in legacy standalone; do
+            endpoint=iqoo16/latest.json
+            required=()
+            if [[ "$feed" == 'standalone' ]]; then
+              endpoint=iqoo16/standalone/latest.json
+              required=(--required-tag "$REQUIRED_TAG")
+            fi
+            previous_file="$RUNNER_TEMP/iqoo16-$feed-previous.json"
+            status=$(curl --silent --show-error --location --max-time 60 \
+              --header 'Cache-Control: no-cache' \
+              --output "$previous_file" --write-out '%{http_code}' \
+              "https://nivranic.github.io/MAA_Punish/$endpoint?run=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT")
+            previous=()
+            if [[ "$status" == '200' ]]; then
+              previous=(--previous "$previous_file")
+            elif [[ "$status" != '404' ]]; then
+              echo "Cannot verify the previous $feed Pages manifest (HTTP $status); preserving the existing deployment." >&2
+              exit 1
+            fi
+            python tools/ci/iqoo16_manifest.py \
+              --releases "$RUNNER_TEMP/iqoo16-releases.json" --feed "$feed" \
+              "${required[@]}" "${previous[@]}" --output "pages-dist/$endpoint"
+          done
 
       # Official Pages OIDC workflow: permissions and github-pages environment are required.
       # https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages

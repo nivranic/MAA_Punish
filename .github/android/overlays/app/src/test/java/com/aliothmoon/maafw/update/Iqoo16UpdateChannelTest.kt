@@ -10,7 +10,7 @@ import kotlin.coroutines.cancellation.CancellationException
 
 class Iqoo16UpdateChannelTest {
     private val newTag = "mine-v3.12.6-iqoo.2190"
-    private val apk = "https://github.com/nivranic/MAA_Punish/releases/download/$newTag/MPA-android-v3.12.6-iqoo.2190.apk"
+    private val apk = "https://github.com/nivranic/MAA_Punish/releases/download/$newTag/MPA-android-iqoo16-v3.12.6-iqoo.2190.apk"
 
     @Test
     fun `stored channel names and legacy requests retain their meaning`() {
@@ -85,6 +85,49 @@ class Iqoo16UpdateChannelTest {
     }
 
     @Test
+    fun `standalone service normalizes every legacy channel source and credential`() = runBlocking {
+        for (channel in listOf(UpdateChannel.STABLE, UpdateChannel.BETA, UpdateChannel.IQOO16)) {
+            for (source in UpdateSource.entries) {
+                val gateway = RecordingHttpClientHelper(FakeHttpResponse(200, manifest()), FakeHttpResponse(200, manifest()))
+                val service = UpdateService(
+                    emptyList(), Iqoo16StaticUpdateClient(gateway.mock, 2189), UpdateChannelPolicy(iqoo16Only = true),
+                )
+                assertTrue(service.check(checkRequest().copy(channel = channel, source = source)) is UpdateCheckResult.UpdateAvailable)
+                assertEquals(apk, (service.resolve(resolveRequest().copy(channel = channel, source = source)) as UpdateResolveResult.Resolved).update.downloadUrl)
+                assertEquals(2, gateway.requests.size)
+                assertTrue(gateway.requests.all { it.first.startsWith("$IQOO16_MANIFEST_URL?t=") })
+                val normalized = UpdateChannelPolicy(true).resolve(resolveRequest().copy(channel = channel, source = source))
+                assertEquals(UpdateChannel.IQOO16, normalized.channel)
+                assertNull(normalized.mirrorchyanCdk)
+                assertNull(normalized.mirrorchyanRid)
+                assertEquals(IQOO16_GITHUB_REPOSITORY, normalized.githubRepository)
+            }
+        }
+    }
+
+    @Test
+    fun `standalone policy with no client or failed Pages cannot call an official provider`() = runBlocking {
+        val forbidden = UpdateSource.entries.map { updateSource ->
+            object : UpdateSourceClient {
+                override val source = updateSource
+                override suspend fun check(request: UpdateCheckRequest): UpdateCheckResult = error("Official provider must never run")
+                override suspend fun resolve(request: UpdateResolveRequest): UpdateResolveResult = error("Official provider must never run")
+            }
+        }
+        val policy = UpdateChannelPolicy(true)
+        val unconfigured = UpdateService(forbidden, updatePolicy = policy)
+        val legacyCheck = checkRequest().copy(channel = UpdateChannel.STABLE)
+        val legacyResolve = resolveRequest().copy(channel = UpdateChannel.BETA)
+        assertEquals(UpdateCheckFailure.MISSING_CONFIGURATION, (unconfigured.check(legacyCheck) as UpdateCheckResult.SourceFailed).reason)
+        assertEquals(UpdateCheckFailure.MISSING_CONFIGURATION, (unconfigured.resolve(legacyResolve) as UpdateResolveResult.Failed).reason)
+        val gateway = RecordingHttpClientHelper(FakeHttpResponse(503, "unavailable"), FakeHttpResponse(403, "forbidden"))
+        val service = UpdateService(forbidden, Iqoo16StaticUpdateClient(gateway.mock, 2189), policy)
+        assertEquals(UpdateCheckFailure.HTTP, (service.check(legacyCheck) as UpdateCheckResult.SourceFailed).reason)
+        assertEquals(UpdateCheckFailure.HTTP, (service.resolve(legacyResolve) as UpdateResolveResult.Failed).reason)
+        assertEquals(2, gateway.requests.size)
+    }
+
+    @Test
     fun `same newer or incompatible Android version code cannot download a downgrade`() = runBlocking {
         for ((current, code) in listOf("3.12.6-iqoo.2190" to 2190, "3.12.6-iqoo.2191" to 2191, "3.12.7-iqoo.2192" to 2192, "3.12.5-iqoo.2189" to 2190)) {
             val gateway = RecordingHttpClientHelper(FakeHttpResponse(200, manifest()), FakeHttpResponse(200, manifest()))
@@ -113,6 +156,7 @@ class Iqoo16UpdateChannelTest {
             good.replace("\"schema_version\":1", "\"schema_version\":\"1\""),
             good.replace("\"channel\":\"IQOO16\"", "\"channel\":\"BETA\""),
             good.replace(IQOO16_APPLICATION_ID, "other.package"),
+            good.replace(IQOO16_APPLICATION_ID, "com.overflow65537.maafw.punish"),
             good.replace("\"version_code\":2190", "\"version_code\":2189"),
             good.replace("\"version_code\":2190", "\"version_code\":\"2190\""),
             good.replace("\"version_name\":\"3.12.6-iqoo.2190\"", "\"version_name\":\"3.12.7-iqoo.2190\""),
@@ -120,6 +164,7 @@ class Iqoo16UpdateChannelTest {
             good.replace(apk, "$apk?token=secret"),
             good.replace(apk, apk.replace("nivranic", "someone")),
             good.replace(apk, apk.replace(".apk", "-debug.apk")),
+            good.replace(apk, apk.replace("MPA-android-iqoo16-", "MPA-android-")),
             good.replace("releases/tag/", "releases/other/"),
             good.replace("a".repeat(64), ""),
             good.replace("a".repeat(64), "z".repeat(64)),

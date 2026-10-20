@@ -9,7 +9,12 @@ from pathlib import Path
 import re
 
 REPOSITORY = "nivranic/MAA_Punish"
-APPLICATION_ID = "com.overflow65537.maafw.punish"
+APPLICATION_ID = "com.overflow65537.maafw.punish.iqoo16"
+LEGACY_APPLICATION_ID = "com.overflow65537.maafw.punish"
+FEEDS = {
+    "standalone": (APPLICATION_ID, "MPA-android-iqoo16-"),
+    "legacy": (LEGACY_APPLICATION_ID, "MPA-android-"),
+}
 TAG = re.compile(r"mine-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-iqoo\.([1-9][0-9]*)\Z")
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -24,12 +29,19 @@ def version_key(tag: str) -> tuple[int, int, int, int]:
     return key
 
 
-def validate_manifest(raw: dict) -> dict:
+def feed_identity(feed: str) -> tuple[str, str]:
+    if feed not in FEEDS:
+        raise ValueError("未知的 iQOO 16 清单身份")
+    return FEEDS[feed]
+
+
+def validate_manifest(raw: dict, feed: str = "standalone") -> dict:
+    application_id, asset_prefix = feed_identity(feed)
     if not isinstance(raw, dict):
         raise ValueError("清单必须是 JSON 对象")
     if type(raw.get("schema_version")) is not int or raw["schema_version"] != 1:
         raise ValueError("不支持的清单协议")
-    if raw.get("channel") != "IQOO16" or raw.get("application_id") != APPLICATION_ID:
+    if raw.get("channel") != "IQOO16" or raw.get("application_id") != application_id:
         raise ValueError("清单渠道或包名不匹配")
     tag = raw.get("release_tag")
     if not isinstance(tag, str):
@@ -39,7 +51,7 @@ def validate_manifest(raw: dict) -> dict:
         raise ValueError("版名与 Release tag 不匹配")
     if type(raw.get("version_code")) is not int or raw["version_code"] != key[3]:
         raise ValueError("版本码与 Release tag 不匹配")
-    expected_apk = f"https://github.com/{REPOSITORY}/releases/download/{tag}/MPA-android-{tag.removeprefix('mine-')}.apk"
+    expected_apk = f"https://github.com/{REPOSITORY}/releases/download/{tag}/{asset_prefix}{tag.removeprefix('mine-')}.apk"
     if raw.get("apk_url") != expected_apk:
         raise ValueError("APK 必须是本 fork 该 Release 的精确 release 签名文件")
     if raw.get("release_url") != f"https://github.com/{REPOSITORY}/releases/tag/{tag}":
@@ -49,7 +61,8 @@ def validate_manifest(raw: dict) -> dict:
     return raw
 
 
-def release_manifest(release: dict) -> dict:
+def release_manifest(release: dict, feed: str = "standalone") -> dict:
+    application_id, asset_prefix = feed_identity(feed)
     if not isinstance(release, dict):
         raise ValueError("Release 元数据必须是对象")
     if release.get("draft") is not False:
@@ -58,12 +71,13 @@ def release_manifest(release: dict) -> dict:
     if not isinstance(tag, str):
         raise ValueError("Release tag 必须是字符串")
     key = version_key(tag)
-    name = f"MPA-android-{tag.removeprefix('mine-')}.apk"
+    name = f"{asset_prefix}{tag.removeprefix('mine-')}.apk"
     assets = release.get("assets", [])
     if not isinstance(assets, list) or any(not isinstance(asset, dict) for asset in assets):
         raise ValueError("Release 资产列表结构无效")
-    apks = [asset for asset in assets if str(asset.get("name", "")).endswith(".apk")]
-    if len(apks) != 1 or apks[0].get("name") != name:
+    # Both package identities may coexist in one Release; only this feed's exact asset is eligible.
+    apks = [asset for asset in assets if asset.get("name") == name]
+    if len(apks) != 1:
         raise ValueError("Release 缺少唯一的精确 release APK")
     asset = apks[0]
     digest = asset.get("digest", "")
@@ -74,18 +88,24 @@ def release_manifest(release: dict) -> dict:
     return validate_manifest({
         "schema_version": 1,
         "channel": "IQOO16",
-        "application_id": APPLICATION_ID,
+        "application_id": application_id,
         "version_name": tag.removeprefix("mine-v"),
         "version_code": key[3],
         "release_tag": tag,
         "apk_url": asset.get("browser_download_url"),
         "sha256": digest.removeprefix("sha256:").lower(),
         "release_url": release.get("html_url"),
-    })
+    }, feed)
 
 
-def generate_manifest(releases: list[dict], required_tag: str, previous: dict | None = None) -> dict:
-    version_key(required_tag)
+def generate_manifest(
+    releases: list[dict], required_tag: str | None, previous: dict | None = None, feed: str = "standalone",
+) -> dict:
+    feed_identity(feed)
+    if required_tag is not None:
+        version_key(required_tag)
+    elif feed != "legacy":
+        raise ValueError("独立版必须指定本次成功发布的 tag")
     eligible = []
     for release in releases:
         if not isinstance(release, dict) or not isinstance(release.get("tag_name"), str):
@@ -93,14 +113,17 @@ def generate_manifest(releases: list[dict], required_tag: str, previous: dict | 
         if not TAG.fullmatch(release["tag_name"]):
             continue  # Official releases and historical SHA/debug releases are outside this channel.
         try:
-            eligible.append(release_manifest(release))
+            eligible.append(release_manifest(release, feed))
         except ValueError:
             if release["tag_name"] == required_tag:
                 raise  # The publishing run itself must have uploaded a valid APK before deploying.
-    if not any(item["release_tag"] == required_tag for item in eligible):
+    if not eligible or (required_tag is not None and not any(item["release_tag"] == required_tag for item in eligible)):
         raise ValueError("找不到本次已成功发布的完整 APK")
     tags_by_code = {}
+    manifests_by_tag = {}
     for item in eligible:
+        if manifests_by_tag.setdefault(item["release_tag"], item) != item:
+            raise ValueError("同 tag 的 Release 响应包含相互冲突的资产元数据")
         previous_tag = tags_by_code.setdefault(item["version_code"], item["release_tag"])
         if previous_tag != item["release_tag"]:
             raise ValueError("不同 Release tag 复用了相同版本码；需要递增版本码后重新发布")
@@ -108,7 +131,7 @@ def generate_manifest(releases: list[dict], required_tag: str, previous: dict | 
     if latest["version_code"] < max(item["version_code"] for item in eligible):
         raise ValueError("SemVer 最新版本的版本码回退；需要审查分支历史")
     if previous is not None:
-        validate_manifest(previous)
+        validate_manifest(previous, feed)
         if version_key(latest["release_tag"]) < version_key(previous["release_tag"]) or latest["version_code"] < previous["version_code"]:
             raise ValueError("拒绝用旧 Release 覆盖现有 Pages 清单")
         if latest["release_tag"] != previous["release_tag"] and latest["version_code"] <= previous["version_code"]:
@@ -121,7 +144,8 @@ def generate_manifest(releases: list[dict], required_tag: str, previous: dict | 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--releases", required=True, type=Path, help="gh api --paginate --slurp 的 JSON 输出")
-    parser.add_argument("--required-tag", required=True)
+    parser.add_argument("--required-tag")
+    parser.add_argument("--feed", choices=tuple(FEEDS), default="standalone")
     parser.add_argument("--previous", type=Path)
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
@@ -131,8 +155,8 @@ def main() -> int:
             raise ValueError("Release API 分页响应必须是数组列表")
         previous = None
         if args.previous is not None:
-            previous = validate_manifest(json.loads(args.previous.read_text(encoding="utf-8")))
-        manifest = generate_manifest([release for page in pages for release in page], args.required_tag, previous)
+            previous = validate_manifest(json.loads(args.previous.read_text(encoding="utf-8")), args.feed)
+        manifest = generate_manifest([release for page in pages for release in page], args.required_tag, previous, args.feed)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     except (ValueError, OSError) as error:

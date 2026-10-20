@@ -70,12 +70,13 @@
 ### Android
 
 - 下载 `MPA-android-vXXX.apk` 并安装。
-- Android 包名：com.overflow65537.maafw.punish。
+- 官方 Android 包名：`com.overflow65537.maafw.punish`；本 fork 的 `mine` 专版为 `com.overflow65537.maafw.punish.iqoo16`，桌面名称为 `MAA Punish iqoo16`。
 - Shizuku / root 授权及后续操作请参考 [MaaFwApp 使用说明](https://github.com/Aliothmoon/MaaFwApp#使用已打包的应用)。
 - 首次启动后按应用引导授予通知、电池优化白名单，以及 Shizuku 或 root 权限。
-- 未配置正式签名的开发构建会带有 `-debug` 后缀；安装后续正式版本前可能需要先卸载开发版。
-- 本 fork 的 Android 首页可选“iQOO 16 适配版”更新渠道，从 [静态更新清单](https://nivranic.github.io/MAA_Punish/iqoo16/latest.json) 检查新版，再从 [Releases](https://github.com/nivranic/MAA_Punish/releases) 下载 `mine-vX.Y.Z-iqoo.N` APK；无需 Token 或 MirrorChyan CDK，也不消耗 GitHub REST API 匿名额度。原正式版/公测版渠道不变。
-- 历史 SHA 版本、临时 debug 签名包需先手动迁移到首个专用签名版本，跨签名可能需要卸载，操作前保存配置；之后同包名、同签名且版本码递增的构建才能覆盖升级。版本与验证约束见 [iQOO 16 更新设计](docs/plans/2026-10-20-iqoo16-update-channel-design.md)。
+- 未配置正式签名的开发构建会带有 `-debug` 后缀；不同签名不能直接覆盖，保留数据时不要通过卸载旧版来迁移。
+- iQOO 专版与官方版共存，安装 `MPA-android-iqoo16-vX.Y.Z-iqoo.N.apk` 无需卸载官方版，官方原有数据保留。两版配置、权限、定时和缓存各自独立，不自动共享；支持的配置可经应用原有“导出/导入”迁移，仍校验项目来源，设备权限及凭据需单独设置。
+- 专版首页只保留“iQOO 16 适配版”渠道，默认从 [独立版静态清单](https://nivranic.github.io/MAA_Punish/iqoo16/standalone/latest.json) 检查新版，再从 [Releases](https://github.com/nivranic/MAA_Punish/releases) 下载精确的专版 APK；无需 Token 或 MirrorChyan CDK，不消耗 GitHub REST API 匿名额度。导入旧正式版/公测版设置也不能激活官方更新源。
+- 历史同包名的 fork APK 不会自动迁移为独立包；旧清单继续保留旧包身份，不将旧客户端指向专版。后续专版只有同包名、同签名且版本码递增才能覆盖升级。版本与验证约束见 [iQOO 16 更新设计](docs/plans/2026-10-20-iqoo16-update-channel-design.md)。
 
 ### Windows
 
@@ -196,7 +197,7 @@
 
 Android APK 使用 [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp) 构建。仓库的 `install` 工作流会自动组装 MaaFramework Android 库、双 ABI Python agent 与本项目资源，并上传 APK artifact。`mine` 分支命中路径过滤的推送，或手动选择 `mine` 运行工作流，会在 Android 构建成功后将 APK 发布到 Releases 的 `mine-*` 预发布版本；打开对应版本的 Assets 下载 `.apk`。仅修改文档不会自动构建，可手动运行。正式版本标签仍使用原有的多平台 Release 流程。
 
-本 fork 的 `mine` APK 发布成功后，工作流将最高有效版本的更新清单部署到 GitHub Pages。需将 Pages Source 设为 GitHub Actions，并允许 `github-pages` 环境从 `mine` 部署；清单生成或部署失败会保留上次站点。旧 `3.12.6-iqoo.2189` 及以前的渠道客户端仍查询 Releases API，需先用同签名新版覆盖升级一次，之后改读静态清单。协议、并发与不可变资产约束见 [iQOO 16 更新设计](docs/plans/2026-10-20-iqoo16-update-channel-design.md)。
+本 fork 的 `mine` APK 发布成功后，工作流将独立版和历史同包名版的更新清单一起部署到 GitHub Pages，按包名与精确资产名称隔离。需将 Pages Source 设为 GitHub Actions，并允许 `github-pages` 环境从 `mine` 部署；清单生成或部署失败会保留上次站点。新专版只读 `/iqoo16/standalone/latest.json`；历史 `3.12.6-iqoo.2190` 的 `/iqoo16/latest.json` 继续指向原包，`2189` 及以前仍使用原 Releases API 实现。首次使用独立版需单独安装，无需替换或卸载官方版。协议、并发与不可变资产约束见 [iQOO 16 更新设计](docs/plans/2026-10-20-iqoo16-update-channel-design.md)。
 
 <details>
 <summary>安卓版使用教程参考</summary>

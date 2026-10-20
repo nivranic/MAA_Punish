@@ -10,6 +10,8 @@ import re
 import subprocess
 
 STABLE_TAG = re.compile(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\Z")
+APPLICATION_ID = "com.overflow65537.maafw.punish.iqoo16"
+APPLICATION_LABEL = "MAA Punish iqoo16"
 
 
 def mine_version(tags: list[str], commit_count: int) -> str:
@@ -32,8 +34,8 @@ def version_for_repo(root: Path) -> str:
     )
 
 
-def check_metadata(metadata: dict, expected_version: str, expected_code: int) -> None:
-    if metadata.get("applicationId") != "com.overflow65537.maafw.punish":
+def check_metadata(metadata: dict, expected_version: str, expected_code: int, application_id: str = APPLICATION_ID) -> None:
+    if metadata.get("applicationId") != application_id:
         raise ValueError("APK applicationId 与更新目标不一致")
     elements = metadata.get("elements", [])
     if not elements or any(
@@ -43,16 +45,23 @@ def check_metadata(metadata: dict, expected_version: str, expected_code: int) ->
         raise ValueError("APK metadata 的 versionName/versionCode 与 mine 版本不一致")
 
 
-def check_badging(badging: str, expected_version: str, expected_code: int) -> None:
+def check_badging(
+    badging: str, expected_version: str, expected_code: int,
+    application_id: str = APPLICATION_ID, application_label: str = APPLICATION_LABEL,
+) -> None:
     package = re.search(r"^package: name='([^']+)' versionCode='(\d+)' versionName='([^']*)'", badging, re.MULTILINE)
     if not package:
         raise ValueError("无法读取 APK 实物的 aapt package 元数据")
-    application_id, code, version = package.groups()
+    actual_application_id, code, version = package.groups()
     check_metadata(
-        {"applicationId": application_id, "elements": [{"versionName": version, "versionCode": int(code)}]},
+        {"applicationId": actual_application_id, "elements": [{"versionName": version, "versionCode": int(code)}]},
         expected_version,
         expected_code,
+        application_id,
     )
+    labels = re.findall(r"^application-label(?:-[^:]+)?:'([^']*)'$", badging, re.MULTILINE)
+    if not labels or any(label != application_label for label in labels):
+        raise ValueError("APK 实物的应用名称与发布身份不一致")
 
 
 def check_signer_output(output: str, expected_digest: str) -> str:
@@ -88,6 +97,8 @@ def main() -> int:
     parser.add_argument("--check-badging", type=Path)
     parser.add_argument("--check-signer", type=Path)
     parser.add_argument("--expected-signer")
+    parser.add_argument("--application-id", default=APPLICATION_ID)
+    parser.add_argument("--application-label", default=APPLICATION_LABEL)
     args = parser.parse_args()
     try:
         if args.check_signer:
@@ -100,9 +111,9 @@ def main() -> int:
         if args.check_metadata or args.check_badging:
             expected_code = int(version.rsplit(".", 1)[1])
             if args.check_metadata:
-                check_metadata(json.loads(args.check_metadata.read_text(encoding="utf-8")), version.removeprefix("v"), expected_code)
+                check_metadata(json.loads(args.check_metadata.read_text(encoding="utf-8")), version.removeprefix("v"), expected_code, args.application_id)
             if args.check_badging:
-                check_badging(args.check_badging.read_text(encoding="utf-8"), version.removeprefix("v"), expected_code)
+                check_badging(args.check_badging.read_text(encoding="utf-8"), version.removeprefix("v"), expected_code, args.application_id, args.application_label)
             print(f"APK identity matches {version} ({expected_code})")
         else:
             print(version)

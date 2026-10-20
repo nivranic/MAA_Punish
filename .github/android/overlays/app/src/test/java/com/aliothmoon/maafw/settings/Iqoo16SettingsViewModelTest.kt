@@ -142,7 +142,86 @@ class Iqoo16SettingsViewModelTest {
         assertEquals(2, checks)
     }
 
-    private fun viewModel(settings: AppSettingsGateway, service: UpdateService): SettingsViewModel {
+    @Test
+    fun `standalone defaults and imported settings discard old update channels source and cdk`() {
+        val policy = UpdateChannelPolicy(true)
+        for (channel in listOf("STABLE", "BETA", "IQOO16", "invalid")) {
+            for (source in listOf("MIRRORCHYAN", "GITHUB", "invalid")) {
+                val imported = AppSettings(updateChannel = channel, updateSource = source, mirrorchyanCdk = "do-not-use", autoCheckUpdate = "false")
+                val actual = imported.forUpdatePolicy(policy)
+                assertEquals("IQOO16", actual.updateChannel)
+                assertEquals("GITHUB", actual.updateSource)
+                assertEquals("", actual.mirrorchyanCdk)
+                assertEquals("false", actual.autoCheckUpdate)
+                assertEquals(actual, actual.forUpdatePolicy(policy))
+                assertEquals(imported, imported.forUpdatePolicy(UpdateChannelPolicy()))
+            }
+        }
+        assertEquals("IQOO16", AppSettings().forUpdatePolicy(policy).updateChannel)
+    }
+
+    @Test
+    fun `standalone viewmodel shows only canonical state and cannot activate old selections`() = runTest {
+        val settings = FakeAppSettingsGateway()
+        settings.updateChannel.value = UpdateChannel.BETA
+        settings.updateSource.value = UpdateSource.MIRRORCHYAN
+        settings.mirrorchyanCdk.value = "do-not-use"
+        val checks = mutableListOf<UpdateCheckRequest>()
+        val resolves = mutableListOf<UpdateResolveRequest>()
+        val vm = viewModel(settings, mockk {
+            coEvery { check(any()) } coAnswers {
+                checks += firstArg<UpdateCheckRequest>()
+                UpdateCheckResult.UpdateAvailable(UpdateSource.GITHUB, UpdateInfo("mine-v3.12.6-iqoo.2190"))
+            }
+            coEvery { resolve(any()) } coAnswers {
+                resolves += firstArg<UpdateResolveRequest>()
+                UpdateResolveResult.Failed(UpdateSource.GITHUB, UpdateCheckFailure.NETWORK)
+            }
+        }, UpdateChannelPolicy(true))
+        assertTrue(vm.uiState.first().update.iqoo16Only)
+        assertEquals(UpdateChannel.IQOO16, vm.uiState.first().update.channel)
+        assertEquals(UpdateSource.GITHUB, vm.uiState.first().update.updateSource)
+        assertEquals("", vm.uiState.first().update.mirrorchyanCdk)
+        vm.onIntent(SettingsIntent.CheckUpdate)
+        vm.onIntent(SettingsIntent.DownloadUpdate)
+        advanceUntilIdle()
+        assertEquals(UpdateChannel.IQOO16, checks.single().channel)
+        assertEquals(UpdateSource.GITHUB, checks.single().source)
+        assertNull(checks.single().mirrorchyanRid)
+        assertEquals(IQOO16_GITHUB_REPOSITORY, checks.single().githubRepository)
+        assertEquals(UpdateChannel.IQOO16, resolves.single().channel)
+        assertNull(resolves.single().mirrorchyanCdk)
+        vm.onIntent(SettingsIntent.SetUpdateChannel(UpdateChannel.STABLE))
+        vm.onIntent(SettingsIntent.SetUpdateSource(UpdateSource.MIRRORCHYAN))
+        vm.onIntent(SettingsIntent.SetMirrorchyanCdk("ignored"))
+        advanceUntilIdle()
+        assertEquals(UpdateChannel.IQOO16, settings.updateChannel.value)
+        assertEquals(UpdateSource.GITHUB, settings.updateSource.value)
+        assertEquals("", settings.mirrorchyanCdk.value)
+        assertFalse(vm.uiState.first().update.checking)
+        assertNull(vm.uiState.first().update.checkResult)
+    }
+
+    @Test
+    fun `standalone startup check also normalizes imported legacy state`() = runTest {
+        val settings = FakeAppSettingsGateway()
+        settings.autoCheckUpdate.value = true
+        settings.updateChannel.value = UpdateChannel.STABLE
+        settings.updateSource.value = UpdateSource.MIRRORCHYAN
+        val requests = mutableListOf<UpdateCheckRequest>()
+        viewModel(settings, mockk {
+            coEvery { check(any()) } coAnswers {
+                requests += firstArg<UpdateCheckRequest>()
+                UpdateCheckResult.UpToDate(UpdateSource.GITHUB, "mine-v3.12.6-iqoo.2185")
+            }
+        }, UpdateChannelPolicy(true))
+        advanceUntilIdle()
+        assertEquals(UpdateChannel.IQOO16, requests.single().channel)
+        assertEquals(UpdateSource.GITHUB, requests.single().source)
+        assertNull(requests.single().mirrorchyanRid)
+    }
+
+    private fun viewModel(settings: AppSettingsGateway, service: UpdateService, policy: UpdateChannelPolicy = UpdateChannelPolicy()): SettingsViewModel {
         val definition = ProjectDefinition(
             name = "demo", version = "1", controllers = listOf(ControllerDefinition()),
             resources = emptyList(), tasks = emptyList(), groups = emptyList(), options = emptyMap(), templates = emptyList(),
@@ -153,6 +232,7 @@ class Iqoo16SettingsViewModelTest {
             projectRepository = FakeProjectRepository(ProjectState.Ready(definition, emptyList())),
             updateService = service, updateDownloader = mockk(), apkInstaller = mockk<SystemApkInstaller>(),
             currentVersion = "3.12.6-iqoo.2185", abi = AndroidAbi.UNIVERSAL,
+            updatePolicy = policy,
         )
     }
 }

@@ -3,8 +3,8 @@ package com.aliothmoon.maafw.update
 import io.github.z4kn4fein.semver.Version
 
 internal const val IQOO16_GITHUB_REPOSITORY = "nivranic/MAA_Punish"
-internal const val IQOO16_MANIFEST_URL = "https://nivranic.github.io/MAA_Punish/iqoo16/latest.json"
-internal const val IQOO16_APPLICATION_ID = "com.overflow65537.maafw.punish"
+internal const val IQOO16_MANIFEST_URL = "https://nivranic.github.io/MAA_Punish/iqoo16/standalone/latest.json"
+internal const val IQOO16_APPLICATION_ID = "com.overflow65537.maafw.punish.iqoo16"
 
 /** Keep the stored source for the original channels; the fork uses GitHub exclusively. */
 internal fun UpdateChannel.effectiveSource(selected: UpdateSource): UpdateSource =

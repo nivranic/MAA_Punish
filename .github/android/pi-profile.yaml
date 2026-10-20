@@ -49,6 +49,7 @@ update:
   mirrorchyanRid: MAA_Punish_MaaFwApp
 
 app:
-  id: punish
-  label: MAA Punish
+  # MaaFwApp 原生支持环境占位符及点分后缀；仅本 fork mine 的 CI 注入独立版身份。
+  id: ${MAA_PUNISH_APP_ID:-punish}
+  label: ${MAA_PUNISH_APP_LABEL:-MAA Punish}
   icon: ../../logo.png

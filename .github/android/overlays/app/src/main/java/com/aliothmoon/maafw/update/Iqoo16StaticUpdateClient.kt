@@ -38,7 +38,7 @@ internal data class Iqoo16Manifest(
             if (raw.text("version_name") != tag.removePrefix("mine-v")) return null
             val code = raw.integer("version_code") ?: return null
             if (code !in 1..2_100_000_000 || tag.substringAfterLast('.') != code.toString()) return null
-            val apkUrl = "https://github.com/$IQOO16_GITHUB_REPOSITORY/releases/download/$tag/MPA-android-${tag.removePrefix("mine-")}.apk"
+            val apkUrl = "https://github.com/$IQOO16_GITHUB_REPOSITORY/releases/download/$tag/MPA-android-iqoo16-${tag.removePrefix("mine-")}.apk"
             val releaseUrl = "https://github.com/$IQOO16_GITHUB_REPOSITORY/releases/tag/$tag"
             if (raw.text("apk_url") != apkUrl || raw.text("release_url") != releaseUrl) return null
             val sha256 = raw.text("sha256")?.takeIf { it.matches(Regex("[0-9a-f]{64}")) } ?: return null

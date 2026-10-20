@@ -17,9 +17,10 @@ manifest_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(manifest_module)
 
 
-def release(version="3.12.6-iqoo.2190", digest="a" * 64):
+def release(version="3.12.6-iqoo.2190", digest="a" * 64, feed="standalone"):
     tag = "mine-v" + version
-    name = f"MPA-android-v{version}.apk"
+    prefix = "MPA-android-iqoo16-" if feed == "standalone" else "MPA-android-"
+    name = f"{prefix}v{version}.apk"
     return {
         "tag_name": tag, "draft": False, "prerelease": True,
         "html_url": f"https://github.com/nivranic/MAA_Punish/releases/tag/{tag}",
@@ -37,7 +38,7 @@ class Iqoo16ManifestTest(unittest.TestCase):
         manifest = manifest_module.generate_manifest([candidate], candidate["tag_name"])
         self.assertEqual(1, manifest["schema_version"])
         self.assertEqual("IQOO16", manifest["channel"])
-        self.assertEqual("com.overflow65537.maafw.punish", manifest["application_id"])
+        self.assertEqual("com.overflow65537.maafw.punish.iqoo16", manifest["application_id"])
         self.assertEqual("3.12.6-iqoo.2190", manifest["version_name"])
         self.assertEqual(2190, manifest["version_code"])
         self.assertEqual("a" * 64, manifest["sha256"])
@@ -168,6 +169,77 @@ class Iqoo16ManifestTest(unittest.TestCase):
         self.assertEqual(valid["tag_name"], result["release_tag"])
         with self.assertRaises(ValueError):
             manifest_module.generate_manifest([pending, valid], pending["tag_name"])
+
+    def test_two_package_feeds_select_only_their_own_asset_and_preserve_legacy(self):
+        legacy = release("3.12.6-iqoo.2190", feed="legacy")
+        standalone = release("3.12.6-iqoo.2195")
+        later = release("3.12.6-iqoo.2196")
+        previous_legacy = manifest_module.release_manifest(legacy, "legacy")
+        candidates = [later, legacy, standalone]
+        retained = manifest_module.generate_manifest(candidates, None, previous_legacy, "legacy")
+        selected = manifest_module.generate_manifest(candidates, standalone["tag_name"])
+        self.assertEqual(previous_legacy, retained)
+        self.assertEqual("com.overflow65537.maafw.punish", retained["application_id"])
+        self.assertEqual("mine-v3.12.6-iqoo.2196", selected["release_tag"])
+        self.assertIn("/MPA-android-iqoo16-", selected["apk_url"])
+        self.assertNotIn("/MPA-android-iqoo16-", retained["apk_url"])
+        for document, wrong_feed in ((retained, "standalone"), (selected, "legacy")):
+            with self.subTest(feed=wrong_feed), self.assertRaisesRegex(ValueError, "包名"):
+                manifest_module.validate_manifest(document, wrong_feed)
+        with self.assertRaisesRegex(ValueError, "精确 release APK"):
+            manifest_module.generate_manifest([legacy], legacy["tag_name"])
+
+    def test_asset_name_and_application_id_must_both_match_each_feed(self):
+        legacy = release(feed="legacy")
+        standalone = release()
+        for candidate, feed in ((standalone, "standalone"), (legacy, "legacy")):
+            document = manifest_module.release_manifest(candidate, feed)
+            other = manifest_module.release_manifest(legacy if feed == "standalone" else standalone, "legacy" if feed == "standalone" else "standalone")
+            # Relabeling a document cannot make the other package's APK eligible.
+            with self.assertRaisesRegex(ValueError, "精确"):
+                manifest_module.validate_manifest({**document, "apk_url": other["apk_url"]}, feed)
+        combined = copy.deepcopy(standalone)
+        combined["assets"].extend(legacy["assets"])
+        self.assertEqual(manifest_module.release_manifest(standalone), manifest_module.release_manifest(combined))
+        self.assertEqual(manifest_module.release_manifest(legacy, "legacy"), manifest_module.release_manifest(combined, "legacy"))
+
+    def test_legacy_feed_also_rejects_downgrade_mutation_and_bad_previous_types(self):
+        old = release("3.12.6-iqoo.2189", feed="legacy")
+        current = release(feed="legacy")
+        previous = manifest_module.release_manifest(current, "legacy")
+        with self.assertRaisesRegex(ValueError, "旧 Release"):
+            manifest_module.generate_manifest([old], None, previous, "legacy")
+        changed = release(digest="b" * 64, feed="legacy")
+        with self.assertRaisesRegex(ValueError, "同一版本"):
+            manifest_module.generate_manifest([changed], None, previous, "legacy")
+        for invalid in (None, [], True):
+            if invalid is None:
+                continue  # No previous document is the supported first-deployment state.
+            with self.subTest(previous=invalid), self.assertRaises(ValueError):
+                manifest_module.generate_manifest([current], None, invalid, "legacy")
+        with self.assertRaisesRegex(ValueError, "独立版必须"):
+            manifest_module.generate_manifest([release()], None)
+
+    def test_cli_generates_both_site_documents_from_one_release_snapshot(self):
+        temporary_root = ROOT / "build-debug" / "android-patch-tests"
+        temporary_root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=temporary_root) as directory:
+            root = Path(directory)
+            legacy = release(feed="legacy")
+            standalone = release("3.12.6-iqoo.2195")
+            releases = root / "releases.json"
+            releases.write_text(json.dumps([[legacy, standalone]]), encoding="utf-8")
+            for feed, endpoint in (("legacy", "iqoo16/latest.json"), ("standalone", "iqoo16/standalone/latest.json")):
+                output = root / "site" / endpoint
+                required = [] if feed == "legacy" else ["--required-tag", standalone["tag_name"]]
+                result = subprocess.run(
+                    [sys.executable, str(ROOT / "tools/ci/iqoo16_manifest.py"), "--feed", feed,
+                     "--releases", str(releases), *required, "--output", str(output)],
+                    capture_output=True, text=True, encoding="utf-8",
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
+                manifest_module.validate_manifest(json.loads(output.read_text(encoding="utf-8")), feed)
+            self.assertEqual({"iqoo16/latest.json", "iqoo16/standalone/latest.json"}, {path.relative_to(root / "site").as_posix() for path in (root / "site").rglob("*") if path.is_file()})
 
 
 if __name__ == "__main__":

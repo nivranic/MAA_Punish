@@ -89,7 +89,7 @@ class MineVersionTest(unittest.TestCase):
 
     def test_apk_metadata_must_match_package_name_version_and_commit_count(self):
         expected = "3.12.6-iqoo.2185"
-        metadata = {"applicationId": "com.overflow65537.maafw.punish", "elements": [{"versionName": expected, "versionCode": 2185}]}
+        metadata = {"applicationId": "com.overflow65537.maafw.punish.iqoo16", "elements": [{"versionName": expected, "versionCode": 2185}]}
         version_module.check_metadata(metadata, expected, 2185)
         for invalid in (
             {**metadata, "applicationId": "other.package"},
@@ -102,11 +102,20 @@ class MineVersionTest(unittest.TestCase):
 
     def test_apk_badging_checks_actual_manifest_and_rejects_hash_version(self):
         expected = "3.12.6-iqoo.2185"
-        good = "package: name='com.overflow65537.maafw.punish' versionCode='2185' versionName='3.12.6-iqoo.2185' platformBuildVersionName='16'"
+        good = "package: name='com.overflow65537.maafw.punish.iqoo16' versionCode='2185' versionName='3.12.6-iqoo.2185' platformBuildVersionName='16'\napplication-label:'MAA Punish iqoo16'\napplication-label-zh-CN:'MAA Punish iqoo16'"
         version_module.check_badging(good, expected, 2185)
-        for invalid in ("invalid", good.replace(expected, "cb3acf9c"), good.replace("2185'", "2184'")):
+        for invalid in ("invalid", good.replace(expected, "cb3acf9c"), good.replace("2185'", "2184'"), good.replace("punish.iqoo16", "punish"), good.replace(" iqoo16", ""), good.replace("application-label-zh-CN:'MAA Punish iqoo16'", "application-label-zh-CN:'MAA Punish'")):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 version_module.check_badging(invalid, expected, 2185)
+
+    def test_nonstandalone_build_can_keep_its_original_identity_explicitly(self):
+        version = "3.12.6-iqoo.2185"
+        metadata = {"applicationId": "com.overflow65537.maafw.punish", "elements": [{"versionName": version, "versionCode": 2185}]}
+        version_module.check_metadata(metadata, version, 2185, "com.overflow65537.maafw.punish")
+        badging = "package: name='com.overflow65537.maafw.punish' versionCode='2185' versionName='3.12.6-iqoo.2185'\napplication-label:'MAA Punish'"
+        version_module.check_badging(badging, version, 2185, "com.overflow65537.maafw.punish", "MAA Punish")
+        with self.assertRaises(ValueError):
+            version_module.check_metadata(metadata, version, 2185)
 
     def test_signer_output_accepts_numbered_and_sdk_range_certificates(self):
         digest = "a" * 64
