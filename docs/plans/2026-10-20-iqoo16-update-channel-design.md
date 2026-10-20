@@ -17,7 +17,7 @@ Android 首页“更新渠道”追加“iQOO 16 适配版”，用户主动选�
 | APK `versionCode` | `2185` |
 | APK 文件 | `MPA-android-v3.12.6-iqoo.2185.apk` |
 
-缺少可达正式标签时失败，不能回落到猜测版本。完整 Git 历史及标签由 Android/meta checkout 获取。只有 `mine` 的版本生成和 `BUILD_VERSION_NAME` 改用上述契约，其他分支及正式 `v*` 标签沿用现有流程。
+缺少可达正式标签时失败，不能回落到猜测版本。Android 与 meta 两个 job 在 `mine` 的完整 checkout 后，都显式从官方 `https://github.com/overflow65537/MAA_Punish.git` 获取 `v*` 标签，再由版本工具筛选 `HEAD` 可达的最高正式版本；fork 可能没有同步官方标签，`fetch-depth: 0` 本身不能补足该基线。获取使用 `git fetch --no-tags <官方地址> 'refs/tags/v*:refs/tags/v*'`，不强制覆盖，标签冲突直接失败。两个 job 采用相同来源和筛选规则，保证生成版本与 APK 验收基线一致。只有 `mine` 的版本生成和 `BUILD_VERSION_NAME` 改用上述契约，其他分支及正式 `v*` 标签沿用现有流程。
 
 新增渠道仅接受 `mine-vX.Y.Z-iqoo.<正整数>`，按 SemVer 数值比较，选择该 tag 同名 Android APK，复用原 ABI、摘要校验、下载与系统安装器。无 APK、错误文件名、同名 debug/release 多候选均不误选。检查列表包含预发布版本，不依赖 GitHub `/releases/latest`。
 
