@@ -491,7 +491,9 @@ jobs:
           set -euo pipefail
           chmod +x ./gradlew
           variant="${{ steps.signing.outputs.variant }}"
-          ./gradlew ":app:test${variant^}UnitTest" \
+          # AGP 9.2.1 defaults to unit tests for debug only; enable the selected variant for this invocation.
+          ./gradlew -Pandroid.onlyEnableUnitTestForTheTestedBuildType=false \
+            ":app:test${variant^}UnitTest" \
             --tests 'com.aliothmoon.maafw.update.*' \
             --tests 'com.aliothmoon.maafw.settings.SettingsViewModelTest' \
             --tests 'com.aliothmoon.maafw.settings.Iqoo16SettingsViewModelTest' \

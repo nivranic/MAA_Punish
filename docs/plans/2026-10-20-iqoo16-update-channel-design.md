@@ -31,6 +31,6 @@ Android 首页“更新渠道”追加“iQOO 16 适配版”，用户主动选�
 
 - Python 3.12：`python -m unittest discover -s .github/android/tests -v`，覆盖幂等、重复/漂移锚点、overlay 冲突时不部分写入，以及版本生成、APK metadata 和实物 badging 校验。
 - 固定上游真实源码运行补丁两次，确认首次应用、二次无改动；升级固定 SHA 时重新审查锚点与共同消费者。
-- Android CI 在实际签名 variant 下执行 `:app:testReleaseUnitTest` 或 `:app:testDebugUnitTest`，选择 `com.aliothmoon.maafw.update.*`、原 `SettingsViewModelTest` 与新增 `Iqoo16SettingsViewModelTest`。包含新渠道路由/无 CDK 下载、原渠道保留、旧 hash 拒绝、版本比较、不降级、资产选择与旧结果清理。
+- Android CI 在实际签名 variant 下执行 `:app:testReleaseUnitTest` 或 `:app:testDebugUnitTest`，选择 `com.aliothmoon.maafw.update.*`、原 `SettingsViewModelTest` 与新增 `Iqoo16SettingsViewModelTest`。固定 AGP 9.2.1 默认只为 `testBuildType=debug` 启用单元测试，CI 在该次 Gradle 测试命令显式传入受支持的 `-Pandroid.onlyEnableUnitTestForTheTestedBuildType=false` 来启用所选 variant，不修改上游全局配置。包含新渠道路由/无 CDK 下载、原渠道保留、旧 hash 拒绝、版本比较、不降级、资产选择与旧结果清理。
 - `mine` 构建后检查 Gradle `output-metadata.json` 和 APK 实物 `aapt dump badging` 的包名、版本名、版本码，并由 `apksigner verify --print-certs` 检查专用证书。构建和 CI 测试失败时不发布该 APK。
 - 新渠道首包发布后，用真实 Release API 与 APK 验证检查/下载选择；真实手机上的首页展示、网络访问、系统安装确认和保留配置升级需设备验收。源码/Mock、构建、静态证书一致不能代替设备升级成功。
