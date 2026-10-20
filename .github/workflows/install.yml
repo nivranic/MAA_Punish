@@ -347,6 +347,8 @@ jobs:
     needs: [meta]
     runs-on: ubuntu-latest
     name: Build Android APK
+    permissions:
+      contents: read
     outputs:
       variant: ${{ steps.signing.outputs.variant }}
     env:
@@ -408,6 +410,8 @@ jobs:
       - name: Prepare MaaFramework and Python agent
         working-directory: build-android/MaaFwApp
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           python scripts/setup_maa_framework.py --tag "$MAAFRAMEWORK_TAG"
