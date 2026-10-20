@@ -474,6 +474,39 @@ jobs:
           name: MPA-android
           path: android-dist/*.apk
           if-no-files-found: error
+  mine_apk_release:
+    name: Publish mine APK prerelease
+    if: ${{ github.ref == 'refs/heads/mine' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    needs: [meta, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: MPA-android
+          path: android-dist
+
+      - name: Publish APK prerelease
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: mine-${{ needs.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: mine APK ${{ needs.meta.outputs.tag }}
+          body: |
+            `mine` 分支自动构建的 Android APK（预发布）。
+
+            - 源码提交：`${{ github.sha }}`
+            - 构建记录：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            - APK 签名类型：`${{ needs.android.outputs.variant }}`
+
+            下载本页 Assets 中的 `.apk` 文件。
+          draft: false
+          prerelease: true
+          make_latest: false
+          files: android-dist/*.apk
+          fail_on_unmatched_files: true
+
   release:
     if: ${{ needs.meta.outputs.is_release == 'true' }}
     needs: [meta, build, android, changelog]

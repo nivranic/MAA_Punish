@@ -203,7 +203,7 @@ The binaries and resources are generated in the `install` folder.
 
 #### Android
 
-The Android APK is built with [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp). The repository's `install` workflow assembles the MaaFramework Android libraries, the dual-ABI Python agent and this project's resources, and uploads the APK as an artifact; tagged builds also add the APK to the GitHub Release.
+The Android APK is built with [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp). The repository's `install` workflow assembles the MaaFramework Android libraries, the dual-ABI Python agent and this project's resources, and uploads the APK as an artifact. A push to `mine` matching the workflow's path filters, or a manual run with `mine` selected, also publishes the successfully built APK to a `mine-*` prerelease. Download the `.apk` from that release's Assets. Documentation-only pushes do not trigger a build; use a manual run when needed. Version tags retain the existing multi-platform Release flow.
 
 For Android build prerequisites and release signing configuration, see the [install workflow](.github/workflows/install.yml). The resource recipe is in [pi-profile.yaml](.github/android/pi-profile.yaml); check selection and artifact boundaries are explained in the [development and validation guide](docs/开发与验证指南.md) (Chinese).
 

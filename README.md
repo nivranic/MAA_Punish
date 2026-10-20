@@ -192,7 +192,7 @@
 
 ### Android(安卓)
 
-Android APK 使用 [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp) 构建。仓库的 `install` 工作流会自动组装 MaaFramework Android 库、双 ABI Python agent 与本项目资源，并上传 APK artifact；标签构建还会把 APK 加入 GitHub Release。
+Android APK 使用 [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp) 构建。仓库的 `install` 工作流会自动组装 MaaFramework Android 库、双 ABI Python agent 与本项目资源，并上传 APK artifact。`mine` 分支命中路径过滤的推送，或手动选择 `mine` 运行工作流，会在 Android 构建成功后将 APK 发布到 Releases 的 `mine-*` 预发布版本；打开对应版本的 Assets 下载 `.apk`。仅修改文档不会自动构建，可手动运行。正式版本标签仍使用原有的多平台 Release 流程。
 
 <details>
 <summary>安卓版使用教程参考</summary>
