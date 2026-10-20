@@ -112,6 +112,8 @@ class MineVersionTest(unittest.TestCase):
         digest = "a" * 64
         for prefix in (
             "Signer #1",
+            "V2 Signer:",
+            "V3 Signer:",
             "Signer (minSdkVersion=28, maxSdkVersion=2147483647)",
             "Signer (minSdkVersion=33 (dev release=true), maxSdkVersion=2147483647)",
             "Signer (minSdkVersion=28, maxSdkVersion=32) #1",
@@ -137,9 +139,21 @@ class MineVersionTest(unittest.TestCase):
             good + f"Signer #2 certificate SHA-256 digest: {'b' * 64}\n",
             good + "Signer #2 certificate SHA-256 digest: malformed\n",
             good + f"Signer unknown certificate SHA-256 digest: {digest}\n",
+            good + f"V2 Signer: certificate SHA-256 digest: {'b' * 64}\n",
+            good + f"V2 Signer #2: certificate SHA-256 digest: {digest}\n",
         ):
             with self.subTest(output=output), self.assertRaises(ValueError):
                 version_module.check_signer_output(output, digest)
+
+    def test_actual_ci_v2_signer_output(self):
+        digest = "a4eb8265896986293c8a746324c9ed25a79af0aee81e3ef77f249f31037db9a6"
+        output = (
+            "V2 Signer: certificate DN: CN=MAA Punish iQOO16, OU=Android, O=nivranic, C=CN\n"
+            f"V2 Signer: certificate SHA-256 digest: {digest}\n"
+            "V2 Signer: certificate SHA-1 digest: 6e44016c5ad1f1ba3f8d31ddc51a5d375b732328\n"
+            "V2 Signer: certificate MD5 digest: 12dd299192472789ab41aac1e0a31004\n"
+        )
+        self.assertEqual(digest, version_module.check_signer_output(output, digest))
 
 
 if __name__ == "__main__":

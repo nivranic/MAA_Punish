@@ -62,13 +62,13 @@ def check_signer_output(output: str, expected_digest: str) -> str:
     # ApkSignerTool.verify: v3/v3.1 names signers by SDK range; older schemes use #N.
     # https://android.googlesource.com/platform/tools/apksig/+/refs/heads/main/src/apksigner/java/com/android/apksigner/ApkSignerTool.java
     signer_line = re.compile(
-        r"Signer (?:#[1-9]\d*|\(minSdkVersion=\d+(?: \(dev release=true\))?, maxSdkVersion=\d+\)(?: #[1-9]\d*)?)"
+        r"(?:Signer (?:#[1-9]\d*|\(minSdkVersion=\d+(?: \(dev release=true\))?, maxSdkVersion=\d+\)(?: #[1-9]\d*)?)|V[1-4](?:\.\d+)? Signer:)"
         r" certificate SHA-256 digest: ([0-9a-fA-F]{64})"
     )
     digests: set[str] = set()
     for line in output.splitlines():
         line = line.strip()
-        if not line.startswith("Signer ") or " certificate SHA-256 digest:" not in line:
+        if not re.match(r"(?:Signer |V\d+(?:\.\d+)? Signer\b)", line) or " certificate SHA-256 digest:" not in line:
             continue
         match = signer_line.fullmatch(line)
         if not match:
