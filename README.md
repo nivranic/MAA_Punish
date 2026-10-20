@@ -74,6 +74,8 @@
 - Shizuku / root 授权及后续操作请参考 [MaaFwApp 使用说明](https://github.com/Aliothmoon/MaaFwApp#使用已打包的应用)。
 - 首次启动后按应用引导授予通知、电池优化白名单，以及 Shizuku 或 root 权限。
 - 未配置正式签名的开发构建会带有 `-debug` 后缀；安装后续正式版本前可能需要先卸载开发版。
+- 本 fork 的 Android 首页可选“iQOO 16 适配版”更新渠道，从 [nivranic/MAA_Punish Releases](https://github.com/nivranic/MAA_Punish/releases) 获取 `mine-vX.Y.Z-iqoo.N` 预发布 APK；该渠道使用 GitHub，无需 MirrorChyan CDK，原正式版/公测版渠道不变。
+- 历史 SHA 版本、临时 debug 签名包需先手动迁移到首个专用签名版本，跨签名可能需要卸载，操作前保存配置；之后同包名、同签名且版本码递增的构建才能覆盖升级。版本与验证约束见 [iQOO 16 更新设计](docs/plans/2026-10-20-iqoo16-update-channel-design.md)。
 
 ### Windows
 

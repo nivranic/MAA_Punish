@@ -11,6 +11,7 @@ on:
       - ".github/android/**"
       - "tools/ci/install.py"
       - "tools/ci/gen_resource_hash.py"
+      - "tools/ci/mine_apk_version.py"
       - "agent/**"
       - "resource/**"
       - "tasks/**"
@@ -27,6 +28,7 @@ on:
       - ".github/android/**"
       - "tools/ci/install.py"
       - "tools/ci/gen_resource_hash.py"
+      - "tools/ci/mine_apk_version.py"
       - "agent/**"
       - "resource/**"
       - "tasks/**"
@@ -72,6 +74,9 @@ jobs:
             is_release=true
             tag=${GITHUB_REF#refs/tags/}
             echo "Release tag format is valid: $tag"
+          elif [[ "$GITHUB_REF" == 'refs/heads/mine' ]]; then
+            is_release=false
+            tag=$(python tools/ci/mine_apk_version.py)
           else
             is_release=false
             # 获取最新的发布标签
@@ -83,7 +88,7 @@ jobs:
             tag=$(date "+$tag-%y%m%d-$(git rev-parse --short HEAD)")
           fi
 
-          if ! $($is_release) ; then
+          if ! $($is_release) && [[ "$GITHUB_REF" != 'refs/heads/mine' ]]; then
             prefix=${tag%-*-*}
             suffix=${tag#$prefix-}
             tag="$prefix-ci.$suffix"
@@ -91,16 +96,18 @@ jobs:
 
           # 检查是否为预发布版本
           is_prerelease=false
-          if [[ $tag =~ .*alpha.* || $tag =~ .*beta.* || $tag =~ .*rc.* || $tag =~ .*dev.* || $tag =~ .*-ci.* ]]; then
+          if [[ $tag =~ .*alpha.* || $tag =~ .*beta.* || $tag =~ .*rc.* || $tag =~ .*dev.* || $tag =~ .*-ci.* || $tag =~ .*-iqoo.* ]]; then
             is_prerelease=true
             echo "This is a pre-release version"
           fi
 
           echo tag=$tag | tee -a $GITHUB_OUTPUT
+          echo version_name=${tag#v} >> "$GITHUB_OUTPUT"
           echo is_release=$is_release | tee -a $GITHUB_OUTPUT
           echo is_prerelease=$is_prerelease | tee -a $GITHUB_OUTPUT
     outputs:
       tag: ${{ steps.set_tag.outputs.tag }}
+      version_name: ${{ steps.set_tag.outputs.version_name }}
       is_release: ${{ steps.set_tag.outputs.is_release }}
       is_prerelease: ${{ steps.set_tag.outputs.is_prerelease }}
 
@@ -356,6 +363,8 @@ jobs:
       MAAFWAPP_REF: bc55dac4c8231ab73e7ee42bd38c43e322838b14
       MAAFRAMEWORK_TAG: v5.14.2
       PI_PROFILE: ${{ github.workspace }}/.github/android/pi-profile.yaml
+      # Blank preserves other branches/tags. mine must embed the exact comparable release version.
+      BUILD_VERSION_NAME: ${{ github.ref == 'refs/heads/mine' && needs.meta.outputs.version_name || '' }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -389,7 +398,10 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Configure MAA_Punish Android package name
+      - name: Test Android patch and version helpers
+        run: python -m unittest discover -s .github/android/tests -v
+
+      - name: Configure MAA_Punish Android package and update channel
         shell: bash
         run: python .github/android/patch_maafwapp.py build-android/MaaFwApp
 
@@ -438,6 +450,10 @@ jobs:
           done
 
           if [[ "$configured" -eq 0 ]]; then
+            if [[ "$GITHUB_REPOSITORY" == 'nivranic/MAA_Punish' && "$GITHUB_REF" == 'refs/heads/mine' ]]; then
+              echo "The iQOO 16 update channel requires all four Android signing secrets; refusing an incompatible debug release." >&2
+              exit 1
+            fi
             echo "No release keystore configured; building a debug-signed APK."
             echo "gradle_task=assembleDebug" >> "$GITHUB_OUTPUT"
             echo "variant=debug" >> "$GITHUB_OUTPUT"
@@ -459,6 +475,19 @@ jobs:
             echo "suffix=" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Test Android update channels
+        working-directory: build-android/MaaFwApp
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          variant="${{ steps.signing.outputs.variant }}"
+          ./gradlew ":app:test${variant^}UnitTest" \
+            --tests 'com.aliothmoon.maafw.update.*' \
+            --tests 'com.aliothmoon.maafw.settings.SettingsViewModelTest' \
+            --tests 'com.aliothmoon.maafw.settings.Iqoo16SettingsViewModelTest' \
+            --stacktrace
+
       - name: Build APK
         working-directory: build-android/MaaFwApp
         shell: bash
@@ -470,6 +499,19 @@ jobs:
           variant="${{ steps.signing.outputs.variant }}"
           apk="$(find "app/build/outputs/apk/$variant" -maxdepth 1 -type f -name '*.apk' -print -quit)"
           test -n "$apk"
+          if [[ "$GITHUB_REF" == 'refs/heads/mine' ]]; then
+            python "$GITHUB_WORKSPACE/tools/ci/mine_apk_version.py" --check-metadata \
+              "app/build/outputs/apk/$variant/output-metadata.json"
+            build_tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+            "$build_tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/mine-apk-badging.txt"
+            python "$GITHUB_WORKSPACE/tools/ci/mine_apk_version.py" --check-badging "$RUNNER_TEMP/mine-apk-badging.txt"
+            signer=$("$build_tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+            if [[ "$GITHUB_REPOSITORY" == 'nivranic/MAA_Punish' && "$variant" == 'release' && "$signer" != 'a4eb8265896986293c8a746324c9ed25a79af0aee81e3ef77f249f31037db9a6' ]]; then
+              echo "APK signer does not match the iQOO 16 update key." >&2
+              exit 1
+            fi
+            echo "Verified APK signer SHA-256: $signer"
+          fi
           mkdir -p "$GITHUB_WORKSPACE/android-dist"
           cp "$apk" "$GITHUB_WORKSPACE/android-dist/MPA-android-${{ needs.meta.outputs.tag }}${{ steps.signing.outputs.suffix }}.apk"
 
