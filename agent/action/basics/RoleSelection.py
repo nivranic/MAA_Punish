@@ -550,6 +550,9 @@ class RoleSelection(CustomAction):
                         roguelike_equivalent or 0,
                     )
                 )
+                # 停止可能发生在单页扫描中，不能把部分结果当成完整缓存。
+                if context.tasker.stopping:
+                    return CustomAction.RunResult(success=True)
                 image = context.tasker.controller.post_screencap().wait().get()
                 check_role = context.run_recognition("检查到未解锁角色", image)
                 if check_role is not None and check_role.hit:
@@ -557,6 +560,15 @@ class RoleSelection(CustomAction):
                     break
                 context.run_action("滑动_选人")
                 performed_slide_count += 1
+
+            if context.tasker.stopping:
+                return CustomAction.RunResult(success=True)
+
+            if not role:
+                message = "角色扫描未识别到任何角色，已保留原缓存，请检查角色列表画面及模板匹配"
+                self.logger.error(message)
+                self.send_msg(context, message)
+                return CustomAction.RunResult(success=False)
 
             if scan_then_return:
                 for r in role.values():
@@ -1178,6 +1190,9 @@ class RoleSelection(CustomAction):
         )
 
     def save_cache(self, role: dict, update_frequency: str = "weekly"):
+        if not role:
+            self.logger.warning("角色列表为空，跳过缓存写入并保留原刷新时间")
+            return
         cache_path = self._cache_path()
         role = self._strip_generation_from_roles(role)
         self.logger.info(f"正在保存缓存到 {cache_path}, 数据: {role}")

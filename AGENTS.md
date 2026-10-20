@@ -1,5 +1,12 @@
 # Repository Guidelines
 
+## Fork 与分支边界
+
+- 上游：`https://github.com/overflow65537/MAA_Punish`，上游主分支为 `main`。
+- `main` 能且只能同步上游 `main`，不得提交个人开发或修复。
+- 个人需求与修复只在 `mine` 开发；同步顺序为更新 `main`、合并到 `mine`、推送 `mine` 到 fork 远程。
+- 切换或合并前检查工作区，保留已有改动；推送前审查待推送提交。
+
 ## 项目结构与模块划分
 
 MAA_Punish 基于 MaaFramework，通过图像识别与模拟输入实现《战双帕弥什》自动化。

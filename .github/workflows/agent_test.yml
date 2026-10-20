@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "main"
+      - "mine"
     paths:
       - "agent/**"
       - "requirements-dev.txt"
