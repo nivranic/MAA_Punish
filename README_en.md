@@ -176,6 +176,7 @@ Characters without their own logic use the **GeneralFight** logic once the battl
 
 ### Developer docs
 
+- [Development and validation guide (project map, change boundaries, checks and handoff; Chinese)](docs/开发与验证指南.md)
 - [MaaFramework quick start](https://github.com/MaaXYZ/MaaFramework/blob/main/docs/en_us/1.1-QuickStarted.md)
 - [Combat framework development guide (with LLM prompts for changing combat)](docs/自动战斗框架开发指南.md) (Chinese)
 
@@ -204,7 +205,7 @@ The binaries and resources are generated in the `install` folder.
 
 The Android APK is built with [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp). The repository's `install` workflow assembles the MaaFramework Android libraries, the dual-ABI Python agent and this project's resources, and uploads the APK as an artifact; tagged builds also add the APK to the GitHub Release.
 
-Building locally needs JDK 17, the Android SDK and Python 3. For the exact commands, packaging recipe and release-signing setup, see [`.github/android/README.md`](.github/android/README.md).
+For Android build prerequisites and release signing configuration, see the [install workflow](.github/workflows/install.yml). The resource recipe is in [pi-profile.yaml](.github/android/pi-profile.yaml); check selection and artifact boundaries are explained in the [development and validation guide](docs/开发与验证指南.md) (Chinese).
 
 ## Acknowledgements
 

@@ -165,6 +165,7 @@
 
 ### 开发文档
 
+- [开发与验证指南（项目地图、任务边界、检查命令与交接）](docs/开发与验证指南.md)
 - [MaaFramework 快速开始](https://github.com/MaaAssistantArknights/MaaFramework/blob/main/docs/zh_cn/1.1-%E5%BF%AB%E9%80%9F%E5%BC%80%E5%A7%8B.md)
 - [自动战斗框架开发指南（含 LLM 改战斗提示词）](docs/自动战斗框架开发指南.md)
 
@@ -202,7 +203,7 @@ Android APK 使用 [MaaFwApp](https://github.com/Aliothmoon/MaaFwApp) 构建。�
 
 </details>
 
-本地构建需要 JDK 17、Android SDK 和 Python 3，详细命令、打包配方及 release 签名配置见 [`.github/android/README.md`](.github/android/README.md)。
+Android 的构建前提与 release 签名配置以 [install 工作流](.github/workflows/install.yml) 为准；资源配方见 [pi-profile.yaml](.github/android/pi-profile.yaml)，开发验证与产物边界见 [开发与验证指南](docs/开发与验证指南.md)。
 
 ## 鸣谢
 

@@ -16,7 +16,7 @@ description: 分析用户给出的本地日志目录或日志文件路径，结�
 | 文件 | 含义 |
 |------|------|
 | `gui.log` | **MFW-cfa** 图形界面侧日志：配置加载、任务发起、界面与编排相关线索。 |
-| `custom.log` | **Python 自定义**（`assets/agent`）侧日志：自定义识别/动作的打印与异常。 |
+| `custom.log` | **Python 自定义**（源码 `agent/`）侧日志：自定义识别/动作的打印与异常。 |
 | `maa.log` | **MaaFramework** 核心运行时（仓库 README 反馈问题时常用 `debug/maa.log`）：Pipeline 节点、识别、动作、控制器、`task_id` 等。 |
 
 说明：`agent/logger_component.py` 默认可能写入 `debug/custom_YYYYMMDD.log`；若用户统一导出为 `custom.log`，以用户约定为准，并在分析时兼容两种命名。
@@ -34,10 +34,11 @@ description: 分析用户给出的本地日志目录或日志文件路径，结�
    - 在 `custom.log` 中查找同一时段的 Python 扩展输出。
 
 3. **关联代码与资源**
-   - 任务入口与选项：`assets/interface.json`、`assets/tasks/*.json`。
-   - Pipeline 节点：`assets/resource/**/pipeline/**/*.jsonc`（含 `base`、`zh_TW` 等变体）。
+   - 任务入口与选项：根目录 `interface.json`、`tasks/*.json`、`options/*.json`；文案在 `i18n/`。
+   - Pipeline 节点：`resource/**/pipeline/**/*.jsonc`（含 `base`、平台与语言覆盖资源）。
    - 自定义逻辑：`agent/**/*.py`。
-   - Pipeline 协议与术语不确定时：本仓库 `protocol-3.1-task-pipeline.md`、上游 [PipelineProtocol](https://github.com/MaaXYZ/MaaFramework/blob/main/docs/en_us/3.1-PipelineProtocol.md)。
+   - 发行包可能有 `assets/` 前缀，关联源码时先核对包布局，不将其当成仓库目录。
+   - Pipeline 协议与术语不确定时：查看 `tools/schema/` 与上游 [PipelineProtocol](https://github.com/MaaXYZ/MaaFramework/blob/main/docs/en_us/3.1-PipelineProtocol.md)，核对实际 MaaFramework 版本；仓库未保存本地协议全文。
 
 4. **过滤证据**
    - 高价值关键词示例：`Tasker.Task.Starting` / `Succeeded` / `Failed`，`Node.Recognition.Failed`，`Node.Action.Failed`，`timeout`，`Warn` / `Error` / `Fatal`，`post_task`，`task_id`。
@@ -67,5 +68,6 @@ description: 分析用户给出的本地日志目录或日志文件路径，结�
 ## 注意事项
 
 - 默认**不**分析 `.dmp`；若用户附带崩溃转储，说明需要专用符号化环境再判断。
-- 用户任务名、选项名若要友好展示，可在 `assets` 内查找与 `interface.json`/任务 JSON 对应的文案；找不到再写原始 id。
+- 用户任务名、选项名若要友好展示，可在 `i18n/` 内查找与 `interface.json` / `tasks/` / `options/` 对应的文案；找不到再写原始 id。
 - 引用本仓库代码时使用仓库内路径；引用 MaaFramework 行为可指向上游文档链接。
+- 日志中的成功、静态 ROI 覆盖或资源加载通过，不等于原截图识别成功或设备任务验收；验证分层见 `docs/开发与验证指南.md`。

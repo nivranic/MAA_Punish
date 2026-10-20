@@ -1,6 +1,6 @@
 ---
 name: maa-punish-pipeline-guide
-description: MAA_Punish 任务流水线 JSON/JSONC 编写与审查指南。含 Pipeline 速查表（识别类型、动作类型、节点字段默认值、JumpBack/Anchor、Custom）。基于 MaaFramework 协议与本仓库 protocol-3.1-task-pipeline.md。在编写或审查 pipeline、排查超时/on_error、或使用 TemplateMatch/OCR/Custom 时使用。
+description: MAA_Punish 任务流水线 JSON/JSONC 编写与审查指南。含 Pipeline 速查表（识别类型、动作类型、节点字段默认值、JumpBack/Anchor、Custom）。按仓库 Schema 与实际 MaaFramework 版本核对上游协议。在编写或审查 pipeline、排查超时/on_error、或使用 TemplateMatch/OCR/Custom 时使用。
 ---
 
 # MAA_Punish Pipeline 编写指南
@@ -10,11 +10,14 @@ description: MAA_Punish 任务流水线 JSON/JSONC 编写与审查指南。含 P
 | 需求 | 优先看 |
 |------|--------|
 | **速查表（本节下方）** | 识别/动作/字段默认值/节点属性 |
-| 完整语义与边界情况 | 仓库根目录 `protocol-3.1-task-pipeline.md` |
+| 完整语义与边界情况 | 按 `requirements.txt` 的 MaaFramework 版本核对上游协议；仓库未保存本地协议全文 |
 | 上游原文 | [3.1-PipelineProtocol](https://github.com/MaaXYZ/MaaFramework/blob/main/docs/en_us/3.1-PipelineProtocol.md) |
 | JSON Schema 校验 | `tools/schema/pipeline.schema.json`、`custom.*.schema.json` |
 | 自动战斗专项 | `docs/自动战斗框架开发指南.md` |
 | Python 自定义实现 | `agent/recognition/`、`agent/action/` |
+| 命令、平台与验证选择 | `docs/开发与验证指南.md` |
+
+下方是便于定位的协议速查，不是本仓库额外强制的默认值。版本标注和上游 `main` 文档可能与当前依赖不一致，遇到语义差异应核对对应版本、仓库 Schema 及实际加载结果；不要仅凭表格修改运行契约。
 
 ---
 
@@ -35,7 +38,7 @@ description: MAA_Punish 任务流水线 JSON/JSONC 编写与审查指南。含 P
 
 ### 节点通用字段 · 默认值速查
 
-以下为协议常见内置默认（节点未写时使用；实际可能被 `assets/resource/**/default_pipeline.json` 覆盖，见下节）。
+以下为协议常见内置默认（节点未写时使用；实际可能被 `resource/**/default_pipeline.json` 覆盖，见下节）。
 
 | 字段 | 典型默认 | 说明 |
 |------|----------|------|
@@ -117,9 +120,9 @@ description: MAA_Punish 任务流水线 JSON/JSONC 编写与审查指南。含 P
 
 ## 本项目约定
 
-1. **分辨率**：ROI / 模板均以 **1280×720** 为基准（与 README 模拟器说明一致）。
-2. **资源路径**：`assets/resource/**/pipeline/**/*.jsonc`；图片相对各自 bundle 的 `image/` 等目录。
-3. **默认值文件**：例如 `assets/resource/base/default_pipeline.json` 会与框架 `default_pipeline.json` 机制合并；改全局默认时注意多 bundle 加载顺序（见协议「多 Bundle」）。
+1. **坐标基准**：现有战斗资源常用 **1280×720** 识别画面。修改前核对实际截图、控制器缩放、按钮布局缓存和平台覆盖；物理屏幕分辨率不能直接代替识别坐标系。
+2. **资源路径**：源码为 `resource/**/pipeline/**/*.jsonc`；图片相对各自 bundle 的 `image/` 目录。发行包路径需另行核对。
+3. **默认值文件**：例如 `resource/base/default_pipeline.json` 参与框架默认值机制；修改时检查 `interface.json` 中基础、语言和控制器资源的组合，不能只验证单个文件。
 4. **Python Custom（v2 示例骨架）**
 
 ```jsonc
@@ -144,7 +147,7 @@ description: MAA_Punish 任务流水线 JSON/JSONC 编写与审查指南。含 P
 }
 ```
 
-注册名必须与 `assets/agent` 内实现一致；调试看 **`custom.log`** 或 `debug/custom_*.log`。
+注册名必须与 `agent/agent_file.py` 注册的处理器一致；调试看 **`custom.log`** 或 `debug/custom_*.log`。新增战斗角色通过 `role_factory` 发现，不为每个角色增加 Custom 注册。
 
 ---
 
@@ -162,15 +165,15 @@ description: MAA_Punish 任务流水线 JSON/JSONC 编写与审查指南。含 P
 
 - [ ] 字段符合 schema；Custom 与 Python 注册名一致
 - [ ] `next` / `on_error` 覆盖主要分支；JumpBack 用于可恢复中断
-- [ ] ROI / 模板基于 720p
-- [ ] 任务入口与 `assets/interface.json`、`assets/tasks` 一致
+- [ ] ROI / 模板与实际识别画面、控制器和平台覆盖一致
+- [ ] 任务入口与 `interface.json`、`tasks/`、`options/` 一致
 - [ ] 需要文案展示时对照 interface / 任务定义
 
 ---
 
 ## 参考（本仓库）
 
-- `protocol-3.1-task-pipeline.md`（权威细节）
+- `requirements.txt` 与匹配版本的上游 Pipeline 协议
 - `docs/自动战斗框架开发指南.md`
 - `tools/schema/pipeline.schema.json`
 - 成熟范例：同目录其它 `*.jsonc`（如 `Role_Selection.jsonc`）
