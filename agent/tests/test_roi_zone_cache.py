@@ -26,6 +26,7 @@ def calibration(request, tmp_path, monkeypatch):
         entry: SimpleNamespace(hit=True, box=rect)
         for _, entry, rect in policy.zones_for(controller)
     })
+    context.tasker.resource = SimpleNamespace(node_list=list(load_module._get_node_zone_map()))
     return controller, path, data, context
 
 
@@ -121,3 +122,89 @@ def test_incomplete_cache_is_not_applied(calibration):
     load_module.LoadRoiZone().apply_offsets(context, controller)
 
     assert context.pipeline_overrides == []
+
+
+@pytest.mark.parametrize("action_type", ["Click", "LongPress", "TouchDown", "TouchMove"])
+@pytest.mark.parametrize("target", [[1200, 620], [1200, 620, 1, 1]])
+def test_fixed_combat_input_follows_calibrated_button(calibration, monkeypatch, action_type, target):
+    controller, path, data, context = calibration
+    data["atk_zone"]["offset"] = [-95, -120, 8, 6]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(load_module, "_get_node_zone_map", lambda: {"攻击": "atk_zone"})
+    context.node_data["攻击"] = {"action": {"type": action_type, "param": {
+        "target": target, "contact": 2, "duration": 1000,
+        "target_offset": [-95, -120, 0, 0],
+    }}}
+
+    load_module.LoadRoiZone().apply_offsets(context, controller)
+
+    patch = context.pipeline_overrides[-1]["攻击"]
+    assert patch["recognition"]["param"]["roi_offset"] == [-95, -120, 8, 6]
+    assert patch["action"] == {"param": {"target_offset": [-95, -120, 0, 0]}}
+    # 真机攻击区为 [1037,452,124,123]，旧点击点在区外，校准后在区内。
+    x, y = [target[i] + patch["action"]["param"]["target_offset"][i] for i in range(2)]
+    assert 1037 <= x < 1161 and 452 <= y < 575
+
+
+@pytest.mark.parametrize("end", [[1200, 620], [[1200, 620], True, "识别目标"]])
+def test_long_attack_moves_both_swipe_endpoints(calibration, monkeypatch, end):
+    controller, path, data, context = calibration
+    data["atk_zone"]["offset"] = [-95, -120, 0, 0]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(load_module, "_get_node_zone_map", lambda: {"长按攻击": "atk_zone"})
+    context.node_data["长按攻击"] = {"action": {"type": "Swipe", "param": {
+        "begin": [1200, 620], "end": end, "duration": 4000,
+    }}}
+
+    load_module.LoadRoiZone().apply_offsets(context, controller)
+
+    param = context.pipeline_overrides[-1]["长按攻击"]["action"]["param"]
+    assert param["begin_offset"] == [-95, -120, 0, 0]
+    assert param["end_offset"] == (
+        [-95, -120, 0, 0] if end == [1200, 620]
+        else [[-95, -120, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+    )
+
+
+@pytest.mark.parametrize("action", [
+    {"type": "Click", "param": {"target": True}},
+    {"type": "Click", "param": {"target": "识别目标"}},
+    {"type": "ClickKey", "param": {"key": 74}},
+    {"type": "KeyDown", "param": {"key": 74}},
+    {"type": "TouchUp", "param": {"contact": 0}},
+])
+def test_recognized_targets_and_keyboard_inputs_are_not_moved(calibration, monkeypatch, action):
+    controller, path, data, context = calibration
+    data["atk_zone"]["offset"] = [-95, -120, 0, 0]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(load_module, "_get_node_zone_map", lambda: {"攻击": "atk_zone"})
+    context.node_data["攻击"] = {"action": action}
+
+    load_module.LoadRoiZone().apply_offsets(context, controller)
+
+    assert "action" not in context.pipeline_overrides[-1]["攻击"]
+
+
+def test_loading_action_calibration_twice_does_not_accumulate(calibration, monkeypatch):
+    controller, path, data, context = calibration
+    data["atk_zone"]["offset"] = [-95, -120, 0, 0]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(load_module, "_get_node_zone_map", lambda: {
+        "攻击": "atk_zone", "战斗中": "atk_zone",
+    })
+    # 模拟已加载一次的运行节点：原始 target 保留，校准保存在 offset 字段。
+    monkeypatch.setattr(context, "get_node_data", Mock(return_value={
+        "action": {"type": "Click", "param": {
+            "target": [1200, 620, 1, 1], "target_offset": [-95, -120, 0, 0],
+        }},
+    }))
+    loader = load_module.LoadRoiZone()
+
+    loader.apply_offsets(context, controller)
+    loader.apply_offsets(context, controller)
+
+    assert context.pipeline_overrides[0] == context.pipeline_overrides[1]
+    assert "战斗中" not in context.pipeline_overrides[-1]
+    assert context.pipeline_overrides[-1]["攻击"]["action"]["param"] == {
+        "target_offset": [-95, -120, 0, 0],
+    }

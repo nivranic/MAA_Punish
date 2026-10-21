@@ -87,6 +87,7 @@ class LoadRoiZone(CustomAction):
             offset_data = json.load(f)
 
         node_zone_map = _get_node_zone_map()
+        resource_nodes = set(context.tasker.resource.node_list)
         overrides: dict[str, Any] = {}
         for node_name, offset_key in node_zone_map.items():
             if node_name in self._OFFSET_EXCLUDED_NODES:
@@ -103,6 +104,12 @@ class LoadRoiZone(CustomAction):
                     }
                 }
             }
+            action_offsets = (
+                self._action_offsets(context.get_node_data(node_name), zone_offset)
+                if node_name in resource_nodes else {}
+            )
+            if action_offsets:
+                overrides[node_name]["action"] = {"param": action_offsets}
 
         if overrides:
             context.override_pipeline(overrides)
@@ -115,6 +122,47 @@ class LoadRoiZone(CustomAction):
             )
         else:
             self.logger.info("LoadRoiZone 本次无覆盖内容")
+
+    @staticmethod
+    def _action_offsets(node: dict | None, offset: list[int]) -> dict[str, Any]:
+        """校准固定触屏目标；识别结果目标已经随 ROI 移动，不再偏移。"""
+        if not isinstance(node, dict):
+            return {}
+        action = node.get("action", {})
+        if not isinstance(action, dict):
+            return {}
+        param = action.get("param", {})
+        if not isinstance(param, dict):
+            return {}
+
+        def fixed_target(target: Any) -> bool:
+            return (
+                isinstance(target, list)
+                and len(target) in (2, 4)
+                and all(type(value) is int for value in target)
+            )
+
+        # 动作只平移，不将布局框尺寸差变成点击点的随机范围。
+        translation = [offset[0], offset[1], 0, 0]
+        action_type = action.get("type")
+        if action_type in {"Click", "LongPress", "TouchDown", "TouchMove"}:
+            if fixed_target(param.get("target")):
+                return {"target_offset": translation}
+        elif action_type == "Swipe":
+            result = {}
+            if fixed_target(param.get("begin")):
+                result["begin_offset"] = translation
+            end = param.get("end")
+            if fixed_target(end):
+                result["end_offset"] = translation
+            elif isinstance(end, list) and end:
+                # 多段路径可混用固定点和识别目标，分别处理，避免二次偏移。
+                result["end_offset"] = [
+                    translation if fixed_target(target) else [0, 0, 0, 0]
+                    for target in end
+                ]
+            return result
+        return {}
 
     @staticmethod
     def _get_zone_offset(offset_data: dict, offset_key: str) -> list[int] | None:
