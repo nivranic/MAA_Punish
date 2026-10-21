@@ -5,6 +5,7 @@ ROI 区偏移：控制器类型、默认 zones 与 debug 校准文件路径
 
 from pathlib import Path
 import json
+import math
 from typing import Any
 
 # 魔法变量：两套默认 zones（adb 为模拟器布局，win32 为 PC 客户端实测 recognized）
@@ -96,4 +97,20 @@ def cache_is_ready(controller: str) -> bool:
         return False
     if not isinstance(data, dict):
         return False
-    return any(isinstance(zone, dict) and zone.get("hit") for zone in data.values())
+    for key, _, _ in zones_for(controller):
+        zone = data.get(key)
+        if not isinstance(zone, dict) or zone.get("hit") is not True:
+            return False
+        offset = zone.get("offset")
+        if (
+            not isinstance(offset, list)
+            or len(offset) != 4
+            or any(
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or (isinstance(value, float) and not math.isfinite(value))
+                for value in offset
+            )
+        ):
+            return False
+    return True

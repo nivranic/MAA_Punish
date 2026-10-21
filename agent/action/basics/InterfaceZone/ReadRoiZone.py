@@ -22,6 +22,8 @@ def capture_roi_zones(context: Context, controller: str) -> bool:
     failed = False
 
     for key, entry, default in zones:
+        if context.tasker.stopping:
+            return False
         reco = context.run_recognition(entry, image)
         if reco and reco.hit and reco.box:
             recognized = list(reco.box)
@@ -43,14 +45,17 @@ def capture_roi_zones(context: Context, controller: str) -> bool:
             _send_msg(context, f"{key} 读取失败")
             failed = True
 
+    if context.tasker.stopping:
+        return False
     if failed:
-        _send_msg(context, "读取ROI偏移配置失败,请切换键位为新界面")
+        _send_msg(context, "读取ROI偏移配置失败，未更新缓存，请检查布局界面及引导遮挡")
+        return False
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=4, ensure_ascii=False)
 
     print(f"capture_roi_zones controller={controller} saved to {output_path}")
-    return not failed
+    return True
 
 
 def _send_msg(context: Context, msg: str):

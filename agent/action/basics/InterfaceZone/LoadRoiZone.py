@@ -16,6 +16,7 @@ from maa.custom_action import CustomAction
 from logger_component import LoggerComponent
 
 from action.basics.InterfaceZone.roi_zone_controller import (
+    cache_is_ready,
     offset_path,
     parse_controller,
     parse_param,
@@ -60,16 +61,17 @@ class LoadRoiZone(CustomAction):
                 "LoadRoiZone controller=%s 在布局界面读取识别区",
                 controller,
             )
-            capture_roi_zones(context, controller)
+            if not capture_roi_zones(context, controller):
+                return CustomAction.RunResult(success=False)
 
         self.apply_offsets(context, controller)
         return CustomAction.RunResult(success=True)
 
     def apply_offsets(self, context: Context, controller: str) -> None:
         offset_file = offset_path(controller)
-        if not offset_file.exists():
+        if not cache_is_ready(controller):
             self.logger.warning(
-                "LoadRoiZone controller=%s 偏移配置不存在 (%s), 跳过加载",
+                "LoadRoiZone controller=%s 偏移配置缺失或不完整 (%s), 跳过加载",
                 controller,
                 offset_file,
             )

@@ -35,7 +35,8 @@
             "param": {
                 "template": [
                     "界面/大招区.png"
-                ]
+                ],
+                "threshold": 0.65
             }
         }
     },

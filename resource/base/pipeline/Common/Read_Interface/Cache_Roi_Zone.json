@@ -27,6 +27,7 @@
             }
         },
         "next": [
+            "[JumpBack]关闭布局引导",
             "收起布局菜单",
             "[JumpBack]确定",
             "[JumpBack]前往布局设置",
@@ -108,6 +109,32 @@
             "type": "Click"
         }
     },
+    "关闭布局引导": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [
+                    230,
+                    160,
+                    520,
+                    120
+                ],
+                "expected": [
+                    "欢迎来到布局设置界面",
+                    "拖动调整该模块显示位置"
+                ]
+            }
+        },
+        "action": {
+            "type": "Click",
+            "param": {
+                "target": [
+                    800,
+                    580
+                ]
+            }
+        }
+    },
     "收起布局菜单": {
         "recognition": {
             "type": "TemplateMatch",
@@ -128,6 +155,8 @@
             "type": "Click"
         },
         "next": [
+            "[JumpBack]关闭布局引导",
+            "收起布局菜单",
             "识别区域"
         ]
     },
@@ -137,7 +166,8 @@
             "param": {
                 "all_of": [
                     "识别攻击区",
-                    "识别闪避区"
+                    "识别闪避区",
+                    "展开布局菜单"
                 ]
             }
         },

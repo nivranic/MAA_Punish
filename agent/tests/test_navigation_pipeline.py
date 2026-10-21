@@ -42,3 +42,25 @@ def test_layout_entry_can_confirm_popup_and_resume_navigation():
     assert confirmation["action"]["type"] == "Click"
     assert "确定_文字" in confirmation["recognition"]["param"]["all_of"]
     assert not confirmation.get("next")
+
+
+def test_join_team_roi_contains_complete_observed_label():
+    roles = jsonc.loads((PIPELINE / "Role_Selection.jsonc").read_text(encoding="utf-8"))
+    x, y, width, height = roles["编入队伍"]["recognition"]["param"]["roi"]
+    # 15:35 roster screenshot: the old left edge at 983 cropped off 编.
+    bx, by, bw, bh = (952, 472, 102, 29)
+    assert x <= bx and y <= by
+    assert x + width >= bx + bw and y + height >= by + bh
+
+
+def test_layout_tutorial_is_handled_before_capture_and_collapse():
+    layout = jsonc.loads(
+        (PIPELINE / "Common/Read_Interface/Cache_Roi_Zone.json").read_text(encoding="utf-8")
+    )
+    for parent, later in (("打开界面设置", "收起布局菜单"), ("收起布局菜单", "识别区域")):
+        branches = layout[parent]["next"]
+        assert branches.index("[JumpBack]关闭布局引导") < branches.index(later)
+    # A tutorial can consume the first fold click; check the expanded menu again.
+    assert "收起布局菜单" in layout["收起布局菜单"]["next"]
+    # Do not calibrate while the menu is still expanded behind a tutorial.
+    assert "展开布局菜单" in layout["识别区域"]["recognition"]["param"]["all_of"]
