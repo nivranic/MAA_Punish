@@ -88,6 +88,20 @@ def test_trial_role_switch_roi_contains_complete_power_label():
     assert x + width >= bx + bw and y + height >= by + bh
 
 
+def test_combat_roi_contains_live_pause_button_and_original_search_area():
+    combat = jsonc.loads(
+        (PIPELINE / "Auto_Battle/Auto_Battle.jsonc").read_text(encoding="utf-8")
+    )
+    x, y, width, height = combat["战斗中"]["recognition"]["param"]["roi"]
+    # Three live combat frames all matched this complete 58x49 pause template.
+    bx, by, bw, bh = (1145, 26, 58, 49)
+    assert x <= bx and y <= by
+    assert x + width >= bx + bw and y + height >= by + bh
+    # Keep the original top-right area for layouts with a farther-right button.
+    assert x <= 1165 and y == 0
+    assert x + width == 1280 and height == 100
+
+
 @pytest.mark.parametrize(
     ("text", "locked"),
     [("碎片", True), ("10/50", True), ("/50", True),
