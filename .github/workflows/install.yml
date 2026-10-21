@@ -372,6 +372,7 @@ jobs:
       # Only this fork's mine builds use the coexisting package; official tags retain their identity.
       MAA_PUNISH_APP_ID: ${{ github.repository == 'nivranic/MAA_Punish' && github.ref == 'refs/heads/mine' && 'punish.iqoo16' || 'punish' }}
       MAA_PUNISH_APP_LABEL: ${{ github.repository == 'nivranic/MAA_Punish' && github.ref == 'refs/heads/mine' && 'MAA Punish iqoo16' || 'MAA Punish' }}
+      MAA_PUNISH_APP_ICON: ${{ github.repository == 'nivranic/MAA_Punish' && github.ref == 'refs/heads/mine' && 'icons/logo-iqoo16.png' || '../../logo.png' }}
       # Blank preserves other branches/tags. mine must embed the exact comparable release version.
       BUILD_VERSION_NAME: ${{ github.ref == 'refs/heads/mine' && needs.meta.outputs.version_name || '' }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
