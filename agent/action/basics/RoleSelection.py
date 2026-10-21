@@ -265,11 +265,10 @@ class RoleSelection(CustomAction):
 
     @staticmethod
     def _template_match_hits(result) -> list[TemplateMatchResult]:
-        """同页多实例时优先用 all_results；filtered_results 受 index 影响可能只有一条。"""
-        for candidates in (result.all_results, result.filtered_results):
-            hits = [r for r in candidates if isinstance(r, TemplateMatchResult)]
-            if hits:
-                return hits
+        """保留通过框架筛选的同页匹配，不把低分原始候选当成角色。"""
+        hits = [r for r in result.filtered_results if isinstance(r, TemplateMatchResult)]
+        if hits:
+            return hits
         if isinstance(result.best_result, TemplateMatchResult):
             return [result.best_result]
         return []
@@ -785,17 +784,6 @@ class RoleSelection(CustomAction):
                 )
                 continue
 
-            is_have_role = context.run_recognition(
-                entry="检查人物是否拥有",
-                image=image,
-            )
-            if is_have_role and is_have_role.hit:
-                self.logger.info(
-                    f"检测到未拥有角色 {role_name}, 停止本页识别 "
-                    #f"(进度 {checked_count}/{total_roles}, 本页已识别={len(role)})"
-                )
-                return role
-
             match_count = len(match_hits)
             if match_count > 1:
                 self.logger.info(
@@ -804,6 +792,19 @@ class RoleSelection(CustomAction):
 
             for role_reco in match_hits:
                 #self.logger.debug(f"角色 {role_name} box={role_reco.box}")
+
+                is_have_role = context.run_recognition(
+                    entry="检查人物是否拥有",
+                    image=image,
+                    pipeline_override={
+                        "检查人物是否拥有": {
+                            "recognition": {"param": {"roi": role_reco.box}}
+                        }
+                    },
+                )
+                if is_have_role and is_have_role.hit:
+                    self.logger.info(f"检测到未拥有角色 {role_name}, 跳过当前匹配")
+                    continue
 
                 trial_reco = context.run_recognition(
                     entry="识别试用角色",

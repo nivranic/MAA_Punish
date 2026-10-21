@@ -1,6 +1,7 @@
 """Regression checks from the 2026-10-21 Android navigation screenshots."""
 
 from pathlib import Path
+import re
 
 import jsonc
 import pytest
@@ -64,3 +65,36 @@ def test_layout_tutorial_is_handled_before_capture_and_collapse():
     assert "收起布局菜单" in layout["收起布局菜单"]["next"]
     # Do not calibrate while the menu is still expanded behind a tutorial.
     assert "展开布局菜单" in layout["识别区域"]["recognition"]["param"]["all_of"]
+
+
+@pytest.mark.parametrize(
+    "observed_box",
+    [(141, 81, 86, 90), (134, 186, 96, 98), (136, 302, 92, 91),
+     (136, 412, 92, 91), (136, 523, 91, 91)],
+)
+def test_role_portrait_roi_contains_observed_complete_portraits(observed_box):
+    roles = jsonc.loads((PIPELINE / "Role_Selection.jsonc").read_text(encoding="utf-8"))
+    x, y, width, height = roles["识别角色"]["recognition"]["param"]["roi"]
+    bx, by, bw, bh = observed_box
+    assert x <= bx and y <= by
+    assert x + width >= bx + bw and y + height >= by + bh
+
+
+def test_trial_role_switch_roi_contains_complete_power_label():
+    siege = jsonc.loads((PIPELINE / "Simulated_Siege.jsonc").read_text(encoding="utf-8"))
+    x, y, width, height = siege["选择其他人物"]["recognition"]["param"]["roi"]
+    bx, by, bw, bh = (259, 131, 52, 17)
+    assert x <= bx and y <= by
+    assert x + width >= bx + bw and y + height >= by + bh
+
+
+@pytest.mark.parametrize(
+    ("text", "locked"),
+    [("碎片", True), ("10/50", True), ("/50", True),
+     ("3/3", False), ("80", False), ("8159", False)],
+)
+def test_fragment_counter_fallback_does_not_match_owned_role_metadata(text, locked):
+    roles = jsonc.loads((PIPELINE / "Role_Selection.jsonc").read_text(encoding="utf-8"))
+    expected = roles["检查人物是否拥有"]["recognition"]["param"]["expected"]
+    patterns = [expected] if isinstance(expected, str) else expected
+    assert any(re.search(pattern, text) for pattern in patterns) is locked
