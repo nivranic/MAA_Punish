@@ -122,6 +122,7 @@ def test_fragment_counter_fallback_does_not_match_owned_role_metadata(text, lock
         ("War_Zone.jsonc", "纷争战区内部", (503, 121, 53, 30)),
         ("War_Zone.jsonc", "首通已完成", (1143, 511, 53, 35)),
         ("War_Zone.jsonc", "战斗准备", (992, 656, 97, 30)),
+        ("War_Zone.jsonc", "进入战区选人界面", (1141, 20, 59, 56)),
     ],
 )
 def test_daily_mode_roi_contains_observed_complete_label(filename, node_name, observed_box):
