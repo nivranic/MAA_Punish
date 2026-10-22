@@ -2,6 +2,7 @@
     "纷争战区": {
         "next": [
             "[JumpBack]覆盖布局菜单",
+            "[JumpBack]关闭战区玩家详情",
             "[JumpBack]是否需要缓存",
             "结算期",
             "纷争战区内部",
@@ -107,11 +108,47 @@
             ]
         },
         "next": [
+            "[JumpBack]关闭战区玩家详情",
+            "[JumpBack]意外点击_玩家详情",
             "[JumpBack]破纪录",
             "[JumpBack]首通未完成",
             "首通已完成",
             "[JumpBack]战斗结束"
         ]
+    },
+    "关闭战区玩家详情": {
+        "max_hit": 3,
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "意外点击_玩家详情",
+                    "战区玩家详情关闭按钮"
+                ],
+                "box_index": 1
+            }
+        },
+        "action": {
+            "type": "Click"
+        },
+        "post_wait_freezes": {
+            "time": 200,
+            "timeout": 2000
+        }
+    },
+    "战区玩家详情关闭按钮": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [
+                    1150,
+                    0,
+                    130,
+                    140
+                ],
+                "expected": "^[Xx×]$"
+            }
+        }
     },
     "破纪录": {
         "recognition": {
@@ -185,6 +222,7 @@
             "type": "Click"
         },
         "next": [
+            "[JumpBack]关闭战区玩家详情",
             "战斗准备",
             "[JumpBack]意外点击_玩家详情",
             "[JumpBack]战斗结束",

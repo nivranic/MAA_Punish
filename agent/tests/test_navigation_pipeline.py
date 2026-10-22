@@ -160,3 +160,24 @@ def test_mapping_settlement_retry_uses_button_result_and_is_bounded():
     assert retry["action"].get("param", {}).get("target", True) is True
     assert 0 < retry["max_hit"] <= 3
     assert "[JumpBack]结算_点击失效" in mapping["结算"]["next"]
+
+
+@pytest.mark.parametrize(
+    ("parent", "later"),
+    [("纷争战区", "纷争战区内部"),
+     ("纷争战区内部", "[JumpBack]首通未完成"),
+     ("首通未完成", "战斗准备")],
+)
+def test_war_zone_closes_profile_modal_before_map_actions(parent, later):
+    war = jsonc.loads((PIPELINE / "War_Zone.jsonc").read_text(encoding="utf-8"))
+    branches = war[parent]["next"]
+    assert branches.index("[JumpBack]关闭战区玩家详情") < branches.index(later)
+    close = war["关闭战区玩家详情"]
+    assert close["recognition"]["param"]["all_of"] == [
+        "意外点击_玩家详情", "战区玩家详情关闭按钮"
+    ]
+    assert close["recognition"]["param"]["box_index"] == 1
+    assert close["action"].get("param", {}).get("target", True) is True
+    x, y, width, height = war["战区玩家详情关闭按钮"]["recognition"]["param"]["roi"]
+    assert x <= 1175 and y <= 46
+    assert x + width >= 1225 and y + height >= 98
