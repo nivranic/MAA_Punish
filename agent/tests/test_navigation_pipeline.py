@@ -193,3 +193,20 @@ def test_war_profile_close_symbol_bypasses_batch_text_detection():
     x, y, width, height = param["roi"]
     assert x >= 1170 and x + width <= 1230
     assert y >= 47 and y + height <= 100  # Exclude the + above and score below.
+
+
+def test_mapping_settlement_precedes_zero_counter_start_fallback():
+    mapping = jsonc.loads((PIPELINE / "HighRankMapping.jsonc").read_text(encoding="utf-8"))
+    branches = mapping["开始挑战"]["next"]
+    # Settlement also shows 0 currency at the start-retry ROI. Checking that
+    # fallback first clicks the currency and opens its details instead of settling.
+    assert branches.index("结算") < branches.index("[JumpBack]开始挑战_点击丢失")
+
+
+def test_mapping_item_modal_close_is_inside_live_x_and_bounded():
+    mapping = jsonc.loads((PIPELINE / "HighRankMapping.jsonc").read_text(encoding="utf-8"))
+    close = mapping["意外点击_物品详情"]
+    x, y = close["action"]["param"]["target"]
+    assert 1180 <= x < 1225 and 51 <= y < 96
+    assert 0 < close["max_hit"] <= 3
+    assert "[JumpBack]意外点击_物品详情" in mapping["结算"]["next"]

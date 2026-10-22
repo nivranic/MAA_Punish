@@ -69,6 +69,7 @@
         }
     },
     "意外点击_物品详情": {
+        "max_hit": 3,
         "recognition": {
             "type": "OCR",
             "param": {
@@ -85,8 +86,8 @@
             "type": "Click",
             "param": {
                 "target": [
-                    1270,
-                    10
+                    1200,
+                    72
                 ]
             }
         }
@@ -143,8 +144,8 @@
         "next": [
             "[JumpBack]战斗中",
             "[JumpBack]确定",
-            "[JumpBack]开始挑战_点击丢失",
             "结算",
+            "[JumpBack]开始挑战_点击丢失",
             "[JumpBack]战斗失败_历战",
             "[JumpBack]继续挑战",
             "[JumpBack]载入中",
@@ -244,6 +245,7 @@
         },
         "next": [
             "历战映射主界面",
+            "[JumpBack]意外点击_物品详情",
             "[JumpBack]确定",
             "[JumpBack]结算_点击失效",
             "[JumpBack]继续",
