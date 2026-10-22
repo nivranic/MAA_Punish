@@ -114,11 +114,10 @@ class LoadRoiZone(CustomAction):
         if overrides:
             context.override_pipeline(overrides)
             self.logger.info(
-                "LoadRoiZone controller=%s 本次覆盖 %d 个节点 (%s):\n%s",
+                "LoadRoiZone controller=%s 本次覆盖 %d 个节点 (%s)",
                 controller,
                 len(overrides),
                 offset_file,
-                json.dumps(overrides, ensure_ascii=False, indent=2),
             )
         else:
             self.logger.info("LoadRoiZone 本次无覆盖内容")

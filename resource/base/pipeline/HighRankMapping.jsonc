@@ -251,26 +251,18 @@
         ]
     },
     "结算_点击失效": {
+        "max_hit": 3,
         "recognition": {
-            "type": "OCR",
+            "type": "And",
             "param": {
-                "roi": [
-                    833,
-                    75,
-                    206,
-                    100
+                "all_of": [
+                    "结算"
                 ],
-                "expected": "(?!00:00:00)\\d{2}:\\d{2}:\\d{2}"
+                "box_index": 0
             }
         },
         "action": {
-            "type": "Click",
-            "param": {
-                "target": [
-                    1103,
-                    141
-                ]
-            }
+            "type": "Click"
         },
         "post_wait_freezes": {
             "time": 500,

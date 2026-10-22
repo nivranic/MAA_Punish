@@ -112,3 +112,51 @@ def test_fragment_counter_fallback_does_not_match_owned_role_metadata(text, lock
     expected = roles["检查人物是否拥有"]["recognition"]["param"]["expected"]
     patterns = [expected] if isinstance(expected, str) else expected
     assert any(re.search(pattern, text) for pattern in patterns) is locked
+
+
+@pytest.mark.parametrize(
+    ("filename", "node_name", "observed_box"),
+    [
+        ("Phantom_Pain_Cage.jsonc", "检查A区", (573, 425, 85, 28)),
+        ("Phantom_Pain_Cage.jsonc", "挑战次数不足", (709, 108, 41, 35)),
+        ("War_Zone.jsonc", "纷争战区内部", (503, 121, 53, 30)),
+        ("War_Zone.jsonc", "首通已完成", (1143, 511, 53, 35)),
+    ],
+)
+def test_daily_mode_roi_contains_observed_complete_label(filename, node_name, observed_box):
+    pipeline = jsonc.loads((PIPELINE / filename).read_text(encoding="utf-8"))
+    x, y, width, height = pipeline[node_name]["recognition"]["param"]["roi"]
+    bx, by, bw, bh = observed_box
+    assert x <= bx and y <= by
+    assert x + width >= bx + bw and y + height >= by + bh
+
+
+def test_cage_marker_keeps_pixel_threshold_and_stays_in_first_card():
+    cage = jsonc.loads((PIPELINE / "Phantom_Pain_Cage.jsonc").read_text(encoding="utf-8"))
+    param = cage["检查A区"]["recognition"]["param"]
+    # Preserve the upstream false-positive guard; the old ROI clipped the marker.
+    assert param["count"] == 1000
+    x, y, width, height = param["roi"]
+    assert x <= 462 and y <= 384
+    assert x + width >= 605 and y + height >= 679
+    assert x + width < 725  # Do not borrow the next card's blue pixels.
+
+
+def test_war_zone_header_does_not_merge_two_rows_into_one_ocr_box():
+    war = jsonc.loads((PIPELINE / "War_Zone.jsonc").read_text(encoding="utf-8"))
+    _, y, _, height = war["纷争战区内部"]["recognition"]["param"]["roi"]
+    # Original PNG: the lower 排行 row starts at y=153. Both rows together
+    # are detected as a square and misread, even after widening the old ROI.
+    assert y + height <= 153
+
+
+def test_mapping_settlement_retry_uses_button_result_and_is_bounded():
+    mapping = jsonc.loads((PIPELINE / "HighRankMapping.jsonc").read_text(encoding="utf-8"))
+    retry = mapping["结算_点击失效"]
+    assert retry["recognition"]["type"] == "And"
+    assert retry["recognition"]["param"]["all_of"] == ["结算"]
+    assert retry["recognition"]["param"].get("box_index", 0) == 0
+    assert retry["action"]["type"] == "Click"
+    assert retry["action"].get("param", {}).get("target", True) is True
+    assert 0 < retry["max_hit"] <= 3
+    assert "[JumpBack]结算_点击失效" in mapping["结算"]["next"]
