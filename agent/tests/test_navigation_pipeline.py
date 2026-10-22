@@ -121,6 +121,7 @@ def test_fragment_counter_fallback_does_not_match_owned_role_metadata(text, lock
         ("Phantom_Pain_Cage.jsonc", "挑战次数不足", (709, 108, 41, 35)),
         ("War_Zone.jsonc", "纷争战区内部", (503, 121, 53, 30)),
         ("War_Zone.jsonc", "首通已完成", (1143, 511, 53, 35)),
+        ("War_Zone.jsonc", "战斗准备", (992, 656, 97, 30)),
     ],
 )
 def test_daily_mode_roi_contains_observed_complete_label(filename, node_name, observed_box):
@@ -179,5 +180,16 @@ def test_war_zone_closes_profile_modal_before_map_actions(parent, later):
     assert close["recognition"]["param"]["box_index"] == 1
     assert close["action"].get("param", {}).get("target", True) is True
     x, y, width, height = war["战区玩家详情关闭按钮"]["recognition"]["param"]["roi"]
-    assert x <= 1175 and y <= 46
+    assert x <= 1180 and y <= 51
     assert x + width >= 1225 and y + height >= 98
+
+
+def test_war_profile_close_symbol_bypasses_batch_text_detection():
+    war = jsonc.loads((PIPELINE / "War_Zone.jsonc").read_text(encoding="utf-8"))
+    param = war["战区玩家详情关闭按钮"]["recognition"]["param"]
+    # On the same phone image, individual OCR finds X but the real next-list
+    # batch detector misses it. Recognize only the cropped symbol instead.
+    assert param["only_rec"] is True
+    x, y, width, height = param["roi"]
+    assert x >= 1170 and x + width <= 1230
+    assert y >= 47 and y + height <= 100  # Exclude the + above and score below.
