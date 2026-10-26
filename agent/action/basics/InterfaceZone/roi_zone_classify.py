@@ -1,5 +1,5 @@
 """
-按 pipeline 节点 ROI 与 win32 标准锚点区重合关系归类（供生成工具使用）。
+按 pipeline 节点语义及 ROI 与 win32 标准锚点区重合关系归类（供生成工具使用）。
 """
 
 from __future__ import annotations
@@ -17,6 +17,8 @@ _PIPELINE_ROOT = (
 COMBAT_PIPELINE_DIR = _PIPELINE_ROOT / "Auto_Battle"
 POINT_ZONE_MARGIN = 48
 OFFSET_EXCLUDED_NODES = frozenset({"战斗中"})
+# 第 8 槽在参考框左侧，不能通过放大所有区域的容差影响其它节点归属。
+ACTION_ZONE_OVERRIDES = {f"消球{slot}": "signal_zone" for slot in range(1, 9)}
 
 
 def expand_rect(rect: list[int], margin: int) -> list[int]:
@@ -186,6 +188,9 @@ def build_node_zone_map() -> dict[str, str]:
     zone_map: dict[str, str] = {}
     for name, node in load_combat_pipeline_nodes().items():
         if name in OFFSET_EXCLUDED_NODES:
+            continue
+        if name in ACTION_ZONE_OVERRIDES:
+            zone_map[name] = ACTION_ZONE_OVERRIDES[name]
             continue
         rect = extract_classify_rect(node)
         if rect is None:

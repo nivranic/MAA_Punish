@@ -29,8 +29,10 @@ from __future__ import annotations
 import logging
 import re
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from action.combat.capture import capture_frame
 from action.combat.core.role import resolve_cls_label
 from action.combat.core.role_detect import detect_current_role
 from action.combat.core.switch import (
@@ -60,6 +62,7 @@ logger = logging.getLogger(__name__)
 COMBAT_EXIT_OVERLAY_NODES = ("重启_寒境曙光",)
 COMBAT_HP_NODE = "检查血量"
 _HP_FRACTION_RE = re.compile(r"(\d+)\s*/\s*(\d+)")
+_STRICT_HP_FRACTION_RE = re.compile(r"\s*([0-9]+)\s*/\s*([0-9]+)\s*")
 
 
 def parse_hp_current(text: str) -> int | None:
@@ -70,6 +73,47 @@ def parse_hp_current(text: str) -> int | None:
     return int(match.group(1))
 
 
+@dataclass(frozen=True, slots=True)
+class HpObservation:
+    """Strict HP evidence; unknown and zero never authorize a new input."""
+
+    current: int | None
+    maximum: int | None
+    reason: str
+    text: str = ""
+    error_type: str = ""
+
+    @property
+    def alive(self) -> bool:
+        return (
+            self.reason == "alive"
+            and self.current is not None
+            and self.maximum is not None
+            and 0 < self.current <= self.maximum
+        )
+
+
+def parse_hp_fraction(text: Any) -> HpObservation:
+    """Require the entire current/maximum fraction, without OCR substitutions.
+
+    In particular, the observed truncated 10509/105 is unknown, not alive.
+    This opt-in parser deliberately does not change parse_hp_current semantics.
+    """
+    if not isinstance(text, str):
+        return HpObservation(None, None, "hp_text_invalid")
+    evidence = text[:128]
+    match = _STRICT_HP_FRACTION_RE.fullmatch(text)
+    if match is None:
+        return HpObservation(None, None, "hp_text_invalid", evidence)
+    try:
+        current, maximum = int(match.group(1)), int(match.group(2))
+    except ValueError:
+        return HpObservation(None, None, "hp_text_invalid", evidence)
+    if maximum <= 0 or not 0 <= current <= maximum:
+        return HpObservation(None, None, "hp_out_of_range", evidence)
+    return HpObservation(current, maximum, "alive" if current > 0 else "dead", evidence)
+
+
 class BaseCombatCheck(ABC):
     """战斗识别基类。"""
 
@@ -77,8 +121,7 @@ class BaseCombatCheck(ABC):
         """优先复用 combat.frame，避免同轮循环重复截屏。"""
         if combat.frame is not None:
             return combat.frame
-        combat.frame = context.tasker.controller.post_screencap().wait().get()
-        return combat.frame
+        return capture_frame(context, combat)
 
     @abstractmethod
     def in_combat(self, context: Context, combat: CombatTask) -> bool:
@@ -104,6 +147,34 @@ class BaseCombatCheck(ABC):
         if not text:
             return None
         return parse_hp_current(str(text))
+
+    def read_hp_from_frame(self, context: Context, image: Any) -> HpObservation:
+        """Read strict HP from the supplied frame and current Context HP node.
+
+        No capture, Controller lookup, ROI override, or fallback to cached_image.
+        The caller owns frame provenance and any device-specific calibration.
+        """
+        if image is None:
+            return HpObservation(None, None, "hp_frame_missing")
+        try:
+            result = context.run_recognition(COMBAT_HP_NODE, image)
+        except Exception as exc:
+            return HpObservation(None, None, "hp_recognition_error", error_type=type(exc).__name__)
+        if result is None:
+            return HpObservation(None, None, "hp_not_recognized")
+        try:
+            hit = getattr(result, "hit", None)
+            if type(hit) is not bool:
+                return HpObservation(None, None, "hp_detail_invalid")
+            if not hit:
+                return HpObservation(None, None, "hp_not_recognized")
+            best = getattr(result, "best_result", None)
+            text = getattr(best, "text", None)
+            if best is None or not isinstance(text, str):
+                return HpObservation(None, None, "hp_detail_invalid")
+        except Exception as exc:
+            return HpObservation(None, None, "hp_detail_invalid", error_type=type(exc).__name__)
+        return parse_hp_fraction(text)
 
     def in_outer_interface(self, context: Context, combat: CombatTask) -> bool:
         """是否处于战斗外界面（结算、菜单、大地图等）。仅在 in_combat 未命中时调用。"""
@@ -195,12 +266,18 @@ class CombatCheck(BaseCombatCheck):
                 cls_name = str(published.get(color) or "").strip()
                 if cls_name and cls_name not in prefer:
                     prefer.append(cls_name)
+        protected = (
+            hasattr(combat, "is_observation_protected")
+            and combat.is_observation_protected()
+        )
         display_name, field_cls = detect_current_role(
             context,
             image,
             prefer_cls=prefer,
-            on_tick=lambda: blind_attack_click(
-                context, attack_count=CHAR_CHECK_ATTACK_COUNT
+            on_tick=(
+                None if protected else lambda: blind_attack_click(
+                    context, attack_count=CHAR_CHECK_ATTACK_COUNT, combat=combat
+                )
             ),
         )
         combat.current_role_name = display_name

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dev_session_notification_channel">USB development</string>
+    <string name="dev_session_notification_title">USB debug session active</string>
+    <string name="dev_session_notification_active">Screen saver enabled; this session releases it on disconnect</string>
+    <string name="dev_session_notification_suppressed">USB auto screen saver paused; manual and task screen savers remain available</string>
+    <string name="dev_session_notification_permission">Screen saver needs overlay permission</string>
+    <string name="dev_session_notification_mode">Screen saver requires background mode</string>
+    <string name="dev_session_notification_failed">Screen saver failed; check debug session status</string>
+    <string name="dev_session_notification_waiting">Computer connected; preparing screen saver</string>
+    <string name="dev_session_notification_exit">End USB debugging</string>
+</resources>

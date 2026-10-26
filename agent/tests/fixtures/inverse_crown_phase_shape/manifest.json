@@ -1,0 +1,192 @@
+{
+  "schema": 1,
+  "kind": "CURRENT_CLIENT_CANDIDATE_ABYSS_SHAPE_ROI",
+  "labels": "Posthoc candidate only; original phase/full-charge/settlement UNKNOWN and B FAIL remain unchanged. YES means named smooth shape under the allowed stationary action context, never completion.",
+  "mechanism_basis": [
+    "docs/逆冕站场策略.md",
+    "build-debug/iqoo16-signal-grounding-20261024/phase-source/report.md",
+    "build-debug/iqoo16-signal-grounding-followup-20261026/report.private.md"
+  ],
+  "samples": [
+    {
+      "file": "a7_smooth_long.png",
+      "candidate_signal": "yes",
+      "source_path": "build-debug/iqoo16-phase-current-ui-host-readback-20261025/probe-output/frame-07-after_release.png",
+      "source_png_sha256": "b75ba77317c135f93f58b42d7d04e78684f2d308ca531238f708527bec28364c",
+      "source_screen_size": [
+        1280,
+        720
+      ],
+      "roi": [
+        539,
+        619,
+        66,
+        19
+      ],
+      "fixture_sha256": "adf3d597f6c41572dd04e44b0721f39633e44ab95455f2cb8549ebc89aeb2dd1",
+      "fixture_bgr_sha256": "7b69ba049d16367d4cdf49d3b074822927471967c76eab422f2aca76933f1b6f"
+    },
+    {
+      "file": "a8_smooth_shorter.png",
+      "candidate_signal": "yes",
+      "source_path": "build-debug/iqoo16-phase-current-ui-host-readback-20261025/probe-output/frame-08-after_release.png",
+      "source_png_sha256": "b8d8c802fdf9cd86509c802297df96c6e23c87340e3a6624f8c8253b52f3c2c1",
+      "source_screen_size": [
+        1280,
+        720
+      ],
+      "roi": [
+        539,
+        619,
+        66,
+        19
+      ],
+      "fixture_sha256": "c354db2a819cd9e96b4307f8602f8a40b8b47bd121c5b6e914c3eeca54167a61",
+      "fixture_bgr_sha256": "1ed8b85e37cd202fb76c7703710d1345aa88fdd2f4f59fda58361851ec4df227"
+    },
+    {
+      "file": "a9_smooth_short.png",
+      "candidate_signal": "yes",
+      "source_path": "build-debug/iqoo16-phase-current-ui-host-readback-20261025/probe-output/frame-09-after_release.png",
+      "source_png_sha256": "455a8adf9b23e0712e353f4e2ab9fc6fdbd033127a2267850f82a5207a6e083d",
+      "source_screen_size": [
+        1280,
+        720
+      ],
+      "roi": [
+        539,
+        619,
+        66,
+        19
+      ],
+      "fixture_sha256": "3fe938a809ae0f8bb738d1c20b691baa7ac9c1554475f5f20ce926f940e9f95c",
+      "fixture_bgr_sha256": "ba88f72bbbdcae3ecf72fabddd87d214fd30fa171f9003734737d0b180be4d6a"
+    },
+    {
+      "file": "b6_smooth_normal.png",
+      "candidate_signal": "yes",
+      "source_path": "build-debug/iqoo16-new-buff-pair-preinput-recheck-host-20261025/live-preinput_recheck_pair_scope07_20261025_01/partial-export-readonly/frame-06-normal_holding.png",
+      "source_png_sha256": "3c677efd6d4b3eeac58416e5523e8204ab05b90330de39ad0b544e9df058e194",
+      "source_screen_size": [
+        1280,
+        720
+      ],
+      "roi": [
+        539,
+        619,
+        66,
+        19
+      ],
+      "fixture_sha256": "d9e2dde7234a0dc981340f9ee063e4e63b55d61f69adabac8cf965d8498c565d",
+      "fixture_bgr_sha256": "74edf792f70a4d226dc9e47e414ded2ed7a2c642e4b56925f5126c6e112feb96"
+    },
+    {
+      "file": "a4_serrated_charge.png",
+      "candidate_signal": "unknown",
+      "source_path": "build-debug/iqoo16-phase-current-ui-host-readback-20261025/probe-output/frame-04-special_holding.png",
+      "source_png_sha256": "f55301e00e8500c157435d2bb34f80af80a889ca48b85be655f91a7c2e256cfd",
+      "source_screen_size": [
+        1280,
+        720
+      ],
+      "roi": [
+        539,
+        619,
+        66,
+        19
+      ],
+      "fixture_sha256": "cedddf50e480d0fedea1de07106fdd3f8300040e4d737412be1ba4abcab30eeb",
+      "fixture_bgr_sha256": "927a974d201242bd683df6ca0d013e8fade85527df7fa60c184341281044b554"
+    },
+    {
+      "file": "b4_serrated_charge.png",
+      "candidate_signal": "unknown",
+      "source_path": "build-debug/iqoo16-new-buff-pair-preinput-recheck-host-20261025/live-preinput_recheck_pair_scope07_20261025_01/partial-export-readonly/frame-04-special_holding.png",
+      "source_png_sha256": "ede11098b18f8b4ce6b4b3978278ed63000f580739cbd25a494e2a098f64ecc9",
+      "source_screen_size": [
+        1280,
+        720
+      ],
+      "roi": [
+        539,
+        619,
+        66,
+        19
+      ],
+      "fixture_sha256": "998c02da6b63fea87a22e0baed8476343f62d8b918fb0a48db54b7414dafca16",
+      "fixture_bgr_sha256": "1e6850f8e4dea9bf2d98ada619d0ea5de7cca28562ef9d1f113c9439c0d79e63"
+    },
+    {
+      "file": "b7_effect_obstruction.png",
+      "candidate_signal": "unknown",
+      "source_path": "build-debug/iqoo16-new-buff-pair-preinput-recheck-host-20261025/live-preinput_recheck_pair_scope07_20261025_01/partial-export-readonly/frame-07-normal_holding.png",
+      "source_png_sha256": "092dfa497f70d226235aca3daf680a204b83b7fc79e9e8034e8e5afeb0f27fea",
+      "source_screen_size": [
+        1280,
+        720
+      ],
+      "roi": [
+        539,
+        619,
+        66,
+        19
+      ],
+      "fixture_sha256": "78336802ee640dd3fa61d36da28e4a7fe531a710a6ae0461fb645494b4e54b83",
+      "fixture_bgr_sha256": "1906fe40c806171b525d71728886443e5f05c4676283507883bc97522eee1c98"
+    },
+    {
+      "file": "b10_burst_obstruction.png",
+      "candidate_signal": "unknown",
+      "source_path": "build-debug/iqoo16-new-buff-pair-preinput-recheck-host-20261025/live-preinput_recheck_pair_scope07_20261025_01/partial-export-readonly/frame-10-normal_holding.png",
+      "source_png_sha256": "1748c4c0a1ee6673405e8a3bc052356dd34db92cf02d8fda18da82001acde75d",
+      "source_screen_size": [
+        1280,
+        720
+      ],
+      "roi": [
+        539,
+        619,
+        66,
+        19
+      ],
+      "fixture_sha256": "09f0b49e364fd17ee499e8da03e01515fc6d604af2137983707a065db0e160d7",
+      "fixture_bgr_sha256": "71c23c541c3e9c74abea38363897dc4142ff5108dc45926f51f42caf9cde153a"
+    },
+    {
+      "file": "a5_new_buff_no_core.png",
+      "candidate_signal": "unknown",
+      "source_path": "build-debug/iqoo16-phase-current-ui-host-readback-20261025/probe-output/frame-05-special_holding.png",
+      "source_png_sha256": "5d2b0b0ff3f48f3026288e67025eb6e8b6454d17b67636d58834d9548945ae9f",
+      "source_screen_size": [
+        1280,
+        720
+      ],
+      "roi": [
+        539,
+        619,
+        66,
+        19
+      ],
+      "fixture_sha256": "1d136c6c6800ed2a208daf336c79d28e113b1e1517a7a9ebe1635f846aa58967",
+      "fixture_bgr_sha256": "e3cf2ffe2957ed2c78690c9b836fc255893857fb8c03c4f99033529b32f3bfca"
+    },
+    {
+      "file": "a10_core_absent.png",
+      "candidate_signal": "unknown",
+      "source_path": "build-debug/iqoo16-phase-current-ui-host-readback-20261025/probe-output/frame-10-after_release.png",
+      "source_png_sha256": "1bb31a6c7351c894ca09db2f974084334b80fba99473f14404d51581163e99d5",
+      "source_screen_size": [
+        1280,
+        720
+      ],
+      "roi": [
+        539,
+        619,
+        66,
+        19
+      ],
+      "fixture_sha256": "26b9920d6ebceac97e26349a08ab7ce7d3800daabd6bc8b87ba41bc675863423",
+      "fixture_bgr_sha256": "8a7ab324294d3d42ca8260015001017a982e7950d65d1a6a359f5c42bf0677b4"
+    }
+  ]
+}

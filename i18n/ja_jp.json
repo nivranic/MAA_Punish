@@ -397,7 +397,7 @@
     "option.选择无分类队角色.description": "対応キャラから選択",
     "option.选择无分类队角色.label": "選択无分类队キャラクター,武藏玖型,不明构造体,罗塞塔",
     "option.选择无分类队角色_战区.description": "対応キャラから選択",
-    "option.选择无分类队角色_战区.label": "選択无分类队キャラクター,武藏玖型,不明构造体,罗塞塔",
+    "option.选择无分类队角色_战区.label": "特性エリアのキャラクターを選択",
     "option.选择暗队_囚笼.description": "ゲーム内の編成名と一致させる",
     "option.选择暗队_囚笼.label": "選択暗队",
     "option.选择暗队_战区.description": "ゲーム内の編成名と一致させる",
@@ -740,5 +740,17 @@
     "option.选择A级角色.label": "选择A级角色",
     "case.使用材料.6星·意识碎片": "6星·意识碎片",
     "case.使用材料.特殊支援信物": "特殊支援信物",
-    "case.使用材料.拟战绩分": "拟战绩分"
+    "case.使用材料.拟战绩分": "拟战绩分",
+    "option.逆冕站场专项.label": "逆冕の居座り専用設定（未対応）",
+    "option.逆冕站场专项.description": "初期設定では進行中の戦闘を引き継ぎます。作戦準備画面からの開始も選択できます。戦略は未対応のため、どちらも入力前に停止します。初期値はオフ。キャラ選択、物語スキップ、血清補充は行いません。",
+    "option.逆冕本场档案.label": "逆冕の今回の戦闘情報",
+    "option.逆冕本场档案.description": "今回の戦闘で有効な情報のみ入力し、不明な項目は unknown のままにしてください。アカウントの育成情報をお試し・借用・モード提供キャラに流用しないでください。scene: single=単体、multi=複数ウェーブ。source: self=所持、trial=お試し、borrowed=借用、mode=モード提供。unknown=不明。専用武器は true/false のみ入力できます。",
+    "input.逆冕本场档案.scene.label": "場面：single / multi / unknown",
+    "input.逆冕本场档案.source.label": "今回の提供元：self / trial / borrowed / mode / unknown",
+    "input.逆冕本场档案.rank.label": "実際のランク：S / S5 / SS / SS3 / SSS / SSS3 / SSS6 / SSS+ / unknown",
+    "input.逆冕本场档案.signature_weapon_confirmed.label": "今回の専用武器を確認済み：true / false",
+    "option.逆冕开始方式.label": "逆冕の開始方法",
+    "option.逆冕开始方式.description": "戦闘の引き継ぎでは開始や再挑戦を実行しません。準備画面からの開始は「作戦開始」が表示された画面、所持する逆冕、単体戦、今回の専用武器の確認が必要です。現在は未対応です。",
+    "case.逆冕开始方式.takeover": "現在の戦闘を引き継ぐ（初期設定）",
+    "case.逆冕开始方式.preparation": "作戦準備画面から開始"
 }

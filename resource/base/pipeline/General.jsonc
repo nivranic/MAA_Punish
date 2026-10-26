@@ -159,25 +159,14 @@
         "post_delay": 1000
     },
     "返回主菜单_err": {
-        "next": [
-            "检查主界面2",
-            "点击频率过快",
-            "检查主界面",
-            "[JumpBack]从战斗中返回",
-            "[JumpBack]退出血清界面_err",
-            "返回主菜单",
-            "[JumpBack]从选人界面返回_厄愿潮声",
-            "[JumpBack]退出_寒境曙光",
-            "[JumpBack]选择宝箱奖励_厄愿潮声",
-            "[JumpBack]点击继续",
-            "[JumpBack]关闭奖励",
-            "[JumpBack]等级提升",
-            "[JumpBack]关闭升级提示",
-            "[JumpBack]返回"
-        ],
-        "on_error": [
-            "重启游戏"
-        ],
+        "action": {
+            "type": "Custom",
+            "param": {
+                "custom_action": "ScopedRecovery"
+            }
+        },
+        "next": [],
+        "on_error": [],
         "focus": {
             "Node.Recognition.Succeeded": "$focus.返回主菜单_err"
         }

@@ -342,7 +342,7 @@
     "case.选择物理队角色_战区.里·超刻": "Lee: Hyperreal",
     "case.选择物理队角色_战区.比安卡·晖暮": "Bianca: Crepuscule",
     "case.选择物理队角色_战区.布偶熊·骇影": "Teddy: Spectre",
-    "option.选择无分类队角色_战区.label": "Unclassified team character (Musashi IX, Unknown Construct, Rosetta)",
+    "option.选择无分类队角色_战区.label": "Special zone character",
     "option.选择无分类队角色_战区.description": "Pick a supported character",
     "case.选择无分类队角色_战区.比安卡·深痕": "Bianca: Stigmata",
     "case.选择无分类队角色_战区.赛琳娜·希声": "Selena: Pianissimo",
@@ -740,5 +740,17 @@
     "option.选择A级角色.label": "A-rank character",
     "case.使用材料.6星·意识碎片": "6★ Memory",
     "case.使用材料.特殊支援信物": "Special Support Token",
-    "case.使用材料.拟战绩分": "Simulation Points"
+    "case.使用材料.拟战绩分": "Simulation Points",
+    "option.逆冕站场专项.label": "Inverse Crown stationary mode (not ready)",
+    "option.逆冕站场专项.description": "Take over an existing battle by default, or select the preparation-page entry. The strategy is not ready; both entries stop before input. Off by default. No automatic character selection, story skipping or stamina refill.",
+    "option.逆冕本场档案.label": "Inverse Crown battle facts",
+    "option.逆冕本场档案.description": "Enter facts effective in this battle only; keep unknown when unconfirmed. Account upgrades do not apply automatically to trial, borrowed or mode-provided characters. scene: single=single target, multi=multiple waves; source: self=owned, trial=trial, borrowed=borrowed, mode=mode-provided; unknown=unconfirmed. Signature weapon accepts only true/false.",
+    "input.逆冕本场档案.scene.label": "Scene: single / multi / unknown",
+    "input.逆冕本场档案.source.label": "Battle source: self / trial / borrowed / mode / unknown",
+    "input.逆冕本场档案.rank.label": "Effective rank: S / S5 / SS / SS3 / SSS / SSS3 / SSS6 / SSS+ / unknown",
+    "input.逆冕本场档案.signature_weapon_confirmed.label": "Signature weapon confirmed in this battle: true / false",
+    "option.逆冕开始方式.label": "Inverse Crown entry",
+    "option.逆冕开始方式.description": "Taking over does not start or restart a battle. Preparation entry requires a visible Mission Start page, owned Inverse Crown, a single-target scene and a confirmed signature weapon for this battle. It is not ready yet.",
+    "case.逆冕开始方式.takeover": "Take over current battle (default)",
+    "case.逆冕开始方式.preparation": "Start from preparation page"
 }

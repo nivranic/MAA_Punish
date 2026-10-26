@@ -342,7 +342,7 @@
     "case.选择物理队角色_战区.里·超刻": "里·超刻",
     "case.选择物理队角色_战区.比安卡·晖暮": "比安卡·晖暮",
     "case.选择物理队角色_战区.布偶熊·骇影": "布偶熊·骇影",
-    "option.选择无分类队角色_战区.label": "选择无分类队角色,武藏玖型,不明构造体,罗塞塔",
+    "option.选择无分类队角色_战区.label": "选择特性区角色",
     "option.选择无分类队角色_战区.description": "从已支持角色中选择",
     "case.选择无分类队角色_战区.比安卡·深痕": "比安卡·深痕",
     "case.选择无分类队角色_战区.赛琳娜·希声": "赛琳娜·希声",
@@ -740,5 +740,17 @@
     "option.选择A级角色.label": "选择A级角色",
     "case.使用材料.6星·意识碎片": "6星·意识碎片",
     "case.使用材料.特殊支援信物": "特殊支援信物",
-    "case.使用材料.拟战绩分": "拟战绩分"
+    "case.使用材料.拟战绩分": "拟战绩分",
+    "option.逆冕站场专项.label": "逆冕站场专项（未就绪）",
+    "option.逆冕站场专项.description": "默认接管已经进入的战斗；可另选从作战准备页开始。当前策略未就绪，两种方式都会在输入前停止。默认关闭，不自动选人、跳剧情或补充体力。",
+    "option.逆冕本场档案.label": "逆冕本场档案",
+    "option.逆冕本场档案.description": "仅填写本场实际生效的事实，未知保留 unknown；不要把账号养成套用于试用、借用或模式角色。scene：single=单体、multi=多波；source：self=自有、trial=试用、borrowed=借用、mode=模式提供；unknown=未知。专武仅接受 true/false。",
+    "input.逆冕本场档案.scene.label": "场景：single / multi / unknown",
+    "input.逆冕本场档案.source.label": "本场来源：self / trial / borrowed / mode / unknown",
+    "input.逆冕本场档案.rank.label": "实际阶级：S / S5 / SS / SS3 / SSS / SSS3 / SSS6 / SSS+ / unknown",
+    "input.逆冕本场档案.signature_weapon_confirmed.label": "已确认本场专武：true / false",
+    "option.逆冕开始方式.label": "逆冕开始方式",
+    "option.逆冕开始方式.description": "接管当前战斗不会开战或重开。从准备页开始仅支持已显示“作战开始”的页面，要求本场自有逆冕、单体场景和已确认专武；当前仍未就绪。",
+    "case.逆冕开始方式.takeover": "接管当前战斗（默认）",
+    "case.逆冕开始方式.preparation": "从作战准备页开始"
 }

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dev_session_notification_channel">USB 开发调试</string>
+    <string name="dev_session_notification_title">USB 调试会话进行中</string>
+    <string name="dev_session_notification_active">熄屏挂机已开启；断开电脑后自动退出本次屏保</string>
+    <string name="dev_session_notification_suppressed">USB 自动屏保已暂停；手动和任务屏保仍可开启</string>
+    <string name="dev_session_notification_permission">未开启屏保：需要悬浮窗权限</string>
+    <string name="dev_session_notification_mode">未开启屏保：仅支持后台运行模式</string>
+    <string name="dev_session_notification_failed">屏保未能显示，请查看调试会话状态</string>
+    <string name="dev_session_notification_waiting">已连接电脑，正在准备调试屏保</string>
+    <string name="dev_session_notification_exit">结束 USB 调试</string>
+</resources>

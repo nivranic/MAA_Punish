@@ -91,6 +91,10 @@ class BaseRole:
         self.combat = combat
         self.color = color.upper()
         self.cls_name = cls_name
+        self.requested_cls_name = cls_name
+        self.implementation_name = f"{type(self).__module__}.{type(self).__qualname__}"
+        self.fallback_reason: str | None = None
+        self.inverse_crown_profile = combat.inverse_crown_profile
         self.phase = "idle"
         self.action = CombatActions(
             combat.context,
@@ -100,6 +104,9 @@ class BaseRole:
         self.action._role = self
 
     def perform(self) -> None:
+        # Direct role entry must not bypass the session's temporary readiness
+        # guard and execute the legacy InverseCrown rotation.
+        self.combat.ensure_strategy_ready(self)
         if self.phase == self.SWITCH_PHASE:
             self.combat.request_role_switch(self)
             return

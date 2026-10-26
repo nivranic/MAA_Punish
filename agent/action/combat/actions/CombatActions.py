@@ -36,8 +36,11 @@ import re
 from typing import Any
 
 from action.combat.config.LoadSetting import ROLE_ACTIONS
+from action.combat.capture import capture_frame
+from action.combat.input_control import CombatInputError
 from action.combat.actions.signal_ball_layout import (
     SIGNAL_BALL_SLOT_COUNT,
+    signal_ball_slot_centers,
     slot_index_from_box,
 )
 from action.combat.actions.signal_ball_strategy import find_elimination_target
@@ -84,17 +87,76 @@ class CombatActions:
     def _get_image(self, *, fresh: bool = False) -> Any:
         """优先复用 CombatTask.frame；fresh 或帧已失效时再截屏。"""
         combat = self._combat_task()
-        if not fresh and combat is not None and combat.frame is not None:
+        scope = getattr(combat, "input_scope", None)
+        if scope is not None:
+            scope.assert_active()
+        if (
+            not fresh and combat is not None and combat.frame is not None
+            and (scope is None or scope.frame_metadata is not None)
+        ):
             return combat.frame
-        image = self.context.tasker.controller.post_screencap().wait().get()
-        if combat is not None:
-            combat.frame = image
-        return image
+        return capture_frame(self.context, combat)
 
     def _invalidate_frame(self) -> None:
         combat = self._combat_task()
+        scope = getattr(combat, "input_scope", None)
+        if scope is not None:
+            scope.invalidate_frame()
         if combat is not None:
             combat.frame = None
+
+    def tap_primary_input(self, node_name, *, start_deadline=None, should_stop=None):
+        """专项单次点按；同一当前帧先做共享退战观察，不附加闪避。"""
+        combat = self._combat_task()
+        scope = getattr(combat, "input_scope", None)
+        if scope is None:
+            raise CombatInputError("专项点按需要显式启用的会话输入作用域")
+        shared_observe = getattr(combat, "observe_hold_state", None)
+        if not callable(shared_observe):
+            raise CombatInputError("专项点按缺少会话共享退战观察入口")
+        image, metadata = combat.frame, scope.frame_metadata
+        if image is None or metadata is None:
+            raise CombatInputError("专项点按缺少当前观察帧")
+
+        def require_frame():
+            if (
+                self._combat_task() is not combat or combat.input_scope is not scope
+                or self.context is not scope.context or combat.frame is not image
+                or scope.frame_metadata is not metadata
+            ):
+                raise CombatInputError("专项点按观察帧或作用域已替换")
+
+        def before_down():
+            require_frame()
+            if shared_observe(image):
+                scope.request_stop(combat.out_of_combat_reason or "observation_stop")
+                raise CombatInputError("共享观察确认停止主输入")
+            require_frame()
+            return should_stop() if should_stop is not None else False
+
+        return scope.tap_semantic(
+            node_name, start_deadline=start_deadline, should_stop=before_down
+        )
+
+    def hold_primary_input(self, node_name, *, duration, observe, should_stop=None):
+        """专项单触点主动作；观察回调须无攻击、闪避或辅助输入。"""
+        combat = self._combat_task()
+        scope = getattr(combat, "input_scope", None)
+        if scope is None:
+            raise CombatInputError("专项持有需要显式启用的会话输入作用域")
+        shared_observe = getattr(combat, "observe_hold_state", None)
+        if not callable(shared_observe):
+            raise CombatInputError("专项持有缺少会话共享退战观察入口")
+
+        def observe_frame(image):
+            if shared_observe(image):
+                scope.request_stop(combat.out_of_combat_reason or "observation_stop")
+                raise CombatInputError("共享观察确认停止主输入")
+            return observe(image)
+
+        return scope.hold_semantic(
+            node_name, duration=duration, observe=observe_frame, should_stop=should_stop
+        )
 
     def _run_recognition(
         self,
@@ -483,6 +545,10 @@ class CombatActions:
 
     def _detect_signal_ball_status(self, image) -> list:
         """三色 TemplateMatch → 长度 8 的状态表；基础设施失败返回 []。"""
+        centers = signal_ball_slot_centers(self.context)
+        if centers is None:
+            self.logger.warning("信号球布局缺失或无效，跳过本次消球识别")
+            return []
         ball_status: list = [None] * SIGNAL_BALL_SLOT_COUNT
         for color in ["red", "blue", "yellow"]:
             result = self._run_recognition(
@@ -504,7 +570,7 @@ class CombatActions:
             for item in result.filtered_results:
                 if not isinstance(item, TemplateMatchResult):
                     continue
-                pos = slot_index_from_box(item.box)
+                pos = slot_index_from_box(item.box, centers)
                 if isinstance(pos, int) and 0 <= pos < len(ball_status):
                     ball_status[pos] = color
                 else:
@@ -523,8 +589,8 @@ class CombatActions:
             self.logger.error("模板未加载")
             return 0
 
+        image = self._get_image()
         try:
-            image = self._get_image()
             ball_list = self._detect_signal_ball_status(image)
             target = find_elimination_target(
                 ball_list, target_ball, log=self.logger

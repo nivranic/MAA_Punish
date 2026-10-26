@@ -13,6 +13,8 @@ on:
       - "tools/ci/gen_resource_hash.py"
       - "tools/ci/mine_apk_version.py"
       - "tools/ci/iqoo16_manifest.py"
+      - "tools/android_debug.py"
+      - "tools/tests/test_android_debug.py"
       - "agent/**"
       - "resource/**"
       - "tasks/**"
@@ -31,6 +33,8 @@ on:
       - "tools/ci/gen_resource_hash.py"
       - "tools/ci/mine_apk_version.py"
       - "tools/ci/iqoo16_manifest.py"
+      - "tools/android_debug.py"
+      - "tools/tests/test_android_debug.py"
       - "agent/**"
       - "resource/**"
       - "tasks/**"
@@ -416,6 +420,9 @@ jobs:
       - name: Test Android patch and version helpers
         run: python -m unittest discover -s .github/android/tests -v
 
+      - name: Test USB development CLI and source policy
+        run: python -m unittest discover -s tools/tests -p test_android_debug.py -v
+
       - name: Configure MAA_Punish Android package and update channel
         shell: bash
         run: python .github/android/patch_maafwapp.py build-android/MaaFwApp
@@ -490,7 +497,7 @@ jobs:
             echo "suffix=" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Test Android update channels
+      - name: Test Android sessions and update channels
         working-directory: build-android/MaaFwApp
         shell: bash
         run: |
@@ -503,6 +510,14 @@ jobs:
             --tests 'com.aliothmoon.maafw.update.*' \
             --tests 'com.aliothmoon.maafw.settings.SettingsViewModelTest' \
             --tests 'com.aliothmoon.maafw.settings.Iqoo16SettingsViewModelTest' \
+            --tests 'com.aliothmoon.maafw.devsession.*' \
+            --tests 'com.aliothmoon.maafw.runner.EnvironmentHooksTest' \
+            --tests 'com.aliothmoon.maafw.maa.TaskRecoveryHistoryTest' \
+            --tests 'com.aliothmoon.maafw.remote.MaaRunnerRecoveryHistoryTest' \
+            --tests 'com.aliothmoon.maafw.runner.RunLogRecorderRecoveryTest' \
+            --tests 'com.aliothmoon.maafw.runner.MaaFrameworkRecoveryResultLogTest' \
+            --tests 'com.aliothmoon.maafw.runner.RunLogRecorderTest' \
+            --tests 'com.aliothmoon.maafw.runner.RunLogComposerTest' \
             --stacktrace
 
       - name: Build APK
@@ -516,6 +531,24 @@ jobs:
           variant="${{ steps.signing.outputs.variant }}"
           apk="$(find "app/build/outputs/apk/$variant" -maxdepth 1 -type f -name '*.apk' -print -quit)"
           test -n "$apk"
+          if [[ "$variant" == 'release' ]]; then
+            apk_analyzer="$(command -v apkanalyzer || true)"
+            if [[ -z "$apk_analyzer" ]]; then
+              apk_analyzer="$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer"
+            fi
+            if [[ ! -x "$apk_analyzer" ]]; then
+              echo "APK analyzer is required to verify JNA reflection constructors." >&2
+              exit 1
+            fi
+            for jna_type in LongByReference IntByReference ByteByReference; do
+              smali_file="$RUNNER_TEMP/jna-${jna_type}.smali"
+              "$apk_analyzer" dex code --class "com.sun.jna.ptr.$jna_type" "$apk" > "$smali_file"
+              if ! grep -Eq '^[[:space:]]*\.method public constructor <init>\(\)V[[:space:]]*$' "$smali_file"; then
+                echo "Missing JNA public no-arg constructor: com.sun.jna.ptr.$jna_type" >&2
+                exit 1
+              fi
+            done
+          fi
           if [[ "$GITHUB_REF" == 'refs/heads/mine' ]]; then
             python "$GITHUB_WORKSPACE/tools/ci/mine_apk_version.py" --check-metadata \
               "app/build/outputs/apk/$variant/output-metadata.json" \

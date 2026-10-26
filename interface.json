@@ -308,6 +308,7 @@
     ],
     "import": [
         "./options/global_option.json",
+        "./options/inverse_crown_profile.json",
         "./tasks/进入游戏.json",
         "./tasks/兑换码.json",
         "./tasks/指挥局.json",

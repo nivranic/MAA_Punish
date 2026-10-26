@@ -26,9 +26,17 @@ MAA_Punish 战斗循环
 
 from __future__ import annotations
 
+import json
 import time
+from dataclasses import asdict, dataclass, replace
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
+from action.combat.capture import capture_frame
+from action.combat.config.inverse_crown_profile import (
+    InverseCrownProfile,
+    InverseCrownUnavailable,
+)
 from action.combat.core.provider import BaseCombatCheck
 from action.combat.core.role import BaseRole, SwitchPriority, resolve_role_name
 from action.combat.core.role_detect import (
@@ -37,12 +45,17 @@ from action.combat.core.role_detect import (
     is_cls_on_field,
     is_dodge_button_visible,
 )
-from action.combat.core.role_factory import ROLE_CLASS_MAP, create_role
+from action.combat.core.role_factory import (
+    ROLE_CLASS_MAP,
+    create_role,
+    require_inverse_crown_identity,
+)
 from action.combat.core.switch import attempt_switch_to_color, blind_attack_click, CHAR_CHECK_ATTACK_COUNT
 from action.combat.core.team import GENERIC_CLS_NAME, TEAM_COLORS, TeamSnapshot
 from action.combat.timing import active_delay
 from action.combat.config.LoadSetting import ROLE_ACTIONS
 from logger_component import LoggerComponent
+from audit_config import AUDIT_CONFIG
 
 if TYPE_CHECKING:
     from maa.context import Context
@@ -53,6 +66,51 @@ def _role_type_for_cls(cls_name: str) -> str:
         if role_info.get("cls_name") == cls_name:
             return str(role_info.get("type", ""))
     return ""
+
+
+@dataclass(frozen=True, slots=True)
+class RoleBinding:
+    """One actual construction, retained even if strict validation rejects it."""
+
+    sequence: int
+    color: str
+    requested_cls_name: str
+    implementation_name: str
+    fallback_reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class CombatOutcome:
+    """Callback execution and game outcome are independent evidence."""
+
+    exit_reason: str
+    callback_status: str = "COMPLETED"
+    game_outcome: str = "UNKNOWN"
+    cleanup_reason: str | None = None
+    exception_type: str | None = None
+    cleanup_exception_type: str | None = None
+    emission_exception_type: str | None = None
+    loop_count: int = 0
+    battle_state: str = "unknown"
+    field_identity: str = "unknown"
+    role_bindings: tuple[RoleBinding, ...] = ()
+    role_bindings_truncated: int = 0
+
+    def to_event(self) -> dict[str, Any]:
+        return {"event": "combat_result", "schema_version": 1, **asdict(self)}
+
+
+def emit_combat_outcome(component: LoggerComponent, outcome: CombatOutcome) -> None:
+    """Use the established sink in each process-start logging mode."""
+    event = outcome.to_event()
+    if AUDIT_CONFIG.enabled:
+        component.emit_audit(event)
+    else:
+        component.logger.info(
+            "战斗结果: %s",
+            json.dumps(event, ensure_ascii=False, sort_keys=True,
+                       separators=(",", ":"), allow_nan=False),
+        )
 
 
 class CombatTask:
@@ -70,6 +128,7 @@ class CombatTask:
     SWITCH_VERIFY_POLL = 0.05
     SWITCH_STUB = False
     SWITCH_DISABLED = False
+    ROLE_BINDING_HISTORY_LIMIT = 64
 
     def __init__(
         self,
@@ -83,9 +142,24 @@ class CombatTask:
         switch_cooldown: float | None = None,
         switch_fail_cooldown: float | None = None,
         field_min_stay: float | None = None,
+        inverse_crown_profile: InverseCrownProfile | None = None,
     ):
         self.context = context
         self.combat_check = combat_check
+        # A distinct immutable snapshot belongs to each combat invocation.
+        self.inverse_crown_profile = replace(
+            inverse_crown_profile
+            if inverse_crown_profile is not None
+            else InverseCrownProfile()
+        )
+        self.input_scope = None
+        if self.inverse_crown_profile.enabled:
+            from action.combat.input_control import CombatInputScope
+
+            self.input_scope = CombatInputScope(context, self, generation=uuid4().int)
+        self.field_identity = "unknown"
+        self.fresh_entry = None
+        self._entry_start_attempted = False
         self.wait_combat_time = (
             wait_combat_time if wait_combat_time is not None else self.WAIT_COMBAT_TIME
         )
@@ -119,6 +193,13 @@ class CombatTask:
         self.battle_state = "unknown"
         self.out_of_combat_reason = ""
         self.loop_count = 0
+        self.outcome: CombatOutcome | None = None
+        self._role_bindings: list[RoleBinding] = []
+        self._role_binding_latest: dict[str, tuple[str, str, str | None]] = {}
+        self._role_binding_count = 0
+        self._role_bindings_truncated = 0
+        self._callback_status = "COMPLETED"
+        self._exception_type: str | None = None
         self._last_in_combat_time = 0.0
         self._hp_zero_since: float | None = None
         self.frame: Any | None = None
@@ -142,23 +223,29 @@ class CombatTask:
             return 0.0
         return max(0.0, time.monotonic() - self._last_in_combat_time)
 
-    def combat_once(self) -> None:
+    def combat_once(self, *, from_preparation: bool = False) -> None:
         """执行一次完整战斗流程。"""
         self.logger.info("战斗会话启动，等待进入战斗...")
-        self._wait_in_combat()
-        if not self._in_combat:
-            return
-
-        self._last_in_combat_time = time.monotonic()
-        self.combat_ui_visible = True
-        self.logger.info("进入战斗")
-
-        if not self.load_team():
-            self.out_of_combat_reason = "team_detect_failed"
-            self.combat_end()
-            return
-
         try:
+            self.ensure_strategy_ready()
+            if from_preparation:
+                from action.combat.core.fresh_entry import begin_from_preparation
+
+                self.fresh_entry = begin_from_preparation(self)
+            self._wait_in_combat()
+            if not self._in_combat:
+                return
+
+            self._last_in_combat_time = time.monotonic()
+            self.combat_ui_visible = True
+            self.logger.info("进入战斗")
+
+            if not self.load_team():
+                self.out_of_combat_reason = "team_detect_failed"
+                return
+            if self.fresh_entry is not None:
+                self.fresh_entry.bind_first_hud(self)
+
             while self._in_combat:
                 if self._should_stop():
                     self.out_of_combat_reason = "stopped"
@@ -183,8 +270,54 @@ class CombatTask:
                     self.context, self
                 )
                 self._sleep_check()
+        except InverseCrownUnavailable as exc:
+            self.out_of_combat_reason = exc.reason
+            self._callback_status = "REJECTED"
+            self._exception_type = type(exc).__name__
+            raise
+        except BaseException as exc:
+            self.out_of_combat_reason = self.out_of_combat_reason or "exception"
+            self._callback_status = "ERROR"
+            # Exception messages can contain device/configuration secrets.
+            self._exception_type = type(exc).__name__
+            raise
         finally:
             self.combat_end()
+
+    def ensure_strategy_ready(self, role: BaseRole | None = None) -> None:
+        """Temporary fail-closed guard until the real signal-driven strategy lands.
+
+        Enabling a profile must never enter the legacy InverseCrown rotation.
+        Remove this guard only together with its actual specialized consumer.
+        """
+        if self.inverse_crown_profile.enabled:
+            raise InverseCrownUnavailable(
+                "strategy_not_ready",
+                actual=role.implementation_name if role is not None else "unknown",
+            )
+
+    def is_observation_protected(self) -> bool:
+        """Specialized identity/exit/wait checks may not add attack or dodge."""
+        return self.inverse_crown_profile.enabled
+
+    def _require_field_identity(
+        self, role: BaseRole | None, display_name: str, detected_cls: str
+    ) -> None:
+        if role is None:
+            self.field_identity = "unknown"
+            raise InverseCrownUnavailable("strategy_identity_unknown")
+        require_inverse_crown_identity(role)
+        if display_name == "未知" or detected_cls == GENERIC_CLS_NAME:
+            self.field_identity = "unknown"
+            raise InverseCrownUnavailable(
+                "field_identity_unknown", actual=role.implementation_name
+            )
+        if detected_cls != "InverseCrown":
+            self.field_identity = "mismatch"
+            raise InverseCrownUnavailable(
+                "field_identity_mismatch", actual=detected_cls
+            )
+        self.field_identity = "confirmed"
 
     def perform(self) -> None:
         """dispatch 当前角色 do_perform。"""
@@ -219,6 +352,26 @@ class CombatTask:
         elif key == "Y":
             self.team.Y = cls_name
 
+    def record_role_binding(self, role: BaseRole) -> None:
+        """Snapshot before validation/assignment so failed fallbacks survive."""
+        identity = (
+            role.requested_cls_name, role.implementation_name, role.fallback_reason,
+        )
+        if self._role_binding_latest.get(role.color) == identity:
+            return
+        self._role_binding_latest[role.color] = identity
+        self._role_binding_count += 1
+        self._role_bindings.append(RoleBinding(
+            sequence=self._role_binding_count,
+            color=role.color,
+            requested_cls_name=role.requested_cls_name,
+            implementation_name=role.implementation_name,
+            fallback_reason=role.fallback_reason,
+        ))
+        if len(self._role_bindings) > self.ROLE_BINDING_HISTORY_LIMIT:
+            self._role_bindings.pop(0)
+            self._role_bindings_truncated += 1
+
     def _rebind_role_at(self, color: str, cls_name: str) -> None:
         """按场上识别修正色位策略（roster 标 GeneralFight 但实际为专属角色等）。"""
         if self.team is None:
@@ -237,23 +390,30 @@ class CombatTask:
 
     def _blind_attack_tick(self) -> None:
         """角色识别等阻塞流程中周期性盲发普攻（检查角色前连点两次）。"""
-        if self._should_stop():
+        if self._should_stop() or self.is_observation_protected():
             return
-        blind_attack_click(self.context, attack_count=CHAR_CHECK_ATTACK_COUNT)
+        blind_attack_click(
+            self.context, attack_count=CHAR_CHECK_ATTACK_COUNT, combat=self
+        )
 
     def _correct_role_from_field(
         self, color: str, roster_cls: str, image: Any, *, solo: bool = False
     ) -> tuple[str, str]:
         """切人/进战后对照 attack_template，必要时将 GeneralFight 占位修正为专属 cls。"""
-        self._blind_attack_tick()
+        protected = self.is_observation_protected()
+        if not protected:
+            self._blind_attack_tick()
         prefer = [roster_cls] if roster_cls else []
         display_name, detected_cls = detect_current_role(
             self.context,
             image,
             prefer_cls=prefer,
-            on_tick=self._blind_attack_tick,
+            on_tick=None if protected else self._blind_attack_tick,
         )
         key = color.upper()
+        if protected:
+            self._require_field_identity(self.roles.get(key), display_name, detected_cls)
+            return display_name, detected_cls
 
         if roster_cls == detected_cls:
             return display_name, roster_cls
@@ -321,6 +481,13 @@ class CombatTask:
 
         :return: True 表示已切换主站角色，本 tick 应跳过后续战斗逻辑。
         """
+        protected = self.is_observation_protected()
+        if protected:
+            require_inverse_crown_identity(role)
+            # A missing frame or hidden HUD does not positively identify the
+            # controlled character. The future strategy may retry observation.
+            if self.team is None or self.frame is None:
+                self._require_field_identity(role, "未知", GENERIC_CLS_NAME)
         if self.team is None:
             return False
 
@@ -328,6 +495,8 @@ class CombatTask:
             not attack_templates_for_cls(role.cls_name)
             and role.cls_name != GENERIC_CLS_NAME
         ):
+            if protected:
+                self._require_field_identity(role, "未知", GENERIC_CLS_NAME)
             return False
 
         image = self.frame
@@ -335,11 +504,16 @@ class CombatTask:
             return False
 
         if not is_dodge_button_visible(self.context, image):
+            if protected:
+                self._require_field_identity(role, "未知", GENERIC_CLS_NAME)
             return False
 
-        self._blind_attack_tick()
+        if not protected:
+            self._blind_attack_tick()
         if is_cls_on_field(self.context, image, role.cls_name):
             self._last_field_cls = role.cls_name
+            if protected:
+                self._require_field_identity(role, role.cls_name, role.cls_name)
             return False
 
         display_name, detected_cls = detect_current_role(
@@ -347,8 +521,11 @@ class CombatTask:
             image,
             prefer_cls=self._prefer_cls_for_field_refresh(role.cls_name),
             skip_cls=(role.cls_name,),
-            on_tick=self._blind_attack_tick,
+            on_tick=None if protected else self._blind_attack_tick,
         )
+        if protected:
+            self._require_field_identity(role, display_name, detected_cls)
+            return False
         if detected_cls == role.cls_name or display_name == "未知":
             return False
 
@@ -443,7 +620,7 @@ class CombatTask:
 
         image = self.frame
         if image is None:
-            image = self.context.tasker.controller.post_screencap().wait().get()
+            image = self._capture_frame()
         cur = self.team.current.upper()
         display_name, _ = self._correct_role_from_field(
             cur, self.team.cls_at(cur), image, solo=self.team.is_solo()
@@ -461,7 +638,7 @@ class CombatTask:
 
     def choose_switch_color(self, requester: BaseRole) -> str | None:
         """选切人目标色位；仅考虑当前可见 QTE 的 roster 色位。"""
-        if self.team is None or self.team.is_solo():
+        if self.is_switch_disabled() or self.team is None or self.team.is_solo():
             return None
 
         if self.SWITCH_STUB:
@@ -572,7 +749,7 @@ class CombatTask:
         return False
 
     def is_switch_disabled(self) -> bool:
-        return bool(self.SWITCH_DISABLED)
+        return bool(self.SWITCH_DISABLED or self.inverse_crown_profile.enabled)
 
     def get_current_cls(self) -> str | None:
         if self.team is None:
@@ -581,6 +758,8 @@ class CombatTask:
 
     def can_switch(self) -> bool:
         """当前主站是否可发起切人（站场最短时长 + 失败重试 CD）。"""
+        if self.is_switch_disabled():
+            return False
         if self.SWITCH_STUB:
             return True
         if self.switch_retry_cooldown_remaining() > 0:
@@ -627,7 +806,7 @@ class CombatTask:
         战前 roster 已写入 team；验证用 attack_template 比对目标色位 cls。
         CD 未好或 QTE 不可见 / 验证超时 → False，保持当前角色流程。
         """
-        if self.SWITCH_DISABLED:
+        if self.is_switch_disabled():
             self.logger.debug("切人已暂时屏蔽")
             return False
 
@@ -695,6 +874,7 @@ class CombatTask:
             verify_timeout=verify_timeout,
             poll_interval=self.SWITCH_VERIFY_POLL,
             should_stop=self._should_stop,
+            combat=self,
         ):
             elapsed = time.monotonic() - switch_started
             self.last_switch_attempt_time = time.monotonic()
@@ -721,7 +901,7 @@ class CombatTask:
             )
         image = self.frame
         if image is None:
-            image = self.context.tasker.controller.post_screencap().wait().get()
+            image = self._capture_frame()
         display_name, target_cls = self._correct_role_from_field(
             target, self.team.cls_at(target), image
         )
@@ -740,7 +920,64 @@ class CombatTask:
         return True
 
     def combat_end(self) -> None:
-        """战斗结束清理。"""
+        """Close input, freeze/emit once, then clear mutable combat state."""
+        if self.fresh_entry is not None:
+            self.fresh_entry.retire()
+        if self.outcome is not None:
+            return
+        had_primary_error = self._exception_type is not None
+        cleanup_reason = None
+        cleanup_error: BaseException | None = None
+        if self.input_scope is not None:
+            try:
+                if not self.input_scope.close():
+                    cleanup_reason = "input_stop_unconfirmed"
+            except BaseException as exc:
+                cleanup_reason = "input_cleanup_exception"
+                cleanup_error = exc
+        if cleanup_reason and not self.out_of_combat_reason:
+            # Preserve the prior empty-reason cleanup contract without
+            # overwriting a real trigger such as stopped/hp_zero/exception.
+            self.out_of_combat_reason = cleanup_reason
+        if cleanup_error is not None and self._exception_type is None:
+            self._callback_status = "ERROR"
+            self._exception_type = type(cleanup_error).__name__
+        self.outcome = CombatOutcome(
+            exit_reason=self.out_of_combat_reason or "unknown",
+            callback_status=self._callback_status,
+            cleanup_reason=cleanup_reason,
+            exception_type=self._exception_type,
+            cleanup_exception_type=(
+                type(cleanup_error).__name__ if cleanup_error is not None else None
+            ),
+            loop_count=self.loop_count,
+            battle_state=self.battle_state,
+            field_identity=self.field_identity,
+            role_bindings=tuple(self._role_bindings),
+            role_bindings_truncated=self._role_bindings_truncated,
+        )
+        emission_error: BaseException | None = None
+        try:
+            emit_combat_outcome(self._logger_component, self.outcome)
+        except BaseException as exc:
+            emission_error = exc
+            # The failed sink cannot reliably report its own failure. Keep a
+            # redacted immutable diagnostic for Runner/last_outcome instead.
+            only_emission_error = not had_primary_error and cleanup_error is None
+            self.outcome = replace(
+                self.outcome,
+                emission_exception_type=type(exc).__name__,
+                callback_status="ERROR" if only_emission_error else self.outcome.callback_status,
+                exception_type=type(exc).__name__ if only_emission_error else self.outcome.exception_type,
+            )
+        finally:
+            self._clear_combat_state(log_end=emission_error is None)
+        if cleanup_error is not None and not had_primary_error:
+            raise cleanup_error
+        if emission_error is not None and not had_primary_error:
+            raise emission_error
+
+    def _clear_combat_state(self, *, log_end: bool = True) -> None:
         self._in_combat = False
         self.combat_ui_visible = False
         self.frame = None
@@ -748,18 +985,19 @@ class CombatTask:
         self.roles = {}
         self.current_role_name = ""
         self._last_field_cls = ""
+        self.field_identity = "unknown"
         self.last_switch_attempt_time = 0.0
         self._switch_attempt_cooldown = 0.0
         self._role_swap_cd_until = {}
         self.current_field_since = 0.0
         self._hp_zero_since = None
-        reason = self.out_of_combat_reason or "unknown"
-        self.logger.info("战斗结束: %s", reason)
+        if log_end:
+            reason = self.out_of_combat_reason or "unknown"
+            self.logger.info("战斗结束: %s", reason)
 
     def _capture_frame(self) -> Any:
         """每轮循环截屏一次，供 in_combat / in_outer_interface 等复用。"""
-        self.frame = self.context.tasker.controller.post_screencap().wait().get()
-        return self.frame
+        return capture_frame(self.context, self)
 
     def _check_combat_presence(self) -> str:
         """
@@ -780,6 +1018,8 @@ class CombatTask:
             return ""
 
         self.combat_ui_visible = False
+        if self.fresh_entry is not None:
+            self.fresh_entry.retire()
 
         if self.combat_check.in_outer_interface(self.context, self):
             return "outer_interface"
@@ -793,6 +1033,35 @@ class CombatTask:
             )
             return "combat_ui_lost"
         return ""
+
+    def observe_hold_state(self, image: Any) -> bool:
+        """Check stop/death/exit from this scope's current frame, without input.
+
+        True asks the hold owner to release and stop; a transient hidden HUD
+        keeps the existing presence budget. This method never captures a frame.
+        """
+        if self._should_stop():
+            self.out_of_combat_reason = "stopped"
+            return True
+        scope = self.input_scope
+        metadata = getattr(scope, "frame_metadata", None)
+        if (
+            scope is None
+            or scope.closed
+            or scope.blocked
+            or metadata is None
+            or metadata.generation != scope.generation
+            or self.frame is not image
+        ):
+            self.out_of_combat_reason = "input_frame_invalid"
+            return True
+        exit_reason = self._check_combat_presence()
+        if not exit_reason and self.combat_check.combat_end_condition(self.context, self):
+            exit_reason = "combat_end_condition"
+        if exit_reason:
+            self.out_of_combat_reason = exit_reason
+            return True
+        return False
 
     def _check_hp_zero_exit(self) -> str:
         """当前血量连续为 0 达到阈值则退战；读到非 0 会重置计时。"""
@@ -841,7 +1110,11 @@ class CombatTask:
         if self._should_stop() or self.sleep_check_interval <= 0:
             return
         role = self.get_current_role()
-        on_tick = role.action.attack if role is not None else None
+        on_tick = (
+            role.action.attack
+            if role is not None and not self.is_observation_protected()
+            else None
+        )
         active_delay(
             self.sleep_check_interval,
             on_tick=on_tick,

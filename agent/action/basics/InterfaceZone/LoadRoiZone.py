@@ -16,12 +16,18 @@ from maa.custom_action import CustomAction
 from logger_component import LoggerComponent
 
 from action.basics.InterfaceZone.roi_zone_controller import (
+    ZONES_BY_CONTROLLER,
     cache_is_ready,
     offset_path,
     parse_controller,
     parse_param,
 )
 from action.basics.InterfaceZone.ReadRoiZone import capture_roi_zones
+from action.basics.InterfaceZone.hud_roi_calibration import (
+    HUD_CALIBRATION_KEY,
+    HudRoiCalibrationError,
+    hud_overrides_from_cache,
+)
 
 _ZONE_MAP_PATH = Path(__file__).with_name("combat_roi_zone_map.json")
 
@@ -56,20 +62,41 @@ class LoadRoiZone(CustomAction):
         params = parse_param(argv.custom_action_param)
         controller = parse_controller(params)
 
+        if HUD_CALIBRATION_KEY in params and (
+            params.get("from_screen") is not True
+            or not isinstance(params[HUD_CALIBRATION_KEY], dict)
+            or type(params.get("controller")) is not str
+            or params["controller"] not in ZONES_BY_CONTROLLER
+            or params["controller"] != controller
+        ):
+            self.logger.error("HUD校准需要显式受支持controller及from_screen=true")
+            return CustomAction.RunResult(success=False)
+
         if params.get("from_screen"):
             self.logger.info(
                 "LoadRoiZone controller=%s 在布局界面读取识别区",
                 controller,
             )
-            if not capture_roi_zones(context, controller):
+            capture_options = (
+                {"hud_calibration": params[HUD_CALIBRATION_KEY]}
+                if HUD_CALIBRATION_KEY in params else {}
+            )
+            if not capture_roi_zones(context, controller, **capture_options):
                 return CustomAction.RunResult(success=False)
 
         self.apply_offsets(context, controller)
         return CustomAction.RunResult(success=True)
 
-    def apply_offsets(self, context: Context, controller: str) -> None:
+    def apply_offsets(self, context: Context, controller: str, *,
+                      hud_screen_size: tuple[int, int] | list[int] | None = None) -> None:
+        if hud_screen_size is not None and (
+            type(controller) is not str or controller not in ZONES_BY_CONTROLLER
+        ):
+            raise HudRoiCalibrationError("hud_controller_invalid")
         offset_file = offset_path(controller)
         if not cache_is_ready(controller):
+            if hud_screen_size is not None:
+                raise HudRoiCalibrationError("hud_layout_cache_missing_or_incomplete")
             self.logger.warning(
                 "LoadRoiZone controller=%s 偏移配置缺失或不完整 (%s), 跳过加载",
                 controller,
@@ -85,6 +112,12 @@ class LoadRoiZone(CustomAction):
 
         with open(offset_file, "r", encoding="utf-8") as f:
             offset_data = json.load(f)
+
+        # Validate explicit HUD requirements before changing any Context node.
+        hud_overrides = (
+            hud_overrides_from_cache(offset_data, controller, hud_screen_size)
+            if hud_screen_size is not None else {}
+        )
 
         node_zone_map = _get_node_zone_map()
         resource_nodes = set(context.tasker.resource.node_list)
@@ -110,6 +143,8 @@ class LoadRoiZone(CustomAction):
             )
             if action_offsets:
                 overrides[node_name]["action"] = {"param": action_offsets}
+
+        overrides.update(hud_overrides)
 
         if overrides:
             context.override_pipeline(overrides)

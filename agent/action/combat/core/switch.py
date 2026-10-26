@@ -31,11 +31,14 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from action.combat.capture import capture_frame
 from action.combat.core.role_detect import is_cls_on_field, is_switch_arrived
 from action.combat.timing import active_delay
 
 if TYPE_CHECKING:
     from maa.context import Context
+
+    from action.combat.core.session import CombatTask
 
 logger = logging.getLogger(__name__)
 
@@ -75,9 +78,11 @@ _QTE_CLICK_BURST = 3
 CHAR_CHECK_ATTACK_COUNT = 2
 
 
-def blind_attack_click(context: Context, *, attack_count: int = 1) -> None:
+def blind_attack_click(
+    context: Context, *, attack_count: int = 1, combat: CombatTask | None = None
+) -> None:
     """识别等待期间盲发普攻/闪避，走 Pipeline 节点（Win32 为 ClickKey）。"""
-    image = context.tasker.controller.post_screencap().wait().get()
+    image = capture_frame(context, combat)
     need_dodge = context.run_recognition("自动闪避", image)
     if need_dodge and need_dodge.hit:
         context.run_action("闪避")
@@ -101,7 +106,7 @@ def _recognize_qte(
     if not node:
         return None
     if image is None:
-        image = context.tasker.controller.post_screencap().wait().get()
+        image = capture_frame(context)
     result = context.run_recognition(node, image)
     if result and result.hit and result.best_result:
         return result
@@ -115,7 +120,7 @@ def detect_visible_team_colors(
     扫描当前可见的换人 QTE，返回 R/B/Y 列表（按屏幕 y 从上到下）。
     """
     if image is None:
-        image = context.tasker.controller.post_screencap().wait().get()
+        image = capture_frame(context)
 
     candidates: list[tuple[float, str]] = []
     for color, node in COLOR_TO_QTE_NODE.items():
@@ -152,6 +157,7 @@ def attempt_switch_to_color(
     verify_timeout: float = _DEFAULT_VERIFY_TIMEOUT,
     poll_interval: float = _DEFAULT_VERIFY_POLL,
     should_stop: Callable[[], bool] | None = None,
+    combat: CombatTask | None = None,
 ) -> bool:
     """
     切人：首次截屏须识别到目标 QTE，之后盲发「攻击 + 换人」直到成功或超时。
@@ -167,7 +173,7 @@ def attempt_switch_to_color(
         verify_timeout,
     )
 
-    image = context.tasker.controller.post_screencap().wait().get()
+    image = capture_frame(context, combat)
     if is_switch_arrived(context, image, target_cls):
         logger.info("切人到位: %s (%s)", target, target_cls)
         return True
@@ -188,7 +194,7 @@ def attempt_switch_to_color(
             attacker_callback()
         context.tasker.controller.post_click(qte_x, qte_y).wait()
 
-        image = context.tasker.controller.post_screencap().wait().get()
+        image = capture_frame(context, combat)
         if is_switch_arrived(context, image, target_cls):
             logger.info("切人到位: %s (%s)", target, target_cls)
             return True
@@ -219,7 +225,7 @@ def click_qte_until_done(
     for _ in range(max_loops):
         if tick_callback is not None:
             tick_callback()
-        image = context.tasker.controller.post_screencap().wait().get()
+        image = capture_frame(context)
         result = _recognize_qte(context, color, image)
         if result:
             box = result.best_result.box  # type: ignore[attr-defined]

@@ -1,0 +1,172 @@
+{
+    "option": {
+        "逆冕站场专项": {
+            "type": "switch",
+            "default_case": "No",
+            "label": "$option.逆冕站场专项.label",
+            "description": "$option.逆冕站场专项.description",
+            "cases": [
+                {
+                    "name": "Yes",
+                    "option": [
+                        "逆冕本场档案",
+                        "逆冕开始方式"
+                    ],
+                    "pipeline_override": {
+                        "战斗辅助": {
+                            "next": [
+                                "战斗中"
+                            ],
+                            "on_error": [
+                                "返回主菜单_err"
+                            ],
+                            "timeout": 5000
+                        },
+                        "战斗中": {
+                            "next": [],
+                            "on_error": [
+                                "返回主菜单_err"
+                            ],
+                            "attach": {
+                                "inverse_crown_profile": {
+                                    "enabled": true,
+                                    "scene": "unknown",
+                                    "source": "unknown",
+                                    "rank": "unknown",
+                                    "signature_weapon_confirmed": false
+                                }
+                            }
+                        },
+                        "逆冕准备页开始": {
+                            "attach": {
+                                "inverse_crown_profile": {
+                                    "enabled": true,
+                                    "scene": "unknown",
+                                    "source": "unknown",
+                                    "rank": "unknown",
+                                    "signature_weapon_confirmed": false
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "No",
+                    "pipeline_override": {
+                        "战斗中": {
+                            "attach": {
+                                "inverse_crown_profile": {
+                                    "enabled": false,
+                                    "scene": "unknown",
+                                    "source": "unknown",
+                                    "rank": "unknown",
+                                    "signature_weapon_confirmed": false
+                                }
+                            }
+                        },
+                        "逆冕准备页开始": {
+                            "attach": {
+                                "inverse_crown_profile": {
+                                    "enabled": false,
+                                    "scene": "unknown",
+                                    "source": "unknown",
+                                    "rank": "unknown",
+                                    "signature_weapon_confirmed": false
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "逆冕本场档案": {
+            "type": "input",
+            "label": "$option.逆冕本场档案.label",
+            "description": "$option.逆冕本场档案.description",
+            "inputs": [
+                {
+                    "name": "scene",
+                    "label": "$input.逆冕本场档案.scene.label",
+                    "default": "unknown",
+                    "pipeline_type": "string",
+                    "verify": "^(?:single|multi|unknown)$"
+                },
+                {
+                    "name": "source",
+                    "label": "$input.逆冕本场档案.source.label",
+                    "default": "unknown",
+                    "pipeline_type": "string",
+                    "verify": "^(?:self|trial|borrowed|mode|unknown)$"
+                },
+                {
+                    "name": "rank",
+                    "label": "$input.逆冕本场档案.rank.label",
+                    "default": "unknown",
+                    "pipeline_type": "string",
+                    "verify": "^(?:S|S5|SS|SS3|SSS|SSS3|SSS6|SSS\\+|unknown)$"
+                },
+                {
+                    "name": "signature_weapon_confirmed",
+                    "label": "$input.逆冕本场档案.signature_weapon_confirmed.label",
+                    "default": "false",
+                    "pipeline_type": "bool",
+                    "verify": "^(?:true|false)$"
+                }
+            ],
+            "pipeline_override": {
+                "战斗中": {
+                    "attach": {
+                        "inverse_crown_profile": {
+                            "enabled": true,
+                            "scene": "{scene}",
+                            "source": "{source}",
+                            "rank": "{rank}",
+                            "signature_weapon_confirmed": "{signature_weapon_confirmed}"
+                        }
+                    }
+                },
+                "逆冕准备页开始": {
+                    "attach": {
+                        "inverse_crown_profile": {
+                            "enabled": true,
+                            "scene": "{scene}",
+                            "source": "{source}",
+                            "rank": "{rank}",
+                            "signature_weapon_confirmed": "{signature_weapon_confirmed}"
+                        }
+                    }
+                }
+            }
+        },
+        "逆冕开始方式": {
+            "type": "select",
+            "default_case": "takeover",
+            "label": "$option.逆冕开始方式.label",
+            "description": "$option.逆冕开始方式.description",
+            "cases": [
+                {
+                    "name": "takeover",
+                    "label": "$case.逆冕开始方式.takeover",
+                    "pipeline_override": {
+                        "战斗辅助": {
+                            "next": [
+                                "战斗中"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "preparation",
+                    "label": "$case.逆冕开始方式.preparation",
+                    "pipeline_override": {
+                        "战斗辅助": {
+                            "next": [
+                                "逆冕准备页开始"
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    }
+}

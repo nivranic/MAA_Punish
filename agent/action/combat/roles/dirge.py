@@ -83,10 +83,8 @@ class Dirge(BaseRole):
 
     def _run_step(self, body) -> None:
         self.action.attack()
-        try:
-            body()
-        finally:
-            self.action.attack()
+        body()
+        self.action.attack()
 
     def _can_use_ult(self) -> bool:
         if self._ult_releasing:

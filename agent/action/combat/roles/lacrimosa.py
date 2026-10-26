@@ -121,10 +121,8 @@ class Lacrimosa(BaseRole):
 
     def _run_step(self, body) -> None:
         self.action.attack()
-        try:
-            body()
-        finally:
-            self.action.attack()
+        body()
+        self.action.attack()
 
     def _phase_idle(self) -> None:
         self.action.lens_lock()

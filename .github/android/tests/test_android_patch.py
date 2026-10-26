@@ -44,7 +44,12 @@ class PatchSafetyTest(unittest.TestCase):
         tests = list(OVERLAYS.rglob("*Test.kt"))
         self.assertGreaterEqual(len(tests), 2)
         for source in tests:
-            self.assertEqual(source.read_bytes(), (self.root / source.relative_to(OVERLAYS)).read_bytes())
+            actual = (self.root / source.relative_to(OVERLAYS)).read_bytes()
+            # The patch writer deliberately emits LF, even when a Windows
+            # checkout has CRLF overlays. Compare the normalized full content.
+            self.assertEqual(source.read_text(encoding="utf-8").encode("utf-8"), actual)
+            self.assertFalse(actual.startswith(b"\xef\xbb\xbf"))
+            self.assertTrue(actual.endswith(b"\n"))
 
     def test_late_anchor_drift_does_not_modify_earlier_files(self):
         path, old, _ = PATCHES[-1]

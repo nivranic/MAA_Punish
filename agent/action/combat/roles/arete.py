@@ -110,10 +110,8 @@ class Arete(BaseRole):
 
     def _run_step(self, body) -> None:
         self.action.attack()
-        try:
-            body()
-        finally:
-            self.action.attack()
+        body()
+        self.action.attack()
 
     def _p1_core_long_press(self) -> None:
         def _body() -> None:

@@ -1,0 +1,28 @@
+{
+    "version": 1,
+    "files": [
+        "interface.json",
+        "agent/action/basics/InterfaceZone/combat_roi_zone_map.json"
+    ],
+    "roots": {
+        "tasks": [".json", ".jsonc"],
+        "options": [".json", ".jsonc"],
+        "resource": [".json", ".jsonc", ".png", ".jpg", ".jpeg", ".webp", ".txt"],
+        "i18n": [".json", ".jsonc"],
+        "agent": [".py"]
+    },
+    "excluded_prefixes": [
+        "resource/pgr_win32/",
+        "resource/playcover/",
+        "agent/tests/",
+        "agent/test_support/",
+        "agent/debug/"
+    ],
+    "excluded_segments": ["model", "models", "__pycache__", ".pytest_cache"],
+    "limits": {
+        "max_file_bytes": 16777216,
+        "max_files": 4096,
+        "max_total_bytes": 134217728,
+        "max_manifest_bytes": 1048576
+    }
+}

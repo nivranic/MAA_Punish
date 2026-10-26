@@ -65,8 +65,9 @@
                         },
                         "购买_宿舍": {
                             "action": {
-                                "type": "Click",
+                                "type": "Custom",
                                 "param": {
+                                    "custom_action": "AuditPurchase",
                                     "target": [
                                         643,
                                         671,

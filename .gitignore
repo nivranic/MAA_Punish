@@ -466,3 +466,28 @@ uv.lock
 *.jks
 *.keystore
 role_cache.json
+
+# Local Python environments and verification caches
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+
+# Android/Gradle local outputs and machine-specific configuration
+.gradle/
+.cxx/
+.externalNativeBuild/
+local.properties
+*.apk
+*.apk.idsig
+*.aab
+*.apks
+
+# Explicitly private local diagnostics; public test fixtures stay trackable
+*.private
+*.private.*

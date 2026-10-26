@@ -9,6 +9,8 @@ from action.basics.RedmeeCode import RedeemCode
 from action.basics.RedmeeCode import CheckRedeemCode
 from action.basics.InterfaceZone.LoadRoiZone import LoadRoiZone
 from action.basics.ResetCount import ResetCount
+from action.basics.AuditPurchase import AuditPurchase
+from action.basics.ScopedRecovery import ScopedRecovery
 
 from action.combat.entry.runner import CombatRunner
 
@@ -21,6 +23,14 @@ from recognition.exclusives.CheckBlueZone import CheckBlueZone
 from recognition.exclusives.CheckROIZoneCache import CheckROIZoneCache
 
 from sink.resolution_check import AspectRatioChecker
+
+@AgentServer.custom_action("AuditPurchase")
+class Agent_AuditPurchase(AuditPurchase):
+    pass
+
+@AgentServer.custom_action("ScopedRecovery")
+class Agent_ScopedRecovery(ScopedRecovery):
+    pass
 
 @AgentServer.tasker_sink()
 class Tasker_AspectRatioChecker(AspectRatioChecker):

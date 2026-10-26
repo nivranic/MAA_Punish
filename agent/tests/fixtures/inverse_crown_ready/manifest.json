@@ -1,0 +1,309 @@
+{
+  "schema": 1,
+  "scope": "Exact 1280x720 sampled layout; enabled single and stable prepare only.",
+  "positive_basis": [
+    "manual-pair-v2-hud-sample/01-current-hud-before-immediate-pause.png shows complete red-orange fill and a distributed blue skill rim.",
+    "The same field subsequently received only the recorded skill input in manual-ultimate-v3 and changed 残心·无我 to 残心·蓄发.",
+    "This is positive availability evidence, not proof of cleared settlement, charge completion, ultimate finish, or generalized resource amount."
+  ],
+  "source_receipts": [
+    "build-debug/iqoo16-device-live-20261024/manual-pair-v2-hud-sample/HUD-visual-facts.json",
+    "build-debug/iqoo16-device-live-20261024/manual-ultimate-v3/receipt.json",
+    "build-debug/iqoo16-signal-grounding-followup-20261026/report.private.md"
+  ],
+  "limits": [
+    "Only source ROI pixels are retained; test canvases, HP and Context are synthetic.",
+    "UNKNOWN samples are not semantic NO; no pixel threshold was relaxed to admit obscured frames.",
+    "No phone/production acceptance or old FAIL/UNKNOWN update is implied."
+  ],
+  "samples": [
+    {
+      "name": "empty_clear",
+      "source": "build-debug/iqoo16-device-live-20261024/manual-calibration-field-v2/06-entry-frame-11.png",
+      "source_sha256": "580c65284f16291fd2f4136cbd9ffc73828a6e2a11b2300576042a6e31fed8c2",
+      "crops": [
+        {
+          "file": "empty_clear_resource.png",
+          "roi": [
+            75,
+            62,
+            215,
+            3
+          ],
+          "sha256": "cca647d4473dbe459069da32098ec135046c2a5fbf1d78a586d3bc84ce1bb898",
+          "bgr_sha256": "ef8fee82743ac87baa2c9843921707fe4f95f59fcdd79c777f4d8b4bdf20ea24"
+        },
+        {
+          "file": "empty_clear_skill.png",
+          "roi": [
+            942,
+            594,
+            124,
+            126
+          ],
+          "sha256": "ae961ccb5242cb0c29a091653703ef8732c56b38cc3c82f158ef2d474443c71f",
+          "bgr_sha256": "42c62ba38067c3423e229b159e1fbe6fc5735e08de4ad160c9181d161fa251e9"
+        }
+      ],
+      "resource_appearance": "empty",
+      "skill_blue_ring": "unknown",
+      "candidate_ready": "unknown"
+    },
+    {
+      "name": "near_full_009",
+      "source": "build-debug/iqoo16-special-to-normal-v11d-20261024/device-archive/frame-009-normal_holding.png",
+      "source_sha256": "5c316fc35a9e5fb34134b630b4b40d8fe6040fe33395dc05dee4e3de48494c81",
+      "crops": [
+        {
+          "file": "near_full_009_resource.png",
+          "roi": [
+            75,
+            62,
+            215,
+            3
+          ],
+          "sha256": "748e4560e701ad5e0250542590b866d4d14481d8f9c6b6172c848388cc0d75d6",
+          "bgr_sha256": "cf764f972f8305ce57ebd0bd622f30bb306ea3b5f965460fa610b94ac28d6985"
+        },
+        {
+          "file": "near_full_009_skill.png",
+          "roi": [
+            942,
+            594,
+            124,
+            126
+          ],
+          "sha256": "5eb241cb702fa9786d9a733419819af4400ccdbc58def94bd499c6018b205cb4",
+          "bgr_sha256": "1efbdc35c2f6bf19a76d547256fe45439babad85666c95ae1134e5eae786462e"
+        }
+      ],
+      "resource_appearance": "unknown",
+      "skill_blue_ring": "unknown",
+      "candidate_ready": "unknown"
+    },
+    {
+      "name": "full_effect_010",
+      "source": "build-debug/iqoo16-special-to-normal-v11d-20261024/device-archive/frame-010-normal_holding.png",
+      "source_sha256": "40823fe15187602011838a8b0126f015e5303539b1902db6b8e28af913b09a06",
+      "crops": [
+        {
+          "file": "full_effect_010_resource.png",
+          "roi": [
+            75,
+            62,
+            215,
+            3
+          ],
+          "sha256": "036d690b08bf99c5c0b2bd1afabbdf093c9eee78aa17813dceee9cecd70f83a0",
+          "bgr_sha256": "69d16dac5bc741408cbd73992357a3993f2a98b261efec0a5ebccdb0ea5809bd"
+        },
+        {
+          "file": "full_effect_010_skill.png",
+          "roi": [
+            942,
+            594,
+            124,
+            126
+          ],
+          "sha256": "37cabbbd5a9a782a859d6c23f90219fbd765472a23a7440b843f83f702ff2d74",
+          "bgr_sha256": "b118fe98bf7cc12ab03da009cef6ac30a6394b54b7c24a62c6fba1f277bd81a4"
+        }
+      ],
+      "resource_appearance": "unknown",
+      "skill_blue_ring": "yes",
+      "candidate_ready": "unknown"
+    },
+    {
+      "name": "full_clear_hud",
+      "source": "build-debug/iqoo16-device-live-20261024/manual-pair-v2-hud-sample/01-current-hud-before-immediate-pause.png",
+      "source_sha256": "ba253e1a7f93defaf160d10f2cd03bfc71a4cccc48de961e5e46886396bdd6fd",
+      "crops": [
+        {
+          "file": "full_clear_hud_resource.png",
+          "roi": [
+            75,
+            62,
+            215,
+            3
+          ],
+          "sha256": "d50a0933b093f04ea16dae26f8cd52ab6a0630f1421d51fd7af3c4aecb646b04",
+          "bgr_sha256": "c5562fb6a3f099a55294f79489834c3ce1fbf2b6542882e1bb181bee06254197"
+        },
+        {
+          "file": "full_clear_hud_skill.png",
+          "roi": [
+            942,
+            594,
+            124,
+            126
+          ],
+          "sha256": "076bff007b6f43be61de54a3d7ad74e53ee939ec9416b0a0ff8be8e14fa0b811",
+          "bgr_sha256": "b65db1705d91468416c00ac5115ea7d6f714d80039ce570844584b2c99c98278"
+        }
+      ],
+      "resource_appearance": "full",
+      "skill_blue_ring": "yes",
+      "candidate_ready": "yes"
+    },
+    {
+      "name": "quarter_a7",
+      "source": "build-debug/iqoo16-phase-current-ui-host-readback-20261025/probe-output/frame-07-after_release.png",
+      "source_sha256": "b75ba77317c135f93f58b42d7d04e78684f2d308ca531238f708527bec28364c",
+      "crops": [
+        {
+          "file": "quarter_a7_resource.png",
+          "roi": [
+            75,
+            62,
+            215,
+            3
+          ],
+          "sha256": "197d45ee2752d1e6c05ac90c0650c97464fb38704c0386608528e018233a458e",
+          "bgr_sha256": "6ba2cf30d5e5db652e9e0c790c99e8c8be8de58f4b1661ea27a42c88a6d38d73"
+        },
+        {
+          "file": "quarter_a7_skill.png",
+          "roi": [
+            942,
+            594,
+            124,
+            126
+          ],
+          "sha256": "ba8759c92c6e7d3533d4679adb2f60a018b59cfdf52ad1eece733aacdac9ddca",
+          "bgr_sha256": "8663f3f99e6b500df54c1a6463b51fa676ba2033c67d4b8011ee79baf8d99986"
+        }
+      ],
+      "resource_appearance": "unknown",
+      "skill_blue_ring": "unknown",
+      "candidate_ready": "unknown"
+    },
+    {
+      "name": "near_full_b9",
+      "source": "build-debug/iqoo16-new-buff-pair-preinput-recheck-host-20261025/live-preinput_recheck_pair_scope07_20261025_01/partial-export-readonly/frame-09-normal_holding.png",
+      "source_sha256": "9fe61bc6a9625223067953f484dd8216c5bb45511fad06e02d039f351e2b9019",
+      "crops": [
+        {
+          "file": "near_full_b9_resource.png",
+          "roi": [
+            75,
+            62,
+            215,
+            3
+          ],
+          "sha256": "3abc5f0f0e0104c01dad138caa31be9c5e0c9581e59d1070d6439d876acac9c4",
+          "bgr_sha256": "7d44234b1c15c800b5c932c6bf8634e1d1a5ee8c2f46cdfbceb17970ebab8d15"
+        },
+        {
+          "file": "near_full_b9_skill.png",
+          "roi": [
+            942,
+            594,
+            124,
+            126
+          ],
+          "sha256": "4e6616540dac8258c4478f07e6057e647934fdc1e6be47e7ac1b549b1fe4c1da",
+          "bgr_sha256": "25a4979e85bb615594b6c81a6f31811ad7388a941c503d27945dd0a1bad69c06"
+        }
+      ],
+      "resource_appearance": "unknown",
+      "skill_blue_ring": "unknown",
+      "candidate_ready": "unknown"
+    },
+    {
+      "name": "obstructed_b11",
+      "source": "build-debug/iqoo16-new-buff-pair-preinput-recheck-host-20261025/live-preinput_recheck_pair_scope07_20261025_01/partial-export-readonly/frame-11-normal_holding.png",
+      "source_sha256": "80e385f0f4b68ff11dad5842da0ea4c1d3a497da6cd7e6fa989ecbb2689f02e2",
+      "crops": [
+        {
+          "file": "obstructed_b11_resource.png",
+          "roi": [
+            75,
+            62,
+            215,
+            3
+          ],
+          "sha256": "ecd81f1a476836ec7ff4856001884445c6cfc54899946eee1c94e6a06d0471af",
+          "bgr_sha256": "41d736a11782003c624f0aa041d1374307bff069076be41348e647a00b6e1a35"
+        },
+        {
+          "file": "obstructed_b11_skill.png",
+          "roi": [
+            942,
+            594,
+            124,
+            126
+          ],
+          "sha256": "16ed5c835835a8ad68d6344809d204d38cf87671b20fddf286d3cc9d4b33405b",
+          "bgr_sha256": "110b4443b4b7ea7571b99c7e87da400072aa5390db4ffdbac77efa489d4c1f79"
+        }
+      ],
+      "resource_appearance": "unknown",
+      "skill_blue_ring": "unknown",
+      "candidate_ready": "unknown"
+    },
+    {
+      "name": "obstructed_b12",
+      "source": "build-debug/iqoo16-new-buff-pair-preinput-recheck-host-20261025/live-preinput_recheck_pair_scope07_20261025_01/partial-export-readonly/frame-12-normal_holding.png",
+      "source_sha256": "b15b0e05d55a8cd53d6b8a63105f5bddca07bf56d1003f94a8f9209c4dfd111c",
+      "crops": [
+        {
+          "file": "obstructed_b12_resource.png",
+          "roi": [
+            75,
+            62,
+            215,
+            3
+          ],
+          "sha256": "f4a5118fd63d690e85a1293d330e688b21dc9ab3b236c67a83309f3ca0b468af",
+          "bgr_sha256": "02c1b42d7a7567c04f2ce549159ddebadfa07170d85716d9c5ac48510a46596f"
+        },
+        {
+          "file": "obstructed_b12_skill.png",
+          "roi": [
+            942,
+            594,
+            124,
+            126
+          ],
+          "sha256": "95fd5f63243df269049c26ee4be70e0171b1e06147247c3877e7b67fce0d9356",
+          "bgr_sha256": "564e845cb4abd8ed50493b4338c809e42ce5ab660e3e4d56beccf324a40704e4"
+        }
+      ],
+      "resource_appearance": "unknown",
+      "skill_blue_ring": "unknown",
+      "candidate_ready": "unknown"
+    },
+    {
+      "name": "uncertain_tail_b15",
+      "source": "build-debug/iqoo16-new-buff-pair-preinput-recheck-host-20261025/live-preinput_recheck_pair_scope07_20261025_01/partial-export-readonly/frame-15-after_release.png",
+      "source_sha256": "f32f824817ad36ebd4e51582a84c0eed0f1917c3a9e311d8582cc8b431bdfe30",
+      "crops": [
+        {
+          "file": "uncertain_tail_b15_resource.png",
+          "roi": [
+            75,
+            62,
+            215,
+            3
+          ],
+          "sha256": "5eac520f1e3a89e5b4cf43b9205da8370d23b5eda4151d04e0b1ccbc58eead6d",
+          "bgr_sha256": "aa77c3563242caa166c0a979d1128894d4798fa8fa3d22452b04517c5a2fd669"
+        },
+        {
+          "file": "uncertain_tail_b15_skill.png",
+          "roi": [
+            942,
+            594,
+            124,
+            126
+          ],
+          "sha256": "e2fa96d2c4210a7885ee98229d3be6903da9bf87b2d21fcc72056eb0d66294d3",
+          "bgr_sha256": "0de8ff054c82cf3abb0ca02795aeae8efc15afc578fcdcdeb6ca35d3b8037166"
+        }
+      ],
+      "resource_appearance": "unknown",
+      "skill_blue_ring": "unknown",
+      "candidate_ready": "unknown"
+    }
+  ]
+}

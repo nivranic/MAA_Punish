@@ -111,7 +111,10 @@
             }
         },
         "action": {
-            "type": "Click"
+            "type": "Custom",
+            "param": {
+                "custom_action": "AuditPurchase"
+            }
         },
         "next": [
             "关闭界面",

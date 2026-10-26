@@ -185,6 +185,35 @@ PATCHES = (
     ),
 )
 
+# USB development sessions are opt-in through a foreground App + authorized
+# USB CLI. Keep the protocol separate from the privileged service heartbeat.
+PATCHES += (
+    (
+        KOTLIN + "MaaFwApp.kt",
+        "import com.aliothmoon.maafw.constant.AppPaths\n",
+        "import com.aliothmoon.maafw.constant.AppPaths\nimport com.aliothmoon.maafw.devsession.DevSessionCoordinator\nimport com.aliothmoon.maafw.devsession.DevReloadCoordinator\nimport com.aliothmoon.maafw.devsession.DevReloadMailboxBridge\n",
+    ),
+    (
+        KOTLIN + "MaaFwApp.kt",
+        "        koin.get<ScreenSaverOverlayManager>().setup()\n",
+        "        koin.get<ScreenSaverOverlayManager>().setup()\n        koin.get<DevSessionCoordinator>().setup()\n",
+    ),
+    (
+        KOTLIN + "di/CoreModule.kt",
+        "import com.aliothmoon.maafw.settings.search.SettingSearchNavigator\n",
+        "import com.aliothmoon.maafw.settings.search.SettingSearchNavigator\nimport com.aliothmoon.maafw.devsession.DevSessionCoordinator\nimport com.aliothmoon.maafw.devsession.DevReloadCoordinator\nimport com.aliothmoon.maafw.devsession.DevReloadMailboxBridge\n",
+    ),
+    (
+        KOTLIN + "di/CoreModule.kt",
+        "    single { SettingSearchNavigator() }\n",
+        """    single { SettingSearchNavigator() }
+    single { DevSessionCoordinator(get(named<AppCoroutineScope>())) }
+    single { DevReloadCoordinator(androidContext(), get(named<AppCoroutineScope>()), get(), get(), get(), get(), get(), get(), get()) }
+    single { DevReloadMailboxBridge(get(), get(), get(named<AppCoroutineScope>())) }
+""",
+    ),
+)
+
 # Standalone policy is injected only for the distinct iQOO package.
 PATCHES += (
     (
@@ -428,5 +457,25 @@ import com.aliothmoon.maafw.update.UpdateChannelPolicy
         'app/src/main/java/com/aliothmoon/maafw/ui/home/UpdateSection.kt',
         '    if (mirrorInfoVisible) {',
         '    if (mirrorInfoVisible && !update.iqoo16Only) {',
+    ),
+)
+
+from maafwapp_screensaver_patches import PATCHES as SCREENSAVER_PATCHES
+
+PATCHES += SCREENSAVER_PATCHES
+
+from maafwapp_reload_patches import RELOAD_PATCHES
+
+PATCHES += RELOAD_PATCHES
+
+from maafwapp_recovery_patches import RECOVERY_PATCHES
+
+PATCHES += RECOVERY_PATCHES
+
+PATCHES += (
+    (
+        KOTLIN + "MaaFwApp.kt",
+        "    fun postCreate(koin: Koin) {\n",
+        "    fun postCreate(koin: Koin) {\n        koin.get<DevReloadCoordinator>().setup()\n        koin.get<DevReloadMailboxBridge>().setup()\n",
     ),
 )

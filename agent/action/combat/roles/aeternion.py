@@ -88,10 +88,8 @@ class Aeternion(BaseRole):
 
     def _run_step(self, body) -> None:
         self.action.attack()
-        try:
-            body()
-        finally:
-            self.action.attack()
+        body()
+        self.action.attack()
 
     def _try_enter_ult(self) -> bool:
         if not self.action.check_Skill_energy_bar():

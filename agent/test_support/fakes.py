@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+import numpy as np
+
 
 @dataclass
 class FakeBestResult:
@@ -21,12 +23,79 @@ class FakeRecognitionResult:
 
 @dataclass
 class FakeJob:
-    image: bytes = b"fake"
+    image: Any = field(default_factory=lambda: np.zeros((2, 2, 3), dtype=np.uint8))
+    succeeded: bool = True
+    done: bool = True
+    job_id: int = 1
 
     def wait(self) -> FakeJob:
         return self
 
-    def get(self) -> bytes:
+    def get(self, wait: bool = False) -> Any:
+        if wait:
+            self.wait()
+        return self.image
+
+
+@dataclass
+class FakeClock:
+    """Local monotonic clock; sleeping advances time without wall-clock waits."""
+
+    now: float = 0.0
+    on_sleep: Any = None
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+        if self.on_sleep is not None:
+            self.on_sleep(self.now)
+
+
+@dataclass
+class TimedFakeJob:
+    """A controllable native Job: pending -> running -> succeeded/failed.
+
+    These jobs must be polled; wait raises to catch accidental unbounded waits.
+    get still returns a cache on failure, matching the real API's danger.
+    """
+
+    clock: FakeClock
+    finish_at: float = 0.0
+    start_at: float = 0.0
+    success: bool = True
+    image: Any = field(default_factory=lambda: np.zeros((2, 2, 3), dtype=np.uint8))
+    job_id: int = 1
+    get_calls: int = 0
+
+    @property
+    def done(self) -> bool:
+        return self.clock.now >= self.finish_at
+
+    @property
+    def succeeded(self) -> bool:
+        return self.done and self.success
+
+    @property
+    def failed(self) -> bool:
+        return self.done and not self.success
+
+    @property
+    def pending(self) -> bool:
+        return not self.done and self.clock.now < self.start_at
+
+    @property
+    def running(self) -> bool:
+        return not self.done and not self.pending
+
+    def wait(self):
+        raise AssertionError("bounded paths must never call Job.wait()")
+
+    def get(self, wait: bool = False):
+        if wait:
+            self.wait()
+        self.get_calls += 1
         return self.image
 
 
@@ -34,13 +103,24 @@ class FakeJob:
 class FakeController:
     clicks: list[tuple[int, int]] = field(default_factory=list)
     swipes: list[tuple[int, int, int, int, int]] = field(default_factory=list)
-    image: bytes = b"fake"
+    image: Any = field(default_factory=lambda: np.zeros((2, 2, 3), dtype=np.uint8))
+    touches: list[tuple] = field(default_factory=list)
 
     def post_screencap(self) -> FakeJob:
         return FakeJob(image=self.image)
 
-    def post_click(self, x: int, y: int) -> FakeJob:
+    def post_click(self, x: int, y: int, contact: int = 0, pressure: int = 1) -> FakeJob:
         self.clicks.append((x, y))
+        return FakeJob()
+
+    def post_touch_down(
+        self, x: int, y: int, contact: int = 0, pressure: int = 1
+    ) -> FakeJob:
+        self.touches.append(("down", x, y, contact, pressure))
+        return FakeJob()
+
+    def post_touch_up(self, contact: int = 0) -> FakeJob:
+        self.touches.append(("up", contact))
         return FakeJob()
 
     def post_swipe(
@@ -54,6 +134,11 @@ class FakeController:
 class FakeTasker:
     controller: FakeController = field(default_factory=FakeController)
     stopping: bool = False
+    stop_requests: int = 0
+
+    def post_stop(self) -> FakeJob:
+        self.stop_requests += 1
+        return FakeJob()
 
 
 @dataclass

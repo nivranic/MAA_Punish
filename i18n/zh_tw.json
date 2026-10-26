@@ -342,7 +342,7 @@
     "case.选择物理队角色_战区.里·超刻": "里·超刻",
     "case.选择物理队角色_战区.比安卡·晖暮": "比安卡·暉暮",
     "case.选择物理队角色_战区.布偶熊·骇影": "布偶熊·駭影",
-    "option.选择无分类队角色_战区.label": "選擇無分類隊角色,武藏玖型,不明構造體,羅塞塔",
+    "option.选择无分类队角色_战区.label": "選擇特性區角色",
     "option.选择无分类队角色_战区.description": "從已支持角色中選擇",
     "case.选择无分类队角色_战区.比安卡·深痕": "比安卡·深痕",
     "case.选择无分类队角色_战区.赛琳娜·希声": "賽琳娜·希聲",
@@ -740,5 +740,17 @@
     "option.选择A级角色.label": "選擇A級角色",
     "case.使用材料.6星·意识碎片": "6星·意識碎片",
     "case.使用材料.特殊支援信物": "特殊支援信物",
-    "case.使用材料.拟战绩分": "擬戰積分"
+    "case.使用材料.拟战绩分": "擬戰積分",
+    "option.逆冕站场专项.label": "逆冕站場專項（尚未就緒）",
+    "option.逆冕站场专项.description": "預設接管已進入的戰鬥；可另選從作戰準備頁開始。目前策略未就緒，兩種方式都會在輸入前停止。預設關閉，不自動選人、跳劇情或補充體力。",
+    "option.逆冕本场档案.label": "逆冕本場檔案",
+    "option.逆冕本场档案.description": "僅填寫本場實際生效的事實，未知保留 unknown；不要將帳號養成套用於試用、借用或模式角色。scene：single=單體、multi=多波；source：self=自有、trial=試用、borrowed=借用、mode=模式提供；unknown=未知。專武僅接受 true/false。",
+    "input.逆冕本场档案.scene.label": "場景：single / multi / unknown",
+    "input.逆冕本场档案.source.label": "本場來源：self / trial / borrowed / mode / unknown",
+    "input.逆冕本场档案.rank.label": "實際階級：S / S5 / SS / SS3 / SSS / SSS3 / SSS6 / SSS+ / unknown",
+    "input.逆冕本场档案.signature_weapon_confirmed.label": "已確認本場專武：true / false",
+    "option.逆冕开始方式.label": "逆冕開始方式",
+    "option.逆冕开始方式.description": "接管目前戰鬥不會開戰或重開。從準備頁開始僅支援已顯示「作戰開始」的頁面，需要本場自有逆冕、單體場景及已確認專武；目前仍未就緒。",
+    "case.逆冕开始方式.takeover": "接管目前戰鬥（預設）",
+    "case.逆冕开始方式.preparation": "從作戰準備頁開始"
 }

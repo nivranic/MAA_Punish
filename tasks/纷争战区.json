@@ -633,6 +633,37 @@
                         }
                     },
                     "label": "$role.Spectre"
+                },
+                {
+                    "name": "露西亚·逆冕",
+                    "pipeline_override": {
+                        "查看地图_火区": {
+                            "action": {
+                                "param": {
+                                    "custom_action": "PPOverride",
+                                    "custom_action_param": {
+                                        "选择角色程序": {
+                                            "attach": {
+                                                "weight_mode": "exclusive",
+                                                "pick": [
+                                                    "露西亚·逆冕"
+                                                ]
+                                            }
+                                        },
+                                        "选择角色程序_onlyNode": {
+                                            "attach": {
+                                                "weight_mode": "exclusive",
+                                                "pick": [
+                                                    "露西亚·逆冕"
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "label": "$role.InverseCrown"
                 }
             ],
             "default_case": "露西亚·誓焰"
@@ -982,6 +1013,37 @@
                         }
                     },
                     "label": "$role.Spectre"
+                },
+                {
+                    "name": "露西亚·逆冕",
+                    "pipeline_override": {
+                        "查看地图_雷区": {
+                            "action": {
+                                "param": {
+                                    "custom_action": "PPOverride",
+                                    "custom_action_param": {
+                                        "选择角色程序": {
+                                            "attach": {
+                                                "weight_mode": "exclusive",
+                                                "pick": [
+                                                    "露西亚·逆冕"
+                                                ]
+                                            }
+                                        },
+                                        "选择角色程序_onlyNode": {
+                                            "attach": {
+                                                "weight_mode": "exclusive",
+                                                "pick": [
+                                                    "露西亚·逆冕"
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "label": "$role.InverseCrown"
                 }
             ],
             "default_case": "露西亚·深红囚影"
@@ -1331,6 +1393,37 @@
                         }
                     },
                     "label": "$role.Aegis"
+                },
+                {
+                    "name": "露西亚·逆冕",
+                    "pipeline_override": {
+                        "查看地图_冰区": {
+                            "action": {
+                                "param": {
+                                    "custom_action": "PPOverride",
+                                    "custom_action_param": {
+                                        "选择角色程序": {
+                                            "attach": {
+                                                "weight_mode": "exclusive",
+                                                "pick": [
+                                                    "露西亚·逆冕"
+                                                ]
+                                            }
+                                        },
+                                        "选择角色程序_onlyNode": {
+                                            "attach": {
+                                                "weight_mode": "exclusive",
+                                                "pick": [
+                                                    "露西亚·逆冕"
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "label": "$role.InverseCrown"
                 }
             ],
             "default_case": "曲·启明"
@@ -1680,6 +1773,37 @@
                         }
                     },
                     "label": "$role.Spectre"
+                },
+                {
+                    "name": "露西亚·逆冕",
+                    "pipeline_override": {
+                        "查看地图_暗区": {
+                            "action": {
+                                "param": {
+                                    "custom_action": "PPOverride",
+                                    "custom_action_param": {
+                                        "选择角色程序": {
+                                            "attach": {
+                                                "weight_mode": "exclusive",
+                                                "pick": [
+                                                    "露西亚·逆冕"
+                                                ]
+                                            }
+                                        },
+                                        "选择角色程序_onlyNode": {
+                                            "attach": {
+                                                "weight_mode": "exclusive",
+                                                "pick": [
+                                                    "露西亚·逆冕"
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "label": "$role.InverseCrown"
                 }
             ],
             "default_case": "比安卡·晖暮"
@@ -2029,6 +2153,37 @@
                         }
                     },
                     "label": "$role.Spectre"
+                },
+                {
+                    "name": "露西亚·逆冕",
+                    "pipeline_override": {
+                        "查看地图_物理区": {
+                            "action": {
+                                "param": {
+                                    "custom_action": "PPOverride",
+                                    "custom_action_param": {
+                                        "选择角色程序": {
+                                            "attach": {
+                                                "weight_mode": "exclusive",
+                                                "pick": [
+                                                    "露西亚·逆冕"
+                                                ]
+                                            }
+                                        },
+                                        "选择角色程序_onlyNode": {
+                                            "attach": {
+                                                "weight_mode": "exclusive",
+                                                "pick": [
+                                                    "露西亚·逆冕"
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "label": "$role.InverseCrown"
                 }
             ],
             "default_case": "赛琳娜·希声"
@@ -2378,6 +2533,37 @@
                         }
                     },
                     "label": "$role.Spectre"
+                },
+                {
+                    "name": "露西亚·逆冕",
+                    "pipeline_override": {
+                        "查看地图_特性区": {
+                            "action": {
+                                "param": {
+                                    "custom_action": "PPOverride",
+                                    "custom_action_param": {
+                                        "选择角色程序": {
+                                            "attach": {
+                                                "weight_mode": "exclusive",
+                                                "pick": [
+                                                    "露西亚·逆冕"
+                                                ]
+                                            }
+                                        },
+                                        "选择角色程序_onlyNode": {
+                                            "attach": {
+                                                "weight_mode": "exclusive",
+                                                "pick": [
+                                                    "露西亚·逆冕"
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "label": "$role.InverseCrown"
                 }
             ],
             "default_case": "赛琳娜·希声"
@@ -2794,6 +2980,40 @@
                         }
                     },
                     "label": "$role.Spectre"
+                },
+                {
+                    "name": "露西亚·逆冕",
+                    "pipeline_override": {
+                        "查看地图_空区": {
+                            "action": {
+                                "param": {
+                                    "custom_action": "PPOverride",
+                                    "custom_action_param": {
+                                        "选择角色程序": {
+                                            "attach": {
+                                                "weight_mode": "exclusive",
+                                                "pick": [
+                                                    "露西亚·逆冕"
+                                                ]
+                                            }
+                                        },
+                                        "选择角色程序_onlyNode": {
+                                            "attach": {
+                                                "weight_mode": "exclusive",
+                                                "pick": [
+                                                    "露西亚·逆冕"
+                                                ]
+                                            }
+                                        },
+                                        "识别人物": {
+                                            "enabled": true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "label": "$role.InverseCrown"
                 }
             ],
             "default_case": "露娜·终焉"

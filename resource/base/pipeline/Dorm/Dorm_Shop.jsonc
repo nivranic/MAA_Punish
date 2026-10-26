@@ -332,7 +332,10 @@
             }
         },
         "action": {
-            "type": "Click"
+            "type": "Custom",
+            "param": {
+                "custom_action": "AuditPurchase"
+            }
         },
         "post_delay": 1000,
         "next": [

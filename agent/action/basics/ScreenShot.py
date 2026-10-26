@@ -27,11 +27,32 @@ MAA_Punish 截图
 from maa.context import Context
 from maa.custom_action import CustomAction
 import os
+from pathlib import Path
+import re
 import time
 import struct
 import zlib
-import numpy
 import json
+from uuid import uuid4
+
+from action.combat.capture import capture_frame
+from audit_config import AUDIT_CONFIG
+
+
+def _clear_old_screenshots(debug_dir: Path) -> None:
+    """Keep the existing ordinary-mode retention policy out of audit sessions."""
+    three_days_ago = time.time() - 3 * 24 * 3600
+    if debug_dir.exists():
+        for entry in os.scandir(debug_dir):
+            if (
+                entry.is_file()
+                and entry.name.lower().endswith(".png")
+                and entry.stat(follow_symlinks=False).st_mtime < three_days_ago
+            ):
+                try:
+                    os.remove(entry.path)
+                except OSError:
+                    pass
 
 
 class ScreenShot(CustomAction):
@@ -39,30 +60,23 @@ class ScreenShot(CustomAction):
         self, context: Context, argv: CustomAction.RunArg
     ) -> CustomAction.RunResult:
         custom_action_param: dict = json.loads(argv.custom_action_param)
-        image: numpy.ndarray = context.tasker.controller.post_screencap().wait().get()
+        # Job.get() reads MaaFramework's shared cache, so it is safe only after
+        # checking this job. Acquisition exceptions retain their original cause.
+        image = capture_frame(context)
 
-        debug_dir = os.path.abspath("debug")
-        three_days_ago = time.time() - 3 * 24 * 3600
-        if os.path.exists(debug_dir):
-            for entry in os.scandir(debug_dir):
-                if (
-                    entry.is_file()
-                    and entry.name.lower().endswith(".png")
-                    and entry.stat(follow_symlinks=False).st_mtime < three_days_ago
-                ):
-                    try:
-                        os.remove(entry.path)
-                    except:
-                        pass
+        debug_dir = Path("debug")
+        if AUDIT_CONFIG.enabled:
+            # The host can register this exact directory before invoking a
+            # ScreenShot node. This action does not establish host persistence.
+            debug_dir = debug_dir / "audit" / AUDIT_CONFIG.session_id / "screenshots"
+        else:
+            _clear_old_screenshots(debug_dir)
+        debug_dir.mkdir(parents=True, exist_ok=True)
 
         height, width, _ = image.shape
-        current_time = (
-            custom_action_param.get("type", "")
-            + "_"
-            + time.strftime("%Y-%m-%d_%H-%M-%S")
-            + ".png"
-        )
-        debug_path = os.path.join("debug", current_time)
+        image_type = re.sub(r"[^\w-]", "_", str(custom_action_param.get("type", "")))[:80]
+        filename = f"{image_type}_{time.strftime('%Y-%m-%d_%H-%M-%S')}_{time.time_ns()}_{uuid4().hex}.png"
+        debug_path = debug_dir / filename
 
         def png_chunk(chunk_type, data):
             chunk = chunk_type + data
@@ -79,10 +93,22 @@ class ScreenShot(CustomAction):
         ihdr = struct.pack("!2I5B", width, height, 8, 2, 0, 0, 0)
         idat = zlib.compress(raw_data, level=9)
 
-        with open(debug_path, "wb") as f:
-            f.write(b"\x89PNG\r\n\x1a\n")
-            f.write(png_chunk(b"IHDR", ihdr))
-            f.write(png_chunk(b"IDAT", idat))
-            f.write(png_chunk(b"IEND", b""))
+        created = False
+        try:
+            # Exclusive creation also prevents a filename collision from
+            # replacing existing evidence, even across same-session restarts.
+            with debug_path.open("xb") as f:
+                created = True
+                f.write(b"\x89PNG\r\n\x1a\n")
+                f.write(png_chunk(b"IHDR", ihdr))
+                f.write(png_chunk(b"IDAT", idat))
+                f.write(png_chunk(b"IEND", b""))
+        except Exception:
+            if created:
+                try:
+                    debug_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            raise
 
         return CustomAction.RunResult(success=True)
