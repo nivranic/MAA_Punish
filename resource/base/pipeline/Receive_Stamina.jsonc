@@ -1,5 +1,6 @@
 {
     "领取体力": {
+        "timeout": 120000,
         "next": [
             "补给包售罄",
             "[JumpBack]关闭奖励",
@@ -243,17 +244,18 @@
         "action": {
             "type": "Click"
         },
-        "post_wait_freezes": 500
+        "post_wait_freezes": 500,
+        "post_delay": 2000
     },
     "领取": {
         "recognition": {
             "type": "OCR",
             "param": {
                 "roi": [
-                    1073,
-                    632,
-                    162,
-                    60
+                    1020,
+                    620,
+                    250,
+                    80
                 ],
                 "expected": [
                     "^购买$",
