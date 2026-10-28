@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+from maa.define import AndRecognitionResult, RecognitionDetail
+
 from action.combat.config.inverse_crown_profile import (
     InverseCrownProfileError, InverseCrownUnavailable,
 )
@@ -154,9 +156,13 @@ def begin_from_preparation(combat) -> FreshEntryCandidate:
     ready = context.run_recognition(PREPARE_NODE, image)
     if (hud is None or type(hud.hit) is not bool or hud.hit
             or restart is None or type(restart.hit) is not bool or restart.hit
-            or ready is None or ready.hit is not True or ready.best_result is None):
+            or not isinstance(ready, RecognitionDetail) or ready.name != PREPARE_NODE
+            or ready.algorithm != "And" or ready.hit is not True
+            or not isinstance(ready.best_result, AndRecognitionResult)):
         _refuse("preparation_unconfirmed")
-    box = _rect(ready.best_result.box)
+    # SDK 5.14.2 exposes And's selected action box on RecognitionDetail;
+    # AndRecognitionResult contains only sub_results, never its own box.
+    box = _rect(ready.box)
     node = context.get_node_data(START_NODE)
     action = node.get("action", {}) if isinstance(node, dict) else {}
     param = action.get("param", {}) if isinstance(action, dict) else {}

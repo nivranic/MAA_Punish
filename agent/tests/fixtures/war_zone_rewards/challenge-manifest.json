@@ -1,0 +1,18 @@
+{
+  "source": "run_20261026_231948_1 native on_error frame 2026-10-26 23:20:18.374 UTC+8",
+  "source_frame_sha256": "2a490c7692c4d731187a6b40c851bd5f7ee3e443aa21d119273e3d0a92faa46b",
+  "source_size": [
+    1280,
+    720
+  ],
+  "crop": [
+    1090,
+    656,
+    114,
+    53
+  ],
+  "file": "challenge_button.png",
+  "sha256": "186db5b04c62e8f2588e37e4a1a513e563981e7af8b10368bd8b2af00099235b",
+  "visible_text": "挑战",
+  "account_metadata": false
+}

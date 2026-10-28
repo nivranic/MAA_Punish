@@ -10,6 +10,7 @@ from action.basics.RedmeeCode import CheckRedeemCode
 from action.basics.InterfaceZone.LoadRoiZone import LoadRoiZone
 from action.basics.ResetCount import ResetCount
 from action.basics.AuditPurchase import AuditPurchase
+from action.basics.AuditPurchaseReconcile import AuditPurchaseReconcile
 from action.basics.ScopedRecovery import ScopedRecovery
 
 from action.combat.entry.runner import CombatRunner
@@ -21,11 +22,34 @@ from recognition.exclusives.CacheRole import CacheRole
 from recognition.exclusives.ExpressionRecognition import ExpressionRecognition
 from recognition.exclusives.CheckBlueZone import CheckBlueZone
 from recognition.exclusives.CheckROIZoneCache import CheckROIZoneCache
+from recognition.exclusives.PurchaseObservation import (
+    D12PurchaseObservation, D13PurchaseObservation, D14PurchaseObservation,
+)
 
 from sink.resolution_check import AspectRatioChecker
 
+
+@AgentServer.custom_recognition("D12PurchaseObservation")
+class Agent_D12PurchaseObservation(D12PurchaseObservation):
+    pass
+
+
+@AgentServer.custom_recognition("D13PurchaseObservation")
+class Agent_D13PurchaseObservation(D13PurchaseObservation):
+    pass
+
+
+@AgentServer.custom_recognition("D14PurchaseObservation")
+class Agent_D14PurchaseObservation(D14PurchaseObservation):
+    pass
+
 @AgentServer.custom_action("AuditPurchase")
 class Agent_AuditPurchase(AuditPurchase):
+    pass
+
+
+@AgentServer.custom_action("AuditPurchaseReconcile")
+class Agent_AuditPurchaseReconcile(AuditPurchaseReconcile):
     pass
 
 @AgentServer.custom_action("ScopedRecovery")

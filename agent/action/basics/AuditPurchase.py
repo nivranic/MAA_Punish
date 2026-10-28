@@ -37,7 +37,15 @@ class AuditPurchase(CustomAction):
                 )
                 return result is not None and result.success is True
 
-            result = PurchaseCommit(self._logger_component).execute(context, argv, node, click)
+            guard = PurchaseCommit(self._logger_component)
+            selection = node.get("attach", {}).get("audit_quantity_role")
+            if selection is not None:
+                if (selection != {"case_id": "D14", "role": "skip_max_in_audit"} or
+                        argv.node_name != "购买_宿舍" or action["param"].get("target") != [643, 671, 1, 1]):
+                    raise CommitDenied("invalid_quantity_selection_entry")
+                if guard.config.enabled:
+                    return CustomAction.RunResult(success=guard.skip_audit_maximum_selection(context, argv, node))
+            result = guard.execute(context, argv, node, click)
             return CustomAction.RunResult(success=result)
         except Exception as error:
             # Do not wait on post_stop from inside the current task's callback.

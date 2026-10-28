@@ -472,6 +472,10 @@ from maafwapp_recovery_patches import RECOVERY_PATCHES
 
 PATCHES += RECOVERY_PATCHES
 
+from maafwapp_purchase_patches import PURCHASE_PATCHES
+
+PATCHES += PURCHASE_PATCHES
+
 PATCHES += (
     (
         KOTLIN + "MaaFwApp.kt",

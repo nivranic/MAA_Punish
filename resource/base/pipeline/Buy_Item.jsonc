@@ -105,7 +105,8 @@
             "param": {
                 "all_of": [
                     "识别购买界面逆元碎片",
-                    "识别购买界面购买"
+                    "识别购买界面购买",
+                    "识别D12购买意图"
                 ],
                 "box_index": 1
             }
@@ -120,6 +121,14 @@
             "关闭界面",
             "返回主菜单"
         ]
+    },
+    "识别D12购买意图": {
+        "recognition": {
+            "type": "Custom",
+            "param": {
+                "custom_recognition": "D12PurchaseObservation"
+            }
+        }
     },
     "识别购买界面逆元碎片": {
         "recognition": {

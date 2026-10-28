@@ -54,6 +54,8 @@ class DevAuditEvidence(
     private val usedChallenges = mutableSetOf<String>()
     private var invalidRequest = false
     private var revision = 0L
+    private var registrationEpoch = 0L
+    private var authorityEpoch = 0L
 
     init {
         require(packageName.isNotBlank())
@@ -75,11 +77,15 @@ class DevAuditEvidence(
         run.lease.auditLogging && currentLease() == run.lease &&
             currentHello()?.let { it.`package` == run.packageName && it.app_instance == run.appInstance } == true
 
-    @Synchronized fun register(run: DevAuditRunBinding): Boolean {
+    @Synchronized fun register(run: DevAuditRunBinding): Boolean = registerForDispatch(run) != null
+
+    @Synchronized internal fun registerForDispatch(run: DevAuditRunBinding): Long? {
         expire()
-        if (!authoritative(run) || active != null) return false
+        if (!authoritative(run) || active != null) return null
         active = run
         last = run
+        registrationEpoch++
+        authorityEpoch++
         startedMs = nowMs()
         usedNonces.clear()
         usedChallenges.clear()
@@ -88,22 +94,25 @@ class DevAuditEvidence(
         // permit identity makes the strict Python consumer reject that wait.
         permit = null
         revokeChannel()
-        return true
+        return registrationEpoch
     }
 
     /** An old callback cannot revoke a later run, even if the execution ID was accidentally reused. */
-    @Synchronized fun finish(run: DevAuditRunBinding) {
-        if (active != run) return
+    @Synchronized fun finish(run: DevAuditRunBinding, expectedRegistration: Long? = null) {
+        if (active != run || (expectedRegistration != null && registrationEpoch != expectedRegistration)) return
         active = null
+        authorityEpoch++
         revokeChannel()
     }
 
     @Synchronized fun invalidate() {
         active = null
+        authorityEpoch++
         revokeChannel()
     }
 
     @Synchronized fun rejectInvalid() {
+        if (!invalidRequest) authorityEpoch++
         invalidRequest = true
         revokeChannel()
     }
@@ -136,6 +145,7 @@ class DevAuditEvidence(
         val run = active
         if (run != null && !authoritative(run)) {
             active = null
+            authorityEpoch++
             revokeChannel()
         } else if (channel != null && nowMs() >= channelExpiresMs) {
             revokeChannel()
@@ -182,6 +192,7 @@ class DevAuditEvidence(
                     return
                 }
                 usedChallenges += challenge
+                if (invalidRequest) authorityEpoch++
                 invalidRequest = false
                 channel = request
                 channelExpiresMs = expiry
@@ -210,9 +221,16 @@ class DevAuditEvidence(
         }
     }
 
-    data class Publication(val revision: Long, val state: String, val permit: String)
+    data class Publication(
+        val revision: Long,
+        val state: String,
+        val permit: String,
+        internal val runningRun: DevAuditRunBinding?,
+        internal val registrationEpoch: Long,
+        internal val authorityEpoch: Long,
+    )
 
-    /** File publication belongs to the Coordinator's existing IO poll, outside Runner's command mutex. */
+    /** Pure snapshot; the shared publisher owns file I/O outside Runner's command mutex. */
     @Synchronized fun publication(): Publication {
         expire()
         if (permit == null) permit = revoked()
@@ -226,12 +244,21 @@ class DevAuditEvidence(
             put("started_boottime_ms", startedMs); put("observed_boottime_ms", nowMs())
             put("audit_persist_supported", true)
         }
-        return Publication(revision, state.toString(), permit.toString())
+        return Publication(revision, state.toString(), permit.toString(),
+            active?.takeUnless { invalidRequest }, registrationEpoch, authorityEpoch)
     }
 
     @Synchronized fun unchanged(publication: Publication): Boolean {
         expire()
         return revision == publication.revision
+    }
+
+    /** Permit progress is compatible; a different registration or authority phase is not. */
+    @Synchronized fun isPublishedCurrent(run: DevAuditRunBinding, publication: Publication): Boolean {
+        expire()
+        return active == run && !invalidRequest && authoritative(run) &&
+            publication.runningRun == run && publication.registrationEpoch == registrationEpoch &&
+            publication.authorityEpoch == authorityEpoch
     }
 
     companion object {

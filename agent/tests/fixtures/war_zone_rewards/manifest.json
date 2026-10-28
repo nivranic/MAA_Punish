@@ -1,0 +1,18 @@
+{
+  "source": "D07 run_20261026_222946_1 native on_error frame, 2026-10-26 22:38:46.125 UTC+8",
+  "source_frame_sha256": "bc32d22ba0e7f30d02cbd8aec03cbe015bff57fc9aa56dcca9e025bf4137d436",
+  "source_size": [
+    1280,
+    720
+  ],
+  "crop": [
+    1000,
+    159,
+    230,
+    65
+  ],
+  "file": "go_button.png",
+  "sha256": "20eb46c5bc943294c8be8e6c5a396d3f5a59bf7be3bfe0d426f69becee2a9bbb",
+  "visible_text": "前往",
+  "account_metadata": false
+}

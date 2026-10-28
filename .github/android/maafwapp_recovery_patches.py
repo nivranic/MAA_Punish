@@ -89,7 +89,11 @@ RECOVERY_PATCHES = (
         KOTLIN + "remote/MaaRunner.kt",
         "                notify { onTaskFinished(task.taskName, success, statusText(status), stopped) }\n",
         """                val taskMessage = "${statusText(status)}; task_id=$taskId; wait_status=$status; " +
-                    "recovery_history=${history.reason}; native_status=${history.nativeStatus}"
+                    "recovery_history=${history.reason}; native_status=${history.nativeStatus}" +
+                    com.aliothmoon.maafw.maa.PurchaseMaintenanceNative.suffix(
+                        payload.tasks.size == 1 && task.taskName == "Screencap", task.entry,
+                        taskId, status, history, success, stopped,
+                    ).orEmpty()
                 notify { onTaskFinished(task.taskName, success, taskMessage, stopped) }
                 if (history.mustAbort) {
                     reason = "recovery_history:${history.reason}; task_id=$taskId"
@@ -153,6 +157,9 @@ RECOVERY_PATCHES = (
                 // cleared. Preserve it on this execution's ordered log lane before the footer.
                 emit(RunnerEvent.Log("recovery_result execution_id=$executionId; $reason"))
             }
+            PurchaseMaintenanceTerminal.render(
+                executionId, auditBinding?.run, plannedTasks, results, outcome, maintenanceStopped,
+            )?.let { emit(RunnerEvent.Log(it)) }
             emit(RunnerEvent.ExecutionFinished(result))
             _state.update { current ->
 """,

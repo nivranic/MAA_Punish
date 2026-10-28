@@ -157,17 +157,18 @@ RELOAD_PATCHES = (
             nativeLibraryDir = nativeLibraryDir,
             piEnv = plan.piEnv,
         )''',
-        '''        val payload = plan.runtimePayload(piRoot, width, height, mode.displayMode, apkPath, nativeLibraryDir, auditBinding?.lease, auditBinding?.run)''',
+        '''        val payload = plan.runtimePayload(piRoot, width, height, mode.displayMode, apkPath, nativeLibraryDir, auditBinding?.lease, auditBinding?.run)
+        val payloadJson = runPlanWireJson.encodeToString(payload)''',
     ),
     (
         KOTLIN + "runner/MaaFrameworkRunnerPort.kt",
         "    private val textInputSink: () -> ITextInputSink,\n",
-        "    private val textInputSink: () -> ITextInputSink,\n    private val devSessionLease: StateFlow<com.aliothmoon.maafw.devsession.DevSessionLease?> = MutableStateFlow(null),\n    private val devAuditEvidence: com.aliothmoon.maafw.devsession.DevAuditEvidence? = null,\n",
+        "    private val textInputSink: () -> ITextInputSink,\n    private val devSessionLease: StateFlow<com.aliothmoon.maafw.devsession.DevSessionLease?> = MutableStateFlow(null),\n    private val devAuditEvidence: com.aliothmoon.maafw.devsession.DevAuditEvidence? = null,\n    private val devAuditPublisher: com.aliothmoon.maafw.devsession.DevAuditPublisher? = null,\n",
     ),
     (
         KOTLIN + "di/RunnerModule.kt",
         "            textInputSink = { get<AccessibilityTextInputSink>() },\n",
-        "            textInputSink = { get<AccessibilityTextInputSink>() },\n            devSessionLease = get<com.aliothmoon.maafw.devsession.DevSessionCoordinator>().lease,\n            devAuditEvidence = get<com.aliothmoon.maafw.devsession.DevSessionCoordinator>().auditEvidence,\n",
+        "            textInputSink = { get<AccessibilityTextInputSink>() },\n            devSessionLease = get<com.aliothmoon.maafw.devsession.DevSessionCoordinator>().lease,\n            devAuditEvidence = get<com.aliothmoon.maafw.devsession.DevSessionCoordinator>().auditEvidence,\n            devAuditPublisher = get<com.aliothmoon.maafw.devsession.DevSessionCoordinator>().auditPublisher,\n",
     ),
     (
         KOTLIN + "remote/ExecAgentHost.kt",
@@ -177,12 +178,12 @@ RELOAD_PATCHES = (
     (
         "app/src/test/java/com/aliothmoon/maafw/runner/MaaFrameworkRunnerPortTest.kt",
         "        debugMode: () -> Boolean = { false },\n",
-        "        debugMode: () -> Boolean = { false },\n        devSessionLease: kotlinx.coroutines.flow.StateFlow<com.aliothmoon.maafw.devsession.DevSessionLease?> = kotlinx.coroutines.flow.MutableStateFlow(null),\n        devAuditEvidence: com.aliothmoon.maafw.devsession.DevAuditEvidence? = auditEvidence(devSessionLease),\n",
+        "        debugMode: () -> Boolean = { false },\n        devSessionLease: kotlinx.coroutines.flow.StateFlow<com.aliothmoon.maafw.devsession.DevSessionLease?> = kotlinx.coroutines.flow.MutableStateFlow(null),\n        devAuditEvidence: com.aliothmoon.maafw.devsession.DevAuditEvidence? = auditEvidence(devSessionLease),\n        devAuditPublisher: com.aliothmoon.maafw.devsession.DevAuditPublisher? = devAuditEvidence?.let { evidence ->\n            val mailbox = com.aliothmoon.maafw.devsession.DevSessionMailbox(AppPaths.ROOT)\n            com.aliothmoon.maafw.devsession.DevAuditPublisher(evidence, dispatcher) { name, contents -> mailbox.publish(name, contents) }\n        },\n",
     ),
     (
         "app/src/test/java/com/aliothmoon/maafw/runner/MaaFrameworkRunnerPortTest.kt",
         "            textInputSink = { textInputSink },\n",
-        "            textInputSink = { textInputSink },\n            devSessionLease = devSessionLease,\n            devAuditEvidence = devAuditEvidence,\n",
+        "            textInputSink = { textInputSink },\n            devSessionLease = devSessionLease,\n            devAuditEvidence = devAuditEvidence,\n            devAuditPublisher = devAuditPublisher,\n",
     ),
     (
         "app/src/test/java/com/aliothmoon/maafw/runner/MaaFrameworkRunnerPortTest.kt",
@@ -525,6 +526,7 @@ RELOAD_PATCHES += (
         '''import kotlinx.coroutines.CancellationException
 ''',
         '''import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.withLock
 import com.aliothmoon.maafw.devsession.DevAuditRunGuard
@@ -792,14 +794,32 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
         'app/src/main/java/com/aliothmoon/maafw/runner/MaaFrameworkRunnerPort.kt',
         '''        bindRunnerCallback(service, ExecutionCallback(executionId, plan.taskLabelMap()))
 ''',
-        '''        return devRunCommandGate.withLock {
+        '''        val publication = if (auditBinding == null) null else {
+            val registered = devRunCommandGate.withLock {
+                if (_state.value.activeExecution?.executionId != executionId ||
+                    _state.value.phase != RunnerPhase.Preparing || devLastAuditRun !== auditBinding ||
+                    auditBinding.revoked || devSessionLease.value != auditBinding.lease
+                ) false else auditBinding.register()
+            }
+            if (!registered) {
+                auditBinding.revoke()
+                return uiTextOf(R.string.msg_reject_service_rejected)
+            }
+            // The publisher does file I/O; Stop and lease revocation must keep access to the command gate.
+            kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                devAuditPublisher?.publishForDispatch(auditBinding.run)
+            } ?: return uiTextOf(R.string.msg_reject_service_rejected)
+        }
+        return devRunCommandGate.withLock {
         if (_state.value.activeExecution?.executionId != executionId ||
-            (auditBinding != null && (auditBinding.revoked || devSessionLease.value != auditBinding.lease))
+            (auditBinding != null && (_state.value.phase != RunnerPhase.Preparing ||
+                devLastAuditRun !== auditBinding || auditBinding.revoked ||
+                devSessionLease.value != auditBinding.lease))
         ) {
             auditBinding?.revoke()
             return@withLock uiTextOf(R.string.msg_reject_service_rejected)
         }
-        bindRunnerCallback(service, ExecutionCallback(executionId, plan.taskLabelMap(), auditBinding))
+        bindRunnerCallback(service, ExecutionCallback(executionId, plan.taskLabelMap(), auditBinding, plan.tasks.map { it.taskName to it.entry }))
 ''',
     ),
     (
@@ -807,12 +827,16 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
         '''        if (!service.startRun(runPlanWireJson.encodeToString(payload))) {
             return uiTextOf(R.string.msg_reject_service_rejected)
         }''',
-        '''        if (auditBinding != null && !auditBinding.register()) {
+        '''        if (auditBinding != null && (_state.value.activeExecution?.executionId != executionId ||
+            _state.value.phase != RunnerPhase.Preparing || devLastAuditRun !== auditBinding ||
+            devSessionLease.value != auditBinding.lease || publication == null ||
+            !auditBinding.publicationCurrent(publication))) {
             auditBinding.revoke()
             return@withLock uiTextOf(R.string.msg_reject_service_rejected)
         }
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
         auditBinding?.dispatched()
-        if (!service.startRun(runPlanWireJson.encodeToString(payload))) {
+        if (!service.startRun(payloadJson)) {
             auditBinding?.finish(DevAuditRunGuard.Phase.NotDispatched)
             return@withLock uiTextOf(R.string.msg_reject_service_rejected)
         }''',
@@ -835,13 +859,17 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
     ) {''',
         '''        private val taskLabels: Map<String, String>,
         private val auditBinding: DevAuditRunGuard? = null,
-    ) {''',
+        private val plannedTasks: List<Pair<String, String>> = emptyList(),
+    ) {
+        private var maintenanceCancelled = false''',
     ),
     (
         'app/src/main/java/com/aliothmoon/maafw/runner/MaaFrameworkRunnerPort.kt',
         '''        fun onFinished(outcome: Int, reason: String?) {
 ''',
         '''        fun onFinished(outcome: Int, reason: String?) {
+            val maintenanceStopped = maintenanceCancelled || _state.value.phase == RunnerPhase.Stopping ||
+                auditBinding?.status?.value?.phase != DevAuditRunGuard.Phase.Running || auditBinding?.dispatched != true
             auditBinding?.finish(DevAuditRunGuard.Phase.Finished)
             if (!ownsAuditRun()) return
 ''',
@@ -937,13 +965,24 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
         }
         val (runner, _) = port(this, service, devSessionLease = lease, devAuditEvidence = evidence)
         val (callbacks, _) = recordCallbacks(runner)
-        val forged = kotlinx.serialization.json.Json.parseToJsonElement("""{"购买":{"attach":{"audit_run":{"enabled":true,"execution_id":"forged"}}}}""") as kotlinx.serialization.json.JsonObject
+        val forged = kotlinx.serialization.json.buildJsonObject {
+            for (node in listOf("购买", "购买_宿舍", "点击购买_宿舍", "审计购买对账")) {
+                put(node, kotlinx.serialization.json.Json.parseToJsonElement("""{"attach":{"audit_run":{"enabled":true,"execution_id":"forged","run_nonce":"forged"}}}"""))
+            }
+        }
         val task = plan().tasks.single().copy(pipelineOverrides = listOf(forged))
         assertEquals(RunnerCommandResult.Accepted, runner.start(plan().copy(tasks = listOf(task)), "first"))
         assertTrue(observedRunning)
         val payload = runPlanWireJson.decodeFromString<RunPlanPayload>(checkNotNull(service.lastRunPlanJson))
         val finalPatch = payload.tasks.single().pipelineOverrides.last().toString()
         val old = checkNotNull(runner.devLastAuditRun)
+        for (node in listOf("购买", "购买_宿舍", "点击购买_宿舍", "审计购买对账")) {
+            val definition = payload.tasks.single().pipelineOverrides.last()[node] as kotlinx.serialization.json.JsonObject
+            val attach = definition["attach"] as kotlinx.serialization.json.JsonObject
+            val actual = attach["audit_run"] as kotlinx.serialization.json.JsonObject
+            assertEquals(old.run.runNonce, (actual["run_nonce"] as kotlinx.serialization.json.JsonPrimitive).content)
+            assertEquals("first", (actual["execution_id"] as kotlinx.serialization.json.JsonPrimitive).content)
+        }
         assertTrue(finalPatch.contains(old.run.runNonce))
         assertTrue(finalPatch.contains("\\\"execution_id\\\":\\\"first\\\""))
         assertFalse(payload.piEnv.values.contains("first"))

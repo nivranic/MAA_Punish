@@ -26,6 +26,11 @@ STREAM = "6" * 32
 NONCE = "7" * 32
 
 
+@pytest.fixture(autouse=True)
+def isolated_authorization_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(audit, "authorization_root", lambda: tmp_path / "authorizations")
+
+
 def run_state():
     return {**{key: CHANNEL[key] for key in audit.IDENTITY_KEYS}, "version": 1, "phase": "running",
             "started_boottime_ms": 9000, "observed_boottime_ms": 10000, "audit_persist_supported": True}
@@ -235,7 +240,9 @@ def test_disk_failure_never_ack_even_if_record_was_replaced(setup, stage):
             with pytest.raises(OSError):
                 collector.accept(envelope(source("prepare_commit"), 101), 1.0)
     assert adapter.writes == []
-    assert audit.read_case(path)["revision"] == (1 if stage == "readback_fsync" else 0)
+    assert audit.read_case(path)["revision"] == 0
+    authority = audit.authorization_path("D12", POLICY["target"])
+    assert audit.read_case(authority)["revision"] == (1 if stage == "readback_fsync" else 0)
 
 
 def test_ack_transport_failure_retains_budget(setup):

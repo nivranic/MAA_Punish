@@ -5,6 +5,8 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+import logger_component
+from maa.define import AndRecognitionResult, ColorMatchResult, OCRResult, RecognitionDetail, Rect
 
 from action.combat.config.inverse_crown_profile import (
     InverseCrownProfile, InverseCrownProfileError, InverseCrownUnavailable,
@@ -29,15 +31,28 @@ class EntryContext(FakeContext):
         return self.action_result
 
 
+def preparation_detail(box=(1000, 640, 100, 40)):
+    """Use the SDK's actual composite shape, whose best_result has no box."""
+    def detail(name, algorithm, result):
+        return RecognitionDetail(1, name, algorithm, True, result.box,
+            [result], [result], result, {}, np.empty((0, 0, 3), np.uint8), [])
+    children = [detail("作战开始识别", "OCR", OCRResult(Rect(1000, 640, 100, 40), 1.0, "作战开始")),
+                detail("作战开始背景颜色识别", "ColorMatch", ColorMatchResult(Rect(1032, 641, 148, 53), 100))]
+    combined = AndRecognitionResult(children)
+    return RecognitionDetail(2, PREPARE_NODE, "And", True, Rect(*box),
+        [combined], [combined], combined, {}, np.empty((0, 0, 3), np.uint8), [])
+
+
 @pytest.fixture
-def setup(monkeypatch):
+def setup(monkeypatch, tmp_path):
+    monkeypatch.setattr(logger_component, "LOG_DIR", str(tmp_path / "logs"))
     clock = FakeClock()
     context = EntryContext(node_data={
         PREPARE_NODE: {"recognition": {"type": "And", "param": {
             "all_of": ["作战开始识别", "作战开始背景颜色识别"]}}},
         START_NODE: {"action": {"type": "Click", "param": {"target": True}}},
     }, recognition_map={
-        PREPARE_NODE: make_hit((1000, 640, 100, 40)),
+        PREPARE_NODE: preparation_detail(),
         "战斗中": make_miss(), "战斗重启1": make_miss(),
         "检查血量": make_hit(),
     })
@@ -51,6 +66,34 @@ def setup(monkeypatch):
     combat.input_scope = CombatInputScope(context, combat, generation=23,
         monotonic=clock.monotonic, sleep=clock.sleep)
     return SimpleNamespace(combat=combat, context=context, clock=clock)
+
+
+def test_real_sdk_and_result_uses_recognition_detail_selected_box(setup):
+    ready = preparation_detail((1040, 650, 50, 30))
+    setup.context.recognition_map[PREPARE_NODE] = ready
+    setup.context.action_result.box = tuple(ready.box)
+    assert isinstance(ready.best_result, AndRecognitionResult)
+    assert not hasattr(ready.best_result, "box")
+    candidate = begin_from_preparation(setup.combat)
+    # The SDK selected box is authoritative, not an arbitrary sub-result box.
+    assert setup.context.actions == [(START_NODE, (1040, 650, 50, 30))]
+    assert candidate.start_action_id == 100
+
+
+@pytest.mark.parametrize("wrong", ["detail_type", "result_type", "algorithm", "name", "none_box", "float_box", "outside_box"])
+def test_bad_sdk_preparation_detail_refuses_before_start(setup, wrong):
+    ready = preparation_detail()
+    if wrong == "detail_type": ready = make_hit((1000, 640, 100, 40))
+    if wrong == "result_type": ready.best_result = OCRResult(Rect(1000, 640, 100, 40), 1.0, "作战开始")
+    if wrong == "algorithm": ready.algorithm = "OCR"
+    if wrong == "name": ready.name = "other"
+    if wrong == "none_box": ready.box = None
+    if wrong == "float_box": ready.box = [1000.5, 640, 100, 40]
+    if wrong == "outside_box": ready.box = Rect(0, 0, 100, 40)
+    setup.context.recognition_map[PREPARE_NODE] = ready
+    with pytest.raises(InverseCrownUnavailable):
+        begin_from_preparation(setup.combat)
+    assert setup.context.actions == []
 
 
 def bind(case, monkeypatch):

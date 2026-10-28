@@ -53,9 +53,10 @@ class Context:
         self.tasker = Tasker()
 
     def get_node_data(self, name):
-        if name == commit.OBSERVATION_NODE:
-            return {"recognition": {"type": "Custom", "param": {
-                "custom_recognition": commit.OBSERVATION_ACTION}}}
+        for case in commit.PURCHASE_CASES.values():
+            if name == case.observation_node:
+                return {"recognition": {"type": "Custom", "param": {
+                    "custom_recognition": case.observation_action}}}
         return deepcopy(self.node)
 
 
@@ -354,29 +355,21 @@ def test_dorm_audit_refuses_before_challenge_even_with_complete_d12_evidence(f, 
     f.emitter.callback = f.ack
     if not forged_d12:
         f.node["attach"] = {}
-    with pytest.raises(commit.CommitDenied, match="^purchase_observation_not_implemented$"):
+    with pytest.raises(commit.CommitDenied):
         f.run()
     assert not f.inputs and not f.emitter.events
     assert not (f.paths.marker_root / "pending.claim").exists()
 
 
 @pytest.mark.parametrize("pending", [False, True])
-def test_fuse_owner_mapping_differs_from_child_uid_without_mode_bypass(f, monkeypatch, pending):
+def test_split_app_parent_and_python_writer_uid_without_mode_bypass(f, monkeypatch, pending):
+    from test_audit_directory_identity import install_split_identity
     f.config = AuditConfig()
     f.node["attach"] = {"audit_run": {"enabled": False}}
     f.paths.marker_root.mkdir()
     if pending:
         (f.paths.marker_root / "pending.claim").write_bytes(b"unconfirmed")
-    # Model FUSE metadata as seen by a privileged child: every file in the
-    # installed external namespace belongs to mapped UID 10042, child UID is 0.
-    original_stat, original_fstat = Path.stat, commit.os.fstat
-    def mapped(value):
-        values = list(value)
-        values[4] = 10042
-        return os.stat_result(values)
-    monkeypatch.setattr(Path, "stat", lambda path, **kwargs: mapped(original_stat(path, **kwargs)))
-    monkeypatch.setattr(commit.os, "fstat", lambda descriptor: mapped(original_fstat(descriptor)))
-    monkeypatch.setattr(commit.os, "getuid", lambda: 0, raising=False)
+    install_split_identity(monkeypatch, f.root)
     inputs = []
     if pending:
         with pytest.raises(commit.CommitDenied, match="pending_unconfirmed"):
@@ -459,9 +452,51 @@ def test_production_pipeline_and_language_overrides_keep_guard():
     root = Path(__file__).resolve().parents[2]
     source = jsonc.loads((root / "resource/base/pipeline/Buy_Item.jsonc").read_text(encoding="utf-8"))
     assert source["购买"]["action"] == {"type": "Custom", "param": {"custom_action": "AuditPurchase"}}
-    assert source["购买"]["recognition"]["param"]["all_of"] == ["识别购买界面逆元碎片", "识别购买界面购买"]
+    assert source["购买"]["recognition"]["param"]["all_of"] == ["识别购买界面逆元碎片", "识别购买界面购买", "识别D12购买意图"]
     for path in (root / "resource").glob("*/pipeline/Buy_Item.jsonc"):
         if path.parts[-3] != "base":
             assert "action" not in jsonc.loads(path.read_text(encoding="utf-8")).get("购买", {})
     registration = (root / "agent/agent_file.py").read_text(encoding="utf-8")
     assert '@AgentServer.custom_action("AuditPurchase")' in registration
+
+
+def bind_case(f, case_id):
+    case = commit.PURCHASE_CASES[case_id]
+    f.node["attach"]["audit_intent"]["case_id"] = case_id
+    f.argv.node_name = case.action_node
+    f.argv.reco_detail.name = case.action_node
+    f.argv.reco_detail.best_result.sub_results[0].name = case.observation_node
+
+
+@pytest.mark.parametrize("case_id", ["D12", "D13", "D14"])
+def test_each_case_records_its_own_observation_and_pending_before_native_click(f, case_id):
+    bind_case(f, case_id)
+    f.emitter.callback = f.ack
+    assert f.run()
+    prepare = next(event for event in f.emitter.events if event["audit_event"] == "prepare_commit")
+    marker = commit.read_object(f.paths.marker_root / "pending.json")
+    assert prepare["case_id"] == marker["case_id"] == case_id
+    assert f.inputs == ["native_click"]
+    assert marker["effect"] == "unconfirmed"
+    with pytest.raises(commit.CommitDenied, match="pending_unconfirmed"):
+        f.run()
+    assert f.inputs == ["native_click"]
+
+
+@pytest.mark.parametrize("real_case,forged_case", [
+    ("D12", "D13"), ("D13", "D12"), ("D14", "D12"), ("D14", "D13"),
+])
+def test_full_observation_from_another_case_never_prepares(f, real_case, forged_case):
+    bind_case(f, real_case)
+    f.argv.reco_detail.best_result.sub_results[0].name = commit.PURCHASE_CASES[forged_case].observation_node
+    with pytest.raises(commit.CommitDenied, match="observation_not_ready"):
+        f.run()
+    assert not f.inputs and not f.emitter.events
+
+
+def test_d14_maximum_control_is_not_the_purchase_submit_point(f):
+    bind_case(f, "D14")
+    f.argv.node_name = f.argv.reco_detail.name = "购买_宿舍"
+    with pytest.raises(commit.CommitDenied, match="wrong_purchase_case"):
+        f.run()
+    assert not f.inputs and not f.emitter.events

@@ -26,18 +26,27 @@ class DevAuditRunGuard(
     val ended = CompletableDeferred<Unit>()
     private val invalidated = AtomicBoolean(false)
     private val stopClaimed = AtomicBoolean(false)
+    private var registeredEpoch: Long? = null
     val revoked: Boolean get() = invalidated.get()
     @Volatile var dispatched: Boolean = false
         private set
     private var watcher: Job? = null
 
     @Synchronized fun revoke(): Boolean {
-        evidence.finish(run)
+        registeredEpoch?.let { evidence.finish(run, it) }
         return invalidated.compareAndSet(false, true)
     }
 
-    /** Called only at Runner's final command gate, immediately before native dispatch. */
-    @Synchronized fun register(): Boolean = !revoked && evidence.register(run)
+    /** Register at the command gate, then publish outside it before the final dispatch gate. */
+    @Synchronized fun register(): Boolean {
+        if (revoked || registeredEpoch != null) return false
+        registeredEpoch = evidence.registerForDispatch(run)
+        return registeredEpoch != null
+    }
+
+    @Synchronized fun publicationCurrent(publication: DevAuditEvidence.Publication): Boolean =
+        !revoked && registeredEpoch != null && registeredEpoch == publication.registrationEpoch &&
+            evidence.isPublishedCurrent(run, publication)
     fun claimStop(): Boolean = stopClaimed.compareAndSet(false, true)
 
     @Synchronized fun attach(job: Job) {

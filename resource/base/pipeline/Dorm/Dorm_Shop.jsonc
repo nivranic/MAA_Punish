@@ -320,15 +320,13 @@
     },
     "点击购买_宿舍": {
         "recognition": {
-            "type": "OCR",
+            "type": "And",
             "param": {
-                "roi": [
-                    681,
-                    596,
-                    171,
-                    124
+                "all_of": [
+                    "识别宿舍购买按钮",
+                    "识别D13购买意图"
                 ],
-                "expected": "购买"
+                "box_index": 0
             }
         },
         "action": {
@@ -342,6 +340,36 @@
             "购买碎片失败_宿舍",
             "购买成功"
         ]
+    },
+    "识别D13购买意图": {
+        "recognition": {
+            "type": "Custom",
+            "param": {
+                "custom_recognition": "D13PurchaseObservation"
+            }
+        }
+    },
+    "识别D14购买意图": {
+        "recognition": {
+            "type": "Custom",
+            "param": {
+                "custom_recognition": "D14PurchaseObservation"
+            }
+        }
+    },
+    "识别宿舍购买按钮": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [
+                    681,
+                    596,
+                    171,
+                    124
+                ],
+                "expected": "购买"
+            }
+        }
     },
     "购买成功": {
         "recognition": {

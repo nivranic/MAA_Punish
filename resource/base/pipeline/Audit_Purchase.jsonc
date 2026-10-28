@@ -1,0 +1,17 @@
+{
+    "审计购买对账": {
+        "recognition": {
+            "type": "DirectHit"
+        },
+        "action": {
+            "type": "Custom",
+            "param": {
+                "custom_action": "AuditPurchaseReconcile"
+            }
+        },
+        "pre_delay": 0,
+        "post_delay": 0,
+        "next": [],
+        "on_error": []
+    }
+}

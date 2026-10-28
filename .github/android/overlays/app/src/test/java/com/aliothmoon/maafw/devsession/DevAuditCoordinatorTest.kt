@@ -32,6 +32,11 @@ class DevAuditCoordinatorTest {
             val evidence = coordinator.auditEvidence
             val run = checkNotNull(evidence.binding(lease, "actual-run", "d".repeat(32)))
             assertTrue(evidence.register(run))
+            val published = checkNotNull(coordinator.auditPublisher.publishForDispatch(run))
+            assertTrue(evidence.isPublishedCurrent(run, published))
+            val immediate = Json.parseToJsonElement(File(directory, "audit-state.json").readText()).jsonObject
+            assertEquals("running", immediate.getValue("phase").jsonPrimitive.content)
+            run.identity().forEach { (key, value) -> assertEquals(value, immediate[key]) }
             val challenge = buildJsonObject {
                 put("version", 1); run.identity().forEach { (key, value) -> put(key, value) }
                 put("collector_id", "e".repeat(32)); put("source_challenge", "f".repeat(32))

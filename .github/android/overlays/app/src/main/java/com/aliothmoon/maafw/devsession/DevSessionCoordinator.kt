@@ -44,6 +44,10 @@ class DevSessionCoordinator(
     val binding: StateFlow<DevSessionHello?> = mutableBinding.asStateFlow()
     val auditEvidence = DevAuditEvidence(packageName, File(externalRoot, ".dev-session"), nowMs,
         { mutableBinding.value }, { mutableLease.value })
+    private val auditMailbox = DevSessionMailbox(externalRoot)
+    val auditPublisher = DevAuditPublisher(auditEvidence, ioDispatcher) { name, contents ->
+        auditMailbox.publish(name, contents)
+    }
     private var lastAuditRequest: String? = null
     private val closeRequest = AtomicReference<Pair<String, String>?>(null)
     private val screenSaverFeedback = AtomicReference<Pair<String, String>?>(null)
@@ -159,7 +163,7 @@ class DevSessionCoordinator(
                     protocol.end(why = "mailbox_unavailable")
                     mutableLease.value = null
                     auditEvidence.invalidate()
-                    runCatching { publishAudit(mailbox) }
+                    runCatching { auditPublisher.publish() }
                     mutableStatus.value = protocol.status()
                     initialized = false
                     publishedHello = ""
@@ -171,12 +175,12 @@ class DevSessionCoordinator(
         } finally {
             mutableLease.value = null
             auditEvidence.invalidate()
-            runCatching { publishAudit(mailbox) }
+            withContext(NonCancellable) { runCatching { auditPublisher.publish() } }
         }
     }
 
     /** Shares the existing 250 ms IO poll; there is no extra scheduler or stdout reader. */
-    internal fun pollAuditMailbox(mailbox: DevSessionMailbox) {
+    internal suspend fun pollAuditMailbox(mailbox: DevSessionMailbox) {
         try {
             val request = mailbox.readRequest("audit-request.json")
             if (request != null && request != lastAuditRequest) {
@@ -186,16 +190,6 @@ class DevSessionCoordinator(
         } catch (_: Exception) {
             auditEvidence.rejectInvalid()
         }
-        publishAudit(mailbox)
-    }
-
-    private fun publishAudit(mailbox: DevSessionMailbox) {
-        // Disk IO stays outside the Runner command gate. If a lifecycle transition
-        // races this snapshot, replace it immediately before completing this poll.
-        do {
-            val publication = auditEvidence.publication()
-            mailbox.publish("audit-permit.json", publication.permit)
-            mailbox.publish("audit-state.json", publication.state)
-        } while (!auditEvidence.unchanged(publication))
+        auditPublisher.publish()
     }
 }

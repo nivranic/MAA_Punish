@@ -1,0 +1,35 @@
+{
+    "审计购买_商品全名": {
+        "recognition": {"type": "OCR", "param": {"roi": [535, 210, 215, 34], "only_rec": true, "threshold": 0.98, "expected": "^.+$"}}
+    },
+    "审计购买_包内数": {
+        "recognition": {"type": "OCR", "param": {"roi": [609, 246, 63, 25], "only_rec": true, "threshold": 0.98, "expected": "^x[1-9][0-9]*$"}}
+    },
+    "审计购买_花费": {
+        "recognition": {"type": "OCR", "param": {"roi": [553, 493, 171, 48], "only_rec": true, "threshold": 0.98, "expected": "^(0|[1-9][0-9]*)$"}}
+    },
+    "审计购买_份数": {
+        "recognition": {"type": "OCR", "param": {"roi": [439, 643, 33, 47], "only_rec": true, "threshold": 0.98, "expected": "^[1-9][0-9]*$"}}
+    },
+    "审计购买_限购": {
+        "recognition": {"type": "OCR", "param": {"roi": [776, 607, 124, 33], "only_rec": true, "threshold": 0.98, "expected": "^还可购买[1-9][0-9]*$"}}
+    },
+    "审计购买_花费标签": {
+        "recognition": {"type": "OCR", "param": {"roi": [596, 540, 59, 31], "only_rec": true, "threshold": 0.98, "expected": "^/花费$"}}
+    },
+    "审计购买_提交按钮": {
+        "recognition": {"type": "OCR", "param": {"roi": [727, 647, 97, 40], "only_rec": true, "threshold": 0.98, "expected": "^购买$"}}
+    },
+    "审计购买_可提交": {
+        "recognition": {"type": "And", "param": {"all_of": ["审计购买_花费标签", "审计购买_提交按钮"]}}
+    },
+    "审计购买_螺母图标": {
+        "recognition": {"type": "TemplateMatch", "param": {"roi": [653, 539, 31, 31], "template": "购买审计/螺母.png", "threshold": 0.98, "method": 5}}
+    },
+    "审计购买_宿舍币图标": {
+        "recognition": {"type": "TemplateMatch", "param": {"roi": [653, 539, 31, 31], "template": "购买审计/宿舍币.png", "threshold": 0.98, "method": 5}}
+    },
+    "审计购买_遣测凭证图标": {
+        "recognition": {"type": "TemplateMatch", "param": {"roi": [653, 539, 31, 31], "template": "购买审计/遣测凭证.png", "threshold": 0.98, "method": 5}}
+    }
+}

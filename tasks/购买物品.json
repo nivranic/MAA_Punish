@@ -76,11 +76,25 @@
                                     ]
                                 }
                             },
+                            "attach": {
+                                "audit_quantity_role": {"case_id": "D14", "role": "skip_max_in_audit"}
+                            },
                             "recognition": {
                                 "param": {
                                     "all_of": [
                                         "购买_宿舍_武器涂装设计图"
                                     ]
+                                }
+                            }
+                        },
+                        "点击购买_宿舍": {
+                            "recognition": {
+                                "param": {
+                                    "all_of": [
+                                        "识别宿舍购买按钮",
+                                        "识别D14购买意图"
+                                    ],
+                                    "box_index": 0
                                 }
                             }
                         }

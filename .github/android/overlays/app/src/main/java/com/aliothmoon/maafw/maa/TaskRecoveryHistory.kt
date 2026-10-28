@@ -19,6 +19,7 @@ object TaskRecoveryHistory {
         val nativeStatus: Int? = null,
         val nodeCount: Long? = null,
         val completedFalseCount: Long = 0,
+        val singleEntryCompleted: Boolean = false,
     ) {
         val mustAbort: Boolean get() = !complete || recoverySeen
     }
@@ -42,6 +43,7 @@ object TaskRecoveryHistory {
         var observedStatus: Int? = null
         var observedCount: Long? = null
         var completedFalseCount = 0L
+        var singleEntryCompleted = false
         fun unknown(reason: String) = Result(false, recoverySeen, reason, observedStatus, observedCount, completedFalseCount)
         fun active(): Boolean = try {
             ownsRuntime() && nanoTime() - started in 0 until QUERY_NANOS
@@ -100,6 +102,9 @@ object TaskRecoveryHistory {
                     // Native completed=false also describes an executed action failure. A named
                     // node in a stable terminal history is not a missing/unfinished query result.
                     if (completed.value.toInt() == 0) completedFalseCount++
+                    if (capacity == 1L && expectedEntry == PurchaseMaintenanceNative.ENTRY) {
+                        singleEntryCompleted = name == expectedEntry && completed.value.toInt() == 1
+                    }
                     if (!active()) return unknown("runtime_owner_or_deadline")
                 }
                 // Re-read the complete list, not a prefix, after every node query has finished.
@@ -113,11 +118,22 @@ object TaskRecoveryHistory {
                     !ids.contentEquals(idsBuffer.getLongArray(0, capacity.toInt()))
                 ) return unknown("task_history_changed")
                 if (!active()) return unknown("runtime_owner_or_deadline")
+                if (capacity == 1L && expectedEntry == PurchaseMaintenanceNative.ENTRY) {
+                    // A maintenance completion must name the actual sole completed node,
+                    // not infer it from the task's entry or terminal status alone.
+                    val recoId = LongByReference(0)
+                    val actionId = LongByReference(0)
+                    val completed = ByteByReference(0)
+                    if (lib.MaaTaskerGetNodeDetail(tasker, ids.single(), nameBuffer, recoId, actionId, completed).toInt() != 1 ||
+                        lib.MaaStringBufferGet(nameBuffer) != expectedEntry || completed.value.toInt() != 1
+                    ) singleEntryCompleted = false
+                    if (!active()) return unknown("runtime_owner_or_deadline")
+                }
                 if (recoverySeen) return Result(true, true, "shared_recovery_visited", firstStatus, capacity, completedFalseCount)
                 if (waitStatus != firstStatus || !MaaStatus.isDone(waitStatus)) {
                     return unknown("task_completion_unconfirmed")
                 }
-                return Result(true, false, "no_shared_recovery", firstStatus, capacity, completedFalseCount)
+                return Result(true, false, "no_shared_recovery", firstStatus, capacity, completedFalseCount, singleEntryCompleted)
             }
         } catch (_: Throwable) {
             return unknown("native_history_query_failed")

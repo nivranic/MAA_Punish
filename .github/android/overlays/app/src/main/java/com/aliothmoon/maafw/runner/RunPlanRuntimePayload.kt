@@ -25,11 +25,13 @@ fun RunPlan.runtimePayload(
     tasks = tasks.map { task ->
         // Append after user/option patches so stale or forged attach cannot win.
         val auditOverride = buildJsonObject {
-            put("购买", buildJsonObject {
-                put("attach", buildJsonObject {
-                    put("audit_run", auditRun?.attach() ?: buildJsonObject { put("enabled", false) })
+            for (node in listOf("购买", "购买_宿舍", "点击购买_宿舍", "审计购买对账")) {
+                put(node, buildJsonObject {
+                    put("attach", buildJsonObject {
+                        put("audit_run", auditRun?.attach() ?: buildJsonObject { put("enabled", false) })
+                    })
                 })
-            })
+            }
         }
         RuntimeTaskPayload(task.taskName, task.entry, task.pipelineOverrides + auditOverride)
     },

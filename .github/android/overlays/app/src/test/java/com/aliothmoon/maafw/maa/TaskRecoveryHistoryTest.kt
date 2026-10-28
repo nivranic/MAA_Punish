@@ -274,6 +274,40 @@ class TaskRecoveryHistoryTest {
         assertEquals("runtime_owner_or_deadline", f.inspect().reason)
     }
 
+    @Test fun `ordinary singleton keeps the original one node read without maintenance certification`() {
+        val f = NativeFixture().apply { nodes = listOf(Node(101, entry)) }
+        val result = f.inspect()
+        assertTrue(result.complete)
+        assertFalse(result.singleEntryCompleted)
+        assertEquals(1, f.nodeReads)
+    }
+
+    @Test fun `maintenance requires sole completed node to match entry in stable native history`() {
+        val f = NativeFixture().apply {
+            entry = PurchaseMaintenanceNative.ENTRY
+            nodes = listOf(Node(101, entry))
+        }
+        assertTrue(f.inspect(expected = f.entry).singleEntryCompleted)
+        assertEquals(2, f.nodeReads)
+        f.nodes = listOf(Node(101, "different"))
+        assertFalse(f.inspect(expected = f.entry).singleEntryCompleted)
+        f.nodes = listOf(Node(101, f.entry, 0))
+        assertFalse(f.inspect(expected = f.entry).singleEntryCompleted)
+        f.nodes = listOf(Node(101, f.entry), Node(102, f.entry))
+        assertFalse(f.inspect(expected = f.entry).singleEntryCompleted)
+    }
+
+    @Test fun `maintenance second node read cannot certify changed completion or name`() {
+        for (changed in listOf(Node(101, "different"), Node(101, PurchaseMaintenanceNative.ENTRY, 0))) {
+            val f = NativeFixture().apply {
+                entry = PurchaseMaintenanceNative.ENTRY
+                nodes = listOf(Node(101, entry))
+                afterNode = { if (it == 1) nodes = listOf(changed) }
+            }
+            assertFalse(f.inspect(expected = f.entry).singleEntryCompleted)
+        }
+    }
+
     @Test fun `actual JNI method declarations retain fixed uint64 and uint8 references`() {
         val task = MaaFrameworkLibrary::class.java.methods.single { it.name == "MaaTaskerGetTaskDetail" }
         assertEquals(java.lang.Long.TYPE, task.parameterTypes[1])

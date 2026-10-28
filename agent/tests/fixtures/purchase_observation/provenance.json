@@ -1,0 +1,211 @@
+{
+  "version": 1,
+  "scope": "Real CN 1280x720 purchase-detail ROI crops only; no account/header/fullscreen images",
+  "rects": {
+    "title": [
+      535,
+      210,
+      215,
+      90
+    ],
+    "spend": [
+      550,
+      490,
+      180,
+      80
+    ],
+    "controls": [
+      325,
+      605,
+      630,
+      94
+    ]
+  },
+  "images": {
+    "D12-P1": {
+      "original_filename": "d12-P1-mingjue-2216.png",
+      "original_png_sha256": "d0e7ed65e82795b2de0e573af48e7d6935378194bf39e7d90da22367b12cef7f",
+      "shape": [
+        720,
+        1280,
+        3
+      ],
+      "crops": {
+        "title": {
+          "filename": "D12-MINGJUE-P1-title.png",
+          "sha256": "c7584fa992a1142873e923233f29896a51da07f96992cd5caa6bd7e328bff4f3"
+        },
+        "spend": {
+          "filename": "D12-MINGJUE-P1-spend.png",
+          "sha256": "fcfe550823b09231a94212413c3b306f0bbef8e3ab35f691cf081b3b65c121c9"
+        },
+        "controls": {
+          "filename": "D12-MINGJUE-P1-controls.png",
+          "sha256": "7e6b70ef20b0927d2a32e0db672b97ca7b7ec372f53f37aee4a189329b6f46ea"
+        }
+      }
+    },
+    "D12-N1": {
+      "original_filename": "d12-N1-other-item.png",
+      "original_png_sha256": "d4316af5dab0dda308aad6b87276d250eb0c884ec18c1dba19d70edf5ac96ee3",
+      "shape": [
+        720,
+        1280,
+        3
+      ],
+      "crops": {
+        "title": {
+          "filename": "D12-N1-title.png",
+          "sha256": "3afa93aa0d8e3858cf180d002ea0473a29c6b85c9503912b20da7335867f5370"
+        },
+        "spend": {
+          "filename": "D12-N1-spend.png",
+          "sha256": "b17ad2e88c3c3e9554f0fdf08913634f175721c22d84c0c46db75c05200bbc9a"
+        },
+        "controls": {
+          "filename": "D12-N1-controls.png",
+          "sha256": "e47e419eb6af3637ce7999f9239aec8143ff3f38c834cfd39d5dfd7829c8b1a3"
+        }
+      }
+    },
+    "D13-P1": {
+      "original_filename": "d13-P1.png",
+      "original_png_sha256": "72937068f37c2e73d5c3f3ce4d3f5122460e94a33b67f143bdbfc08e7a85a1e8",
+      "shape": [
+        720,
+        1280,
+        3
+      ],
+      "crops": {
+        "title": {
+          "filename": "D13-P1-title.png",
+          "sha256": "714ff683e7655c3f8103d93445634b8e5ed28f287a24099730d57a99db28479a"
+        },
+        "spend": {
+          "filename": "D13-P1-spend.png",
+          "sha256": "b7f3e0cc57e61cc5efec82dd6d7ef50c3b40d7756c2eaf08b5a597e2f621999e"
+        },
+        "controls": {
+          "filename": "D13-P1-controls.png",
+          "sha256": "b3db5bbcfb07da6d02dabc3cec9a9d5de2e447e1ad84ac5d8095dee00c3706e2"
+        }
+      }
+    },
+    "D13-N1": {
+      "original_filename": "d13-N1-other-item.png",
+      "original_png_sha256": "656a1095b4d6f2477bc5757488797228bf0bc064d224e3722706a347d2b8af46",
+      "shape": [
+        720,
+        1280,
+        3
+      ],
+      "crops": {
+        "title": {
+          "filename": "D13-N1-title.png",
+          "sha256": "eb542b26e2594290c023c6c8f9ce6dadfe52f56921e19cc28056de02c6c4ecfa"
+        },
+        "spend": {
+          "filename": "D13-N1-spend.png",
+          "sha256": "9bf74cd30db6c915eb9c815711d25d6dd9aa84b5e50c010cdd49a3b96553d16f"
+        },
+        "controls": {
+          "filename": "D13-N1-controls.png",
+          "sha256": "0394347d3dee5b277622ae55f5795d409b0b7a6325e45362a4fffddb8e7a3b86"
+        }
+      }
+    },
+    "D14-P1": {
+      "original_filename": "d14-P1.png",
+      "original_png_sha256": "55b03b8b1e8f2a638b84ffa4be36d64b5c69f7c61f57c56b073636f8711288ab",
+      "shape": [
+        720,
+        1280,
+        3
+      ],
+      "crops": {
+        "title": {
+          "filename": "D14-P1-title.png",
+          "sha256": "c2718cb76bb248292f8471e803e609880bf1e2c627b31fd7ddad5c086777c64a"
+        },
+        "spend": {
+          "filename": "D14-P1-spend.png",
+          "sha256": "f9bb4750de0f8396472b002545c2e36886e5c14f16356a15fbe82bbdddfb14d1"
+        },
+        "controls": {
+          "filename": "D14-P1-controls.png",
+          "sha256": "9682825bd6324c223b2296a5fecd928385009d87e8eef918f17f22fc27ec1d32"
+        }
+      }
+    },
+    "D14-N1": {
+      "original_filename": "d14-N1-other-item.png",
+      "original_png_sha256": "e47a40e9bc1d5d9f86f32989d0d6b0c80551037f494c2ecd0a50b06f1e1892e7",
+      "shape": [
+        720,
+        1280,
+        3
+      ],
+      "crops": {
+        "title": {
+          "filename": "D14-N1-title.png",
+          "sha256": "411b3ef2b4bd69edc722ad3af2db1a34f4ae630bc0e764c5d566834065ac1e3b"
+        },
+        "spend": {
+          "filename": "D14-N1-spend.png",
+          "sha256": "2236f55e5776f7b73570ef6d85fd992f89969332d5f1821051a5d85d9232e794"
+        },
+        "controls": {
+          "filename": "D14-N1-controls.png",
+          "sha256": "b699ebe336d593686bd8abdb6b386eb9a9288e5c5e3b11a116a5610014606c30"
+        }
+      }
+    },
+    "D12-QINGSHANG-P1": {
+      "original_filename": "d12-P1-details.png",
+      "original_png_sha256": "af7a197a0309e9afc4c1b9724541f452204b7ec8f5af754c23c8a17d3328fb62",
+      "shape": [
+        720,
+        1280,
+        3
+      ],
+      "crops": {
+        "title": {
+          "filename": "D12-P1-title.png",
+          "sha256": "01474620de6a0978f01a22f53d2598548605a9917a59697d12e6e0eb63c658de"
+        },
+        "spend": {
+          "filename": "D12-P1-spend.png",
+          "sha256": "0ab6770ebc20d3eeed6b1e4d9ef3a14781f0819d5c9ae4c4751ad0223fbe5af0"
+        },
+        "controls": {
+          "filename": "D12-P1-controls.png",
+          "sha256": "a74565eadc95d0a4b76503fb212cb888260eb56ff91ad7597b5b3fd2e89c1f22"
+        }
+      }
+    }
+  },
+  "D14-currency-name": {
+    "original_filename": "d14-currency-info.png",
+    "original_png_sha256": "3b3bd8405f178c1c2a886aa402d445f5974e291c5095c1bfac76b0d6de6c29bc",
+    "crop": [
+      270,
+      240,
+      350,
+      85
+    ],
+    "filename": "D14-currency-name.png",
+    "sha256": "06ba03112e3dce5817294c1a6b0cf9e4ff81f7f0de39fbb35d654de03b59cb13"
+  },
+  "D14-S0-month": {
+    "original_filename": "d14-S0-nearstart.png",
+    "original_png_sha256": "9fa911d583967bd2f0ab12c14f9245622862edba190e69435cda1bea40d1d722",
+    "crop": [
+      218,
+      355,
+      1062,
+      144
+    ],
+    "filename": "D14-S0-month.png",
+    "sha256": "d31fbe86d2bee8fd4489c8276dd0c2e041b4b43b19d738136c1afd9e5a3cfae2"
+  }
+}
