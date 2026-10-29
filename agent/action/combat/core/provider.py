@@ -65,6 +65,50 @@ _HP_FRACTION_RE = re.compile(r"(\d+)\s*/\s*(\d+)")
 _STRICT_HP_FRACTION_RE = re.compile(r"\s*([0-9]+)\s*/\s*([0-9]+)\s*")
 
 
+class Roguelike3IdentityError(RuntimeError):
+    """A task-local R03 identity policy rejected further combat input."""
+
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(reason)
+
+
+def roguelike3_identity_required(node_data: dict | None) -> bool:
+    """Consume only the current CombatRunner node's explicit task policy."""
+    # Preserve the shared inverse-profile parser's malformed-node contract.
+    if not isinstance(node_data, dict):
+        return False
+    attach = node_data.get("attach") or {}
+    if not isinstance(attach, dict) or "roguelike3_identity" not in attach:
+        return False
+    policy = attach["roguelike3_identity"]
+    if (
+        not isinstance(policy, dict)
+        or set(policy) != {"version", "require_known_field"}
+        or type(policy["version"]) is not int
+        or policy["version"] != 1
+        or policy["require_known_field"] is not True
+    ):
+        raise Roguelike3IdentityError("r3_identity_policy_invalid")
+    return True
+
+
+def require_roguelike3_field_identity(
+    display_name: str, detected_cls: str, expected_cls: str = "",
+) -> None:
+    """Known generic characters are valid; an unknown generic fallback is not."""
+    if (
+        not isinstance(display_name, str)
+        or not display_name.strip()
+        or display_name.strip().casefold() in ("未知", "unknown")
+        or not isinstance(detected_cls, str)
+        or not detected_cls.strip()
+    ):
+        raise Roguelike3IdentityError("r3_field_identity_unknown")
+    if expected_cls and expected_cls != GENERIC_CLS_NAME and detected_cls != expected_cls:
+        raise Roguelike3IdentityError("r3_field_identity_mismatch")
+
+
 def parse_hp_current(text: str) -> int | None:
     """从「当前/上限」OCR 文本解析当前血量；无法解析时返回 None。"""
     match = _HP_FRACTION_RE.search(text or "")
@@ -248,7 +292,9 @@ class CombatCheck(BaseCombatCheck):
         名单全是通用作战（或没有名单）时，先识别场上角色，再截一帧看黄/蓝 QTE 定人数。
         """
         published = load_team_roster_from_context(context)
-        if not should_infer_team_size_from_qte(published):
+        r3_identity = getattr(combat, "roguelike3_identity_required", False)
+        use_published = not should_infer_team_size_from_qte(published)
+        if use_published and not r3_identity:
             snapshot = TeamSnapshot.from_dict({**(published or {}), "current": "R"})
             if snapshot is None:
                 fallback = (published or {}).get("R") or GENERIC_CLS_NAME
@@ -275,12 +321,24 @@ class CombatCheck(BaseCombatCheck):
             image,
             prefer_cls=prefer,
             on_tick=(
-                None if protected else lambda: blind_attack_click(
+                None if protected or r3_identity else lambda: blind_attack_click(
                     context, attack_count=CHAR_CHECK_ATTACK_COUNT, combat=combat
                 )
             ),
         )
+        if r3_identity:
+            combat.field_identity = "unknown"
+            require_roguelike3_field_identity(
+                display_name, field_cls, (published or {}).get("R", ""),
+            )
+            combat.field_identity = "confirmed"
         combat.current_role_name = display_name
+
+        if use_published:
+            snapshot = TeamSnapshot.from_dict({**published, "current": "R"})
+            if snapshot is None or not snapshot.R:
+                raise Roguelike3IdentityError("r3_published_roster_invalid")
+            return snapshot
 
         combat.frame = None
         image = self._get_frame(context, combat)

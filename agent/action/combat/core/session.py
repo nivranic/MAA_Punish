@@ -37,7 +37,11 @@ from action.combat.config.inverse_crown_profile import (
     InverseCrownProfile,
     InverseCrownUnavailable,
 )
-from action.combat.core.provider import BaseCombatCheck
+from action.combat.core.provider import (
+    BaseCombatCheck,
+    Roguelike3IdentityError,
+    require_roguelike3_field_identity,
+)
 from action.combat.core.role import BaseRole, SwitchPriority, resolve_role_name
 from action.combat.core.role_detect import (
     attack_templates_for_cls,
@@ -143,9 +147,11 @@ class CombatTask:
         switch_fail_cooldown: float | None = None,
         field_min_stay: float | None = None,
         inverse_crown_profile: InverseCrownProfile | None = None,
+        roguelike3_identity_required: bool = False,
     ):
         self.context = context
         self.combat_check = combat_check
+        self.roguelike3_identity_required = roguelike3_identity_required
         # A distinct immutable snapshot belongs to each combat invocation.
         self.inverse_crown_profile = replace(
             inverse_crown_profile
@@ -270,6 +276,11 @@ class CombatTask:
                     self.context, self
                 )
                 self._sleep_check()
+        except Roguelike3IdentityError as exc:
+            self.out_of_combat_reason = exc.reason
+            self._callback_status = "REJECTED"
+            self._exception_type = type(exc).__name__
+            raise
         except InverseCrownUnavailable as exc:
             self.out_of_combat_reason = exc.reason
             self._callback_status = "REJECTED"
@@ -390,27 +401,51 @@ class CombatTask:
 
     def _blind_attack_tick(self) -> None:
         """角色识别等阻塞流程中周期性盲发普攻（检查角色前连点两次）。"""
-        if self._should_stop() or self.is_observation_protected():
+        if (
+            self._should_stop()
+            or self.is_observation_protected()
+            or self.roguelike3_identity_required
+        ):
             return
         blind_attack_click(
             self.context, attack_count=CHAR_CHECK_ATTACK_COUNT, combat=self
         )
+
+    def _require_roguelike3_role_identity(
+        self, role: BaseRole | None, display_name: str, detected_cls: str,
+    ) -> None:
+        self.field_identity = "unknown"
+        require_roguelike3_field_identity(display_name, detected_cls)
+        if (
+            role is None
+            or role.requested_cls_name != detected_cls
+            or role.fallback_reason is not None
+            or role.implementation_name.rsplit(".", 1)[-1] != detected_cls
+        ):
+            raise Roguelike3IdentityError("r3_strategy_identity_mismatch")
+        self.field_identity = "confirmed"
 
     def _correct_role_from_field(
         self, color: str, roster_cls: str, image: Any, *, solo: bool = False
     ) -> tuple[str, str]:
         """切人/进战后对照 attack_template，必要时将 GeneralFight 占位修正为专属 cls。"""
         protected = self.is_observation_protected()
-        if not protected:
+        r3_identity = self.roguelike3_identity_required
+        if not protected and not r3_identity:
             self._blind_attack_tick()
         prefer = [roster_cls] if roster_cls else []
         display_name, detected_cls = detect_current_role(
             self.context,
             image,
             prefer_cls=prefer,
-            on_tick=None if protected else self._blind_attack_tick,
+            on_tick=None if protected or r3_identity else self._blind_attack_tick,
         )
         key = color.upper()
+        if r3_identity:
+            self._require_roguelike3_role_identity(
+                self.roles.get(key), display_name, detected_cls,
+            )
+            return display_name, detected_cls
         if protected:
             self._require_field_identity(self.roles.get(key), display_name, detected_cls)
             return display_name, detected_cls
@@ -482,6 +517,19 @@ class CombatTask:
         :return: True 表示已切换主站角色，本 tick 应跳过后续战斗逻辑。
         """
         protected = self.is_observation_protected()
+        if self.roguelike3_identity_required:
+            if self.team is None or self.frame is None:
+                self._require_roguelike3_role_identity(role, "未知", GENERIC_CLS_NAME)
+            image = self.frame
+            if not is_dodge_button_visible(self.context, image):
+                self._require_roguelike3_role_identity(role, "未知", GENERIC_CLS_NAME)
+            display_name, detected_cls = detect_current_role(
+                self.context, image, prefer_cls=[role.cls_name], on_tick=None,
+            )
+            self._require_roguelike3_role_identity(role, display_name, detected_cls)
+            self._last_field_cls = detected_cls
+            self.current_role_name = display_name
+            return False
         if protected:
             require_inverse_crown_identity(role)
             # A missing frame or hidden HUD does not positively identify the

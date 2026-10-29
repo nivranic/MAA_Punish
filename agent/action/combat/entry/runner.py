@@ -29,7 +29,11 @@ from dataclasses import replace
 from maa.context import Context
 from maa.custom_action import CustomAction
 
-from action.combat.core.provider import CombatCheck
+from action.combat.core.provider import (
+    CombatCheck,
+    Roguelike3IdentityError,
+    roguelike3_identity_required,
+)
 from action.combat.core.fresh_entry import preparation_entry_requested
 from action.combat.core.session import (
     CombatOutcome,
@@ -53,10 +57,11 @@ class CombatRunner(CustomAction):
     ) -> CustomAction.RunResult:
         self.last_outcome: CombatOutcome | None = None
         combat: CombatTask | None = None
+        r3_identity = False
         try:
-            profile = InverseCrownProfile.from_node_data(
-                context.get_node_data(argv.node_name)
-            )
+            node_data = context.get_node_data(argv.node_name)
+            r3_identity = roguelike3_identity_required(node_data)
+            profile = InverseCrownProfile.from_node_data(node_data)
             from_preparation = preparation_entry_requested(
                 argv.node_name, getattr(argv, "custom_action_param", ""),
             )
@@ -65,11 +70,18 @@ class CombatRunner(CustomAction):
             if profile.enabled:
                 require_inverse_crown_layout(context)
             combat_check = CombatCheck()
-            combat = CombatTask(context, combat_check, inverse_crown_profile=profile)
+            combat_options = {"inverse_crown_profile": profile}
+            if r3_identity:
+                combat_options["roguelike3_identity_required"] = True
+            combat = CombatTask(context, combat_check, **combat_options)
             if from_preparation:
                 combat.combat_once(from_preparation=True)
             else:
                 combat.combat_once()
+        except Roguelike3IdentityError as exc:
+            if combat is None:
+                self._record_preflight_outcome("r3_identity_policy_invalid", "REJECTED", type(exc).__name__)
+            return CustomAction.RunResult(success=False)
         except (InverseCrownProfileError, InverseCrownUnavailable) as exc:
             if combat is None:
                 self._record_preflight_outcome(
@@ -82,6 +94,11 @@ class CombatRunner(CustomAction):
                 self._record_preflight_outcome(
                     "preflight_exception", "ERROR", type(exc).__name__,
                 )
+            # ctypes does not translate a Python callback exception into native
+            # action failure. Only this explicit R03 task policy consumes the
+            # existing frozen ERROR outcome as False, reaching its StopTask sink.
+            if r3_identity:
+                return CustomAction.RunResult(success=False)
             raise
         finally:
             if combat is not None:

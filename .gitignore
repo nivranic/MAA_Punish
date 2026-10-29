@@ -491,3 +491,8 @@ local.properties
 # Explicitly private local diagnostics; public test fixtures stay trackable
 *.private
 *.private.*
+
+# Local agent/browser telemetry and review caches
+/.glm-router/
+/.mimosa/
+/.playwright-mcp/

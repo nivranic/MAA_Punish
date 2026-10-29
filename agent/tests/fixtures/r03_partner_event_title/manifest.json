@@ -1,0 +1,28 @@
+{
+  "kind": "R03_PARTNER_EVENT_TITLE_PIXEL_CROPS",
+  "crops": {
+    "partner_title": {
+      "file": "partner_title.png",
+      "rect": [
+        640,
+        96,
+        320,
+        62
+      ],
+      "sha256": "7a71a51509c327795839757182a9f3e6efaf01044a0aeff8cb188ce171ae9ee6",
+      "original_frame_sha256": "3fa7f7c484d5efee7f7f16c0d217122cf2051b83b634771abc6e8a89d70feab0"
+    },
+    "map_negative": {
+      "file": "map_negative.png",
+      "rect": [
+        640,
+        96,
+        320,
+        62
+      ],
+      "sha256": "888c6b9219adc206bf93246f75c51bbc6978083c43727e6f6457fc730b9f2815",
+      "original_frame_sha256": "0db575acf5e247c1e2cc94f060338d33a65317aead55552eb36fdee6e4734188"
+    }
+  },
+  "boundary": "Title-region saved pixels only; no account metadata. Offline recognition does not prove live scene, task, choice, or first battle."
+}

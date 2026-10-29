@@ -33,6 +33,28 @@
                     "attach": {
                         "need_multi": false
                     }
+                },
+                "战斗中": {
+                    "attach": {
+                        "roguelike3_identity": {
+                            "version": 1,
+                            "require_known_field": true
+                        }
+                    },
+                    "on_error": [
+                        "矩阵循生_身份拒绝停止"
+                    ]
+                },
+                "矩阵循生_身份拒绝停止": {
+                    "recognition": {
+                        "type": "DirectHit"
+                    },
+                    "action": {
+                        "type": "StopTask"
+                    },
+                    "next": [],
+                    "on_error": [],
+                    "enabled": true
                 }
             },
             "option": [

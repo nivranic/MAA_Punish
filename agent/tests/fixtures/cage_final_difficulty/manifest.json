@@ -1,0 +1,35 @@
+{
+  "source": "D06 third-run original on_error frame, 2026-10-26",
+  "source_frame_sha256": "f9cedf5fdae38697e94b05f2b3c45ee49628cfd6677f609577253dc33964bbec",
+  "source_size": [
+    1280,
+    720
+  ],
+  "account_metadata": false,
+  "pixel_processing": "exact crops, no resize or pixel edits",
+  "reconstructed_canvas": "BGR zeros, exact crops at original coordinates",
+  "crops": {
+    "hell_zero": {
+      "file": "hell_zero.png",
+      "rect": [
+        750,
+        141,
+        457,
+        117
+      ],
+      "sha256": "21ec38b13a0bd9354430340709c4c9ac061551d47e8f6cef159efc515553f4eb",
+      "visible_text": "地狱 / 讨伐值 0/212500"
+    },
+    "prepare_button": {
+      "file": "prepare_button.png",
+      "rect": [
+        979,
+        574,
+        301,
+        146
+      ],
+      "sha256": "392852bb732f52c8b96ae1ef18c5aca8f0a01dcc05f400d29c527aa51d305664",
+      "visible_text": "作战准备"
+    }
+  }
+}

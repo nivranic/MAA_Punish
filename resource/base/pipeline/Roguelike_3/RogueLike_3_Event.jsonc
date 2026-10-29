@@ -261,9 +261,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    700,
+                    640,
                     96,
-                    254,
+                    320,
                     62
                 ],
                 "expected": "贴心搭档"
@@ -279,7 +279,8 @@
             "[JumpBack]领取藏品",
             "[JumpBack]出发_矩阵循生",
             "[JumpBack]未命中选项",
-            "[JumpBack]贴心搭档_对话"
+            "[JumpBack]贴心搭档_对话",
+            "[JumpBack]贴心搭档_战斗承接_矩阵循生"
         ],
         "focus": {
             "Node.Recognition.Succeeded": "$focus.贴心搭档_矩阵循生"
@@ -311,6 +312,34 @@
         "next": [
             "决定_矩阵循生",
             "出发_矩阵循生"
+        ]
+    },
+    "贴心搭档_战斗承接_矩阵循生": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "编队完成_矩阵循生",
+                    "出击_矩阵循生"
+                ]
+            }
+        },
+        "action": {
+            "type": "DoNothing"
+        },
+        "timeout": 300000,
+        "rate_limit": 0,
+        "next": [
+            "战斗完成_矩阵循生",
+            "战斗失败",
+            "[JumpBack]算力单元不足",
+            "[JumpBack]重启_寒境曙光",
+            "[JumpBack]跳过战斗对话",
+            "[JumpBack]战斗中",
+            "[JumpBack]出击_矩阵循生",
+            "[JumpBack]进入战斗_矩阵循生",
+            "[JumpBack]载入中",
+            "[JumpBack]通用处理-未下载弹窗-角色皮肤没下载-检测层"
         ]
     },
     "逃出生天_矩阵循生": {

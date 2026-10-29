@@ -1,0 +1,28 @@
+{
+  "kind": "R03_PARTNER_TEAM_HANDOFF_TEXT_PIXEL_CROPS",
+  "crops": {
+    "team_adjustment": {
+      "file": "team_adjustment.png",
+      "rect": [
+        699,
+        568,
+        253,
+        148
+      ],
+      "sha256": "38fb0708db6769a2b24d4ddfe70b009c5e94ca6de4089ff6ccc6cb78c161fbbb",
+      "original_frame_sha256": "3b88cbb1e28385090356bbc6fdfe6861ab8131080100a33414f7833881266919"
+    },
+    "deploy": {
+      "file": "deploy.png",
+      "rect": [
+        966,
+        575,
+        164,
+        140
+      ],
+      "sha256": "cebdb3d6d0f02186ab03c429a4c80aafa18ce3ee1156d8fa2cc9de5e697d78f6",
+      "original_frame_sha256": "3b88cbb1e28385090356bbc6fdfe6861ab8131080100a33414f7833881266919"
+    }
+  },
+  "boundary": "Saved team adjustment and deploy text only. No portrait or account metadata; offline recognition does not prove a live fight."
+}
