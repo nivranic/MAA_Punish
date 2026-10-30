@@ -1,6 +1,7 @@
 """Regression checks from the 2026-10-21 Android navigation screenshots."""
 
 from pathlib import Path
+import json
 import re
 
 import jsonc
@@ -211,3 +212,69 @@ def test_mapping_item_modal_close_is_inside_live_x_and_bounded():
     assert 1180 <= x < 1225 and 51 <= y < 96
     assert 0 < close["max_hit"] <= 3
     assert "[JumpBack]意外点击_物品详情" in mapping["结算"]["next"]
+
+
+def test_shared_battle_start_click_is_bounded():
+    # FG-COMMON-START: an unresponsive 作战开始 used to loop through this click
+    # without any budget (260+ taps in the D08 first run). The shared budget
+    # must stay above every normal per-task click count (R04 is the widest at
+    # roughly one tap per battle) while bounding a stuck run to minutes.
+    war = jsonc.loads((PIPELINE / "War_Zone.jsonc").read_text(encoding="utf-8"))
+    click = war["点击作战开始"]
+    assert click["action"]["param"]["target"] == "作战开始"
+    assert click["max_hit"] == 60
+    assert click["post_delay"] == 5000
+
+
+def test_mapping_battle_start_override_keeps_proven_budget():
+    tasks = json.loads(
+        (Path(__file__).resolve().parents[2] / "tasks/历战映射.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    override = tasks["task"][0]["pipeline_override"]
+    # The rerun with max_hit=20 plus a [JumpBack]返回 fallback passed on the
+    # real device (eight battles, one start each, zero idle taps); keep it.
+    assert override["点击作战开始"]["max_hit"] == 20
+    assert override["作战开始"]["next"] == [
+        "[JumpBack]未选择队长",
+        "点击作战开始",
+        "[JumpBack]返回",
+    ]
+
+
+def test_shared_battle_start_consumers_are_frozen():
+    # Any new next-list consumer of the shared 作战开始 node must be checked
+    # against the shared click budget before shipping. Extend the frozen set
+    # deliberately, not silently.
+    expected = {
+        ("选择角色程序", "Role_Selection.jsonc"),
+        ("使用预设", "Role_Selection.jsonc"),
+        ("写入预设队伍色位", "Role_Selection.jsonc"),
+        ("历战映射", "HighRankMapping.jsonc"),
+        ("开始挑战", "HighRankMapping.jsonc"),
+        ("作战界面", "Simulated_Siege.jsonc"),
+        ("意外步骤_战斗界面", "Roguelike_1/Roguelike_1.jsonc"),
+        ("意外识别_已经进入选人界面", "Roguelike_1/Roguelike_1.jsonc"),
+        ("确认进入战斗冲突", "Roguelike_1/Roguelike_1.jsonc"),
+        ("战斗事件_厄愿潮声", "Roguelike_2/Roguelike_2.jsonc"),
+        ("肉鸽战斗_寒境曙光", "Roguelike_4/Roguelike_4.jsonc"),
+    }
+    found = set()
+    for path in list(PIPELINE.rglob("*.jsonc")) + list(PIPELINE.rglob("*.json")):
+        data = jsonc.loads(path.read_text(encoding="utf-8"))
+        rel = path.relative_to(PIPELINE).as_posix()
+        for name, body in data.items():
+            for item in body.get("next") or []:
+                if str(item).replace("[JumpBack]", "") == "作战开始":
+                    found.add((name, rel))
+    assert found == expected
+
+
+def test_cage_reuses_shared_start_recognition_without_click():
+    # The cage pipeline reuses the shared 作战开始 recognition as a plain And
+    # condition; changing the shared ROI/threshold silently affects these.
+    cage = jsonc.loads((PIPELINE / "Phantom_Pain_Cage.jsonc").read_text(encoding="utf-8"))
+    for node in ("没打过", "意外处理_进入作战界面"):
+        assert cage[node]["recognition"]["param"]["all_of"] == ["作战开始"]
+        assert "点击作战开始" not in (cage[node].get("next") or [])
