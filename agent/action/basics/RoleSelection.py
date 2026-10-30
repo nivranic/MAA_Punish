@@ -44,6 +44,7 @@ from action.combat.config import ROLE_ACTIONS
 from action.combat.core.team import (
     TEAM_COLORS,
     TEAM_ROSTER_NODE,
+    load_team_roster_from_context,
     publish_team_roster,
     roster_from_role_selection,
 )
@@ -97,6 +98,9 @@ class RoleSelection(CustomAction):
         self.logger = self._logger_component.logger
         self._cache_prefix = ""
         self._refresh_hour = cache_policy.DEFAULT_REFRESH_HOUR
+        # 角色耐力不足重选链的累计触发次数（单调递增）；
+        # run() 进入时快照，发布名册时比较以判断首发认领是否已被重选链重开。
+        self._cage_detour_count = 0
 
     def _cache_path(self) -> Path:
         return cache_policy.cache_path(self._cache_prefix)
@@ -312,17 +316,27 @@ class RoleSelection(CustomAction):
         *,
         need_multi: bool,
         roguelike_equivalent: int | None,
+        trust_attacker_claim: bool = True,
     ) -> None:
-        """战前配队完成后写入战斗队伍色位，供 CombatTask 读取。"""
+        """战前配队完成后写入战斗队伍色位，供 CombatTask 读取。
+
+        只认领实际编入的色位，未编入的位置保留已发布值（避免幻影成员）。
+        trust_attacker_claim=False 表示本 run 编入期间发生过角色耐力不足重选链：
+        重选链会重开首发位并重新编入，本 run 的首发认领已失效，保留重选链
+        （嵌套 run）发布的首发。
+        """
         if not need_multi or roguelike_equivalent is not None:
             tank = None
             support = None
         roster = roster_from_role_selection(attacker, tank, support)
-        publish_team_roster(context, roster)
-        attach = {
-            color: str(roster.get(color, "")).strip() for color in TEAM_COLORS
+        if not trust_attacker_claim:
+            roster["R"] = ""
+        existing = load_team_roster_from_context(context) or {}
+        merged = {
+            color: roster[color] or existing.get(color, "") for color in TEAM_COLORS
         }
-        self.logger.info("%s attach: %s", TEAM_ROSTER_NODE, attach)
+        publish_team_roster(context, merged)
+        self.logger.info("%s attach: %s", TEAM_ROSTER_NODE, merged)
 
     def _consume_cage_for_role(
         self, role_name: str, update_frequency: str
@@ -334,6 +348,61 @@ class RoleSelection(CustomAction):
         role[role_key]["cage"] = 0
         self.logger.info(f"{role_key} 编入成功, 清除囚笼次数")
         self.save_cache(role, update_frequency)
+
+    def _task_node_names(self, context: Context, detail: object) -> set[str]:
+        """读取子任务节点历史中的节点名，供结果判定。"""
+        names: set[str] = set()
+        for node_id in getattr(detail, "node_id_list", None) or []:
+            node_detail = context.tasker.get_node_detail(node_id)
+            if node_detail is not None:
+                names.add(node_detail.name)
+        return names
+
+    def _field_role(
+        self,
+        context: Context,
+        role_name: str,
+        *,
+        consume: bool,
+        update_frequency: str,
+    ) -> bool:
+        """点击编入队伍并按子任务结果决定缓存与返回值。
+
+        - 子任务正常完成：编入成功，按 consume 清除囚笼次数。
+        - 命中“角色耐力不足”：未编入，但游戏已证实无囚笼次数——同样清除，
+          避免流水线重选链再次选中同一角色形成循环。
+        - 子任务未启动或未确认点击编入：结果未知，保留缓存。
+        """
+        detail = context.run_task("编入队伍")
+        if detail is None:
+            self.logger.warning(f"{role_name} 编入队伍子任务未启动, 保留囚笼次数缓存")
+            return False
+        node_names = self._task_node_names(context, detail)
+        if "编入队伍" not in node_names:
+            self.logger.warning(f"{role_name} 编入队伍未确认点击, 保留囚笼次数缓存")
+            return False
+        if "角色耐力不足" in node_names:
+            self._cage_detour_count += 1
+            self.logger.warning(
+                f"{role_name} 触发角色耐力不足, 重选链已执行, 清除囚笼次数缓存"
+            )
+            if consume:
+                self._consume_cage_for_role(role_name, update_frequency)
+            return False
+        if consume:
+            self._consume_cage_for_role(role_name, update_frequency)
+        return True
+
+    def _open_cage_slot(self, context: Context, slot_node: str) -> bool:
+        """打开黄/蓝位的选人页；未能确认进入选人界面时返回 False 由调用方跳过该位。"""
+        detail = context.run_task(slot_node)
+        if detail is None:
+            self.logger.warning(f"{slot_node} 子任务未启动, 跳过该位")
+            return False
+        if "确认进入选人界面" not in self._task_node_names(context, detail):
+            self.logger.warning(f"{slot_node} 未能确认进入选人界面, 跳过该位")
+            return False
+        return True
 
     def _abort_pick_not_found(
         self,
@@ -401,42 +470,56 @@ class RoleSelection(CustomAction):
             self._abort_pick_not_found(context, attacker_name, notified=True)
             return CustomAction.RunResult(success=True)
 
-        if roguelike_equivalent is None and cage:
-            self._consume_cage_for_role(attacker_name, update_frequency)
-        context.run_task("编入队伍")
+        detour_base = self._cage_detour_count
+        consume_cage = roguelike_equivalent is None and cage
+        attacker_fielded = self._field_role(
+            context,
+            attacker_name,
+            consume=consume_cage,
+            update_frequency=update_frequency,
+        )
+        tank_fielded = False
+        support_fielded = False
 
         if need_multi and roguelike_equivalent is None:
             if tank_name:
-                context.run_task("打开黄色位置")
-                if self.find_role(
-                    context, role_dict, tank_name, allow_trial=False
-                ):
-                    if cage:
-                        self._consume_cage_for_role(tank_name, update_frequency)
-                    context.run_task("编入队伍")
-                else:
-                    time.sleep(0.5)
-                    context.run_task("返回")
+                if self._open_cage_slot(context, "打开黄色位置"):
+                    if self.find_role(
+                        context, role_dict, tank_name, allow_trial=False
+                    ):
+                        tank_fielded = self._field_role(
+                            context,
+                            tank_name,
+                            consume=consume_cage,
+                            update_frequency=update_frequency,
+                        )
+                    else:
+                        time.sleep(0.5)
+                        context.run_task("返回")
 
             if support_name:
-                context.run_task("打开蓝色位置")
-                if self.find_role(
-                    context, role_dict, support_name, allow_trial=False
-                ):
-                    if cage:
-                        self._consume_cage_for_role(support_name, update_frequency)
-                    context.run_task("编入队伍")
-                else:
-                    time.sleep(0.5)
-                    context.run_task("返回")
+                if self._open_cage_slot(context, "打开蓝色位置"):
+                    if self.find_role(
+                        context, role_dict, support_name, allow_trial=False
+                    ):
+                        support_fielded = self._field_role(
+                            context,
+                            support_name,
+                            consume=consume_cage,
+                            update_frequency=update_frequency,
+                        )
+                    else:
+                        time.sleep(0.5)
+                        context.run_task("返回")
 
         self._publish_combat_team_roster(
             context,
-            attacker_name,
-            tank_name,
-            support_name,
+            attacker_name if attacker_fielded else None,
+            tank_name if tank_fielded else None,
+            support_name if support_fielded else None,
             need_multi=need_multi,
             roguelike_equivalent=roguelike_equivalent,
+            trust_attacker_claim=self._cage_detour_count == detour_base,
         )
         return CustomAction.RunResult(success=True)
 
@@ -609,44 +692,59 @@ class RoleSelection(CustomAction):
             context,
             f"队伍构成: {display_support_name or '无'} {attacker_name or '无'} {display_tank_name or '无'}",
         )
+        consume_cage = roguelike_equivalent is None and cage
+        detour_base = self._cage_detour_count
+        attacker_fielded = False
         if attacker_name and self.find_role(
             context, role_dict, attacker_name, 16 if roguelike_equivalent is None else 5
         ):
-            if roguelike_equivalent is None and cage:
-                self._consume_cage_for_role(attacker_name, update_frequency)
-            context.run_task("编入队伍")
+            attacker_fielded = self._field_role(
+                context,
+                attacker_name,
+                consume=consume_cage,
+                update_frequency=update_frequency,
+            )
         else:
             self._abort_pick_not_found(context, attacker_name, notified=True)
             return CustomAction.RunResult(success=True)
 
+        tank_fielded = False
+        support_fielded = False
         if need_multi and roguelike_equivalent is None:
             if tank_name:
-                context.run_task("打开黄色位置")
-                if self.find_role(context, role_dict, tank_name):
-                    if roguelike_equivalent is None and cage:
-                        self._consume_cage_for_role(tank_name, update_frequency)
-                    context.run_task("编入队伍")
-                else:
-                    time.sleep(0.5)
-                    context.run_task("返回")
+                if self._open_cage_slot(context, "打开黄色位置"):
+                    if self.find_role(context, role_dict, tank_name):
+                        tank_fielded = self._field_role(
+                            context,
+                            tank_name,
+                            consume=consume_cage,
+                            update_frequency=update_frequency,
+                        )
+                    else:
+                        time.sleep(0.5)
+                        context.run_task("返回")
 
             if support_name:
-                context.run_task("打开蓝色位置")
-                if self.find_role(context, role_dict, support_name):
-                    if roguelike_equivalent is None and cage:
-                        self._consume_cage_for_role(support_name, update_frequency)
-                    context.run_task("编入队伍")
-                else:
-                    time.sleep(0.5)
-                    context.run_task("返回")
+                if self._open_cage_slot(context, "打开蓝色位置"):
+                    if self.find_role(context, role_dict, support_name):
+                        support_fielded = self._field_role(
+                            context,
+                            support_name,
+                            consume=consume_cage,
+                            update_frequency=update_frequency,
+                        )
+                    else:
+                        time.sleep(0.5)
+                        context.run_task("返回")
 
         self._publish_combat_team_roster(
             context,
-            attacker_name,
-            tank_name,
-            support_name,
+            attacker_name if attacker_fielded else None,
+            tank_name if tank_fielded else None,
+            support_name if support_fielded else None,
             need_multi=need_multi,
             roguelike_equivalent=roguelike_equivalent,
+            trust_attacker_claim=self._cage_detour_count == detour_base,
         )
         return CustomAction.RunResult(success=True)
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import numpy as np
@@ -131,10 +131,41 @@ class FakeController:
 
 
 @dataclass
+class FakeNodeDetail:
+    name: str
+    node_id: int = 0
+
+
+@dataclass
+class FakeTaskDetail:
+    """Context.run_task 返回的 TaskDetail 替身：node_names 即节点历史。"""
+
+    entry: str
+    node_names: list[str] = field(default_factory=list)
+    node_id_list: list[int] = field(default_factory=list)
+
+
+@dataclass
 class FakeTasker:
     controller: FakeController = field(default_factory=FakeController)
     stopping: bool = False
     stop_requests: int = 0
+    node_details: dict[int, str] = field(default_factory=dict)
+    _next_node_id: int = 0
+
+    def register_nodes(self, names: list[str]) -> list[int]:
+        ids: list[int] = []
+        for name in names:
+            self.node_details[self._next_node_id] = name
+            ids.append(self._next_node_id)
+            self._next_node_id += 1
+        return ids
+
+    def get_node_detail(self, node_id: int) -> FakeNodeDetail | None:
+        name = self.node_details.get(node_id)
+        if name is None:
+            return None
+        return FakeNodeDetail(name=name, node_id=node_id)
 
     def post_stop(self) -> FakeJob:
         self.stop_requests += 1
@@ -152,6 +183,8 @@ class FakeContext:
     pipeline_overrides: list[dict[str, Any]] = field(default_factory=list)
     actions: list[str] = field(default_factory=list)
     tasker: FakeTasker = field(default_factory=FakeTasker)
+    run_task_results: dict[str, Any] = field(default_factory=dict)
+    run_task_calls: list[dict[str, Any]] = field(default_factory=list)
 
     def run_recognition(
         self,
@@ -193,6 +226,31 @@ class FakeContext:
     ) -> bool:
         self.actions.append(entry)
         return True
+
+    def run_task(
+        self,
+        entry: str,
+        pipeline_override: dict[str, Any] | None = None,
+    ) -> Any:
+        self.run_task_calls.append(
+            {"entry": entry, "pipeline_override": pipeline_override}
+        )
+        if entry in self.run_task_results:
+            detail = self.run_task_results[entry]
+            if isinstance(detail, list):
+                # 队列语义：逐次弹出（元素可为 None 表示任务未启动）；取尽后回落默认成功
+                detail = (
+                    detail.pop(0)
+                    if detail
+                    else FakeTaskDetail(entry=entry, node_names=[entry])
+                )
+        else:
+            detail = FakeTaskDetail(entry=entry, node_names=[entry])
+        if isinstance(detail, FakeTaskDetail):
+            detail = replace(
+                detail, node_id_list=self.tasker.register_nodes(detail.node_names)
+            )
+        return detail
 
 
 def make_hit(box: tuple[int, int, int, int] = (100, 200, 40, 40)) -> FakeRecognitionResult:
