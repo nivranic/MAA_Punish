@@ -8,13 +8,54 @@
             "default_check": true,
             "entry": "纷争战区",
             "option": [
-                "自行选择编队_战区"
+                "自行选择编队_战区",
+                "逆冕站场_战区"
             ],
             "description": "$task.纷争战区.description",
             "label": "$task.纷争战区"
         }
     ],
     "option": {
+        "逆冕站场_战区": {
+            "label": "$option.逆冕站场_战区.label",
+            "description": "$option.逆冕站场_战区.description",
+            "type": "switch",
+            "default_case": "No",
+            "cases": [
+                {
+                    "name": "Yes",
+                    "pipeline_override": {
+                        "战斗中": {
+                            "attach": {
+                                "inverse_crown_profile": {
+                                    "enabled": true,
+                                    "scene": "multi",
+                                    "source": "unknown",
+                                    "rank": "unknown",
+                                    "signature_weapon_confirmed": false
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "No",
+                    "pipeline_override": {
+                        "战斗中": {
+                            "attach": {
+                                "inverse_crown_profile": {
+                                    "enabled": false,
+                                    "scene": "unknown",
+                                    "source": "unknown",
+                                    "rank": "unknown",
+                                    "signature_weapon_confirmed": false
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        },
         "自行选择编队_战区": {
             "label": "$option.自行选择编队_战区.label",
             "type": "select",

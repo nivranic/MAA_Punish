@@ -9,7 +9,8 @@
             "entry": "幻痛囚笼",
             "description": "$task.幻痛囚笼.description",
             "option": [
-                "选择区域"
+                "选择区域",
+                "逆冕站场_囚笼"
             ],
             "label": "$task.幻痛囚笼",
             "pipeline_override": {
@@ -27,6 +28,46 @@
         }
     ],
     "option": {
+        "逆冕站场_囚笼": {
+            "label": "$option.逆冕站场_囚笼.label",
+            "description": "$option.逆冕站场_囚笼.description",
+            "type": "switch",
+            "default_case": "No",
+            "cases": [
+                {
+                    "name": "Yes",
+                    "pipeline_override": {
+                        "战斗中": {
+                            "attach": {
+                                "inverse_crown_profile": {
+                                    "enabled": true,
+                                    "scene": "single",
+                                    "source": "unknown",
+                                    "rank": "unknown",
+                                    "signature_weapon_confirmed": false
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "No",
+                    "pipeline_override": {
+                        "战斗中": {
+                            "attach": {
+                                "inverse_crown_profile": {
+                                    "enabled": false,
+                                    "scene": "unknown",
+                                    "source": "unknown",
+                                    "rank": "unknown",
+                                    "signature_weapon_confirmed": false
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        },
         "选择区域": {
             "label": "$option.选择区域.label",
             "cases": [
