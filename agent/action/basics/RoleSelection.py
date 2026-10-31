@@ -672,9 +672,15 @@ class RoleSelection(CustomAction):
         role_weight = self.calculate_weight(role, condition)
         self.logger.info(f"根据识别结果计算权重完成, 共 {len(role_weight)} 个角色")
         effective_need_multi = need_multi and roguelike_equivalent is None
-        best_team = self.select_best_team(
-            role_weight, need_multi=effective_need_multi
-        )
+        try:
+            best_team = self.select_best_team(
+                role_weight, need_multi=effective_need_multi, cage=condition["cage"]
+            )
+        except ValueError as exc:
+            message = f"{exc}; 已保留角色缓存, 本任务按失败结束"
+            self.logger.error(message)
+            self.send_msg(context, message)
+            return CustomAction.RunResult(success=False)
         self.logger.info(f"条件: {condition}")
         self.logger.info(f"角色权重: {role_weight}")
         attacker_name = best_team.get("attacker", {}).get("name")
@@ -1145,7 +1151,9 @@ class RoleSelection(CustomAction):
 
         return weight
 
-    def select_best_team(self, role_weight: dict, *, need_multi: bool = True) -> dict:
+    def select_best_team(
+        self, role_weight: dict, *, need_multi: bool = True, cage: bool = False
+    ) -> dict:
         self.logger.info(
             f"开始从 {len(role_weight)} 个角色中筛选最佳队伍 (need_multi={need_multi})"
         )
@@ -1190,6 +1198,13 @@ class RoleSelection(CustomAction):
         candidates = list(unique_candidates.values())
 
         if len(candidates) < 3:
+            # 段15 真机教训：cage 门控模式下候选不足 3 人意味着囚笼次数缓存已耗尽，
+            # 降级残队进场必然团灭并触发 35 分钟重试循环；此时显式放弃本任务。
+            if cage and need_multi:
+                raise ValueError(
+                    "囚笼次数门控下可用角色不足三人, 放弃本次配队: "
+                    f"候选={[name for name, _w, _t, _b, _trial in candidates]}"
+                )
             candidates.sort(key=lambda item: item[1], reverse=True)
             if candidates:
                 best["attacker"] = {

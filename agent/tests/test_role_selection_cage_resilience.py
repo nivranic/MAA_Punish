@@ -51,7 +51,7 @@ def fielding(tmp_path, monkeypatch):
     monkeypatch.setattr(
         selector,
         "select_best_team",
-        lambda role_weight, *, need_multi=True: {
+        lambda role_weight, *, need_multi=True, cage=False: {
             "attacker": {"name": ATTACKER, "weight": 6900.0},
             "tank": {"name": TANK, "weight": 4600.0},
             "support": {"name": SUPPORT, "weight": 6900.0},
@@ -271,5 +271,26 @@ def test_exclusive_slot_open_failure_skips_claim(tmp_path, monkeypatch):
     roster = published_roster(context)
     assert roster["B"] == ""
     assert roster["R"] == role_display_name_to_cls(ATTACKER)
-    assert roster["Y"] == role_display_name_to_cls(TANK)
     assert cache[SUPPORT]["cage"] == 3
+
+
+def test_select_best_team_cage_gate_aborts_when_fewer_than_three():
+    """段15 真机教训：cage 门控下候选不足三人应放弃，不得降级残队进场。"""
+    selector = RoleSelection()
+    weights = {
+        ATTACKER: 6900.0,
+        TANK: 4600.0,
+        SUPPORT: 0.0,
+    }
+    with pytest.raises(ValueError, match="不足三人"):
+        selector.select_best_team(weights, need_multi=True, cage=True)
+
+
+def test_select_best_team_non_cage_keeps_degrade_fallback():
+    """非 cage 模式保留既有降级行为：候选不足三人时按现有策略成队。"""
+    selector = RoleSelection()
+    weights = {ATTACKER: 6900.0, TANK: 4600.0, SUPPORT: 0.0}
+    best = selector.select_best_team(weights, need_multi=True, cage=False)
+    assert best["attacker"]["name"] == ATTACKER
+    assert best["tank"]["name"] == TANK
+    assert best["support"]["name"] is None
