@@ -186,9 +186,18 @@ def test_r03_factory_fallback_is_not_accepted_as_recognized_generic(monkeypatch)
 
 @pytest.mark.parametrize("failure", ["unknown", "recognition_error"])
 def test_r03_original_cleanup_and_immutable_result_remain_truthful(monkeypatch, failure):
+    import action.combat.core.session as session
     item = combat()
     closed, outcomes = [], []
     item.input_scope = SimpleNamespace(close=lambda: closed.append(True) or True)
+    # load_team 对 detect_team 的 unknown 有宽限重试（会重取帧）：压缩预算、跳过
+    # sleep，并把 _get_frame 桩为固定帧以绕开真实截图 scope 协议。
+    item.R3_IDENTITY_GRACE_SECONDS = 0.05
+    monkeypatch.setattr(session.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(
+        type(item.combat_check), "_get_frame",
+        lambda self, context, cb: b"retry-pixels",
+    )
     def enter(): item._in_combat = True
     monkeypatch.setattr(item, "_wait_in_combat", enter)
     error = OSError("PRIVATE_RECOGNITION_ERROR")
@@ -221,15 +230,59 @@ def test_r03_runner_consumes_task_policy_and_returns_false_after_real_cleanup(mo
 def test_r03_setup_becoming_unknown_after_provider_rejects_before_first_input(monkeypatch):
     import action.combat.core.session as session
     item = combat()
+    # 入场校正对瞬时未知放行后，需让 presence 门通过才能跑到首 tick 的拒绝。
+    item.context.recognition_map["战斗中"] = make_hit()
     monkeypatch.setattr(item, "_wait_in_combat", lambda: setattr(item, "_in_combat", True))
     detection(monkeypatch, provider, ("回音", "GeneralFight"))
     calls = detection(monkeypatch, session, ("未知", "GeneralFight"))
     monkeypatch.setattr(provider, "detect_visible_team_colors", lambda *_: [])
     with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_unknown"):
         item.combat_once()
-    assert len(calls) == 1 and calls[0]["on_tick"] is None
+    # 入场校正单次放行 + 首 tick settled-unknown 拒绝：共两次会话级识别。
+    assert len(calls) == 2 and all(call["on_tick"] is None for call in calls)
     assert item.outcome.callback_status == "REJECTED" and item.outcome.field_identity == "unknown"
     assert item.outcome.role_bindings[0].requested_cls_name == "GeneralFight"
+    no_inputs(item.context)
+
+
+def test_r03_load_team_retries_transient_unknown_within_grace(monkeypatch):
+    """detect_team 入场帧演出遮HUD以unknown拒绝时，宽限内重取帧重试直至成功。"""
+    import action.combat.core.session as session
+    item = combat()
+    monkeypatch.setattr(session.time, "sleep", lambda *_: None)
+    attempts = {"n": 0}
+
+    def flaky(context, image, *, prefer_cls=None, on_tick=None, skip_cls=None):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise Roguelike3IdentityError("r3_field_identity_unknown")
+        return ("回音", "GeneralFight")
+
+    monkeypatch.setattr(provider, "detect_current_role", flaky)
+    monkeypatch.setattr(provider, "detect_visible_team_colors", lambda *_: [])
+    detection(monkeypatch, session, ("回音", "GeneralFight"))
+    assert item.load_team() is True
+    assert attempts["n"] == 2
+    assert item.field_identity == "confirmed" and item.team is not None
+    no_inputs(item.context)
+
+
+def test_r03_load_team_does_not_retry_mismatch(monkeypatch):
+    """已证实的身份不匹配立即抛出，不进入宽限重试。"""
+    import action.combat.core.session as session
+    item = combat(roster={"R": "Oblivion", "B": "", "Y": ""})
+    monkeypatch.setattr(session.time, "sleep", lambda *_: None)
+    attempts = {"n": 0}
+
+    def mismatched(context, image, *, prefer_cls=None, on_tick=None, skip_cls=None):
+        attempts["n"] += 1
+        return ("回音", "GeneralFight")
+
+    monkeypatch.setattr(provider, "detect_current_role", mismatched)
+    monkeypatch.setattr(provider, "detect_visible_team_colors", lambda *_: [])
+    with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_mismatch"):
+        item.load_team()
+    assert attempts["n"] == 1
     no_inputs(item.context)
 
 

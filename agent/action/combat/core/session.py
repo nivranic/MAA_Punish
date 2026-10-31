@@ -679,7 +679,36 @@ class CombatTask:
 
     def load_team(self) -> bool:
         """进战识别当前角色，仅调用一次。"""
-        snapshot = self.combat_check.detect_team(self.context, self)
+        # R03：入场帧若恰逢开场演出遮 HUD，detect_team 的内联身份检查会以
+        # unknown 拒绝——那是瞬时不可观察而非身份不明，宽限预算内重取帧重试；
+        # mismatch 等已证实证据仍立即抛出（fail-closed）。
+        deadline = (
+            time.monotonic() + self.R3_IDENTITY_GRACE_SECONDS
+            if self.roguelike3_identity_required
+            else None
+        )
+        logged = False
+        while True:
+            try:
+                snapshot = self.combat_check.detect_team(self.context, self)
+            except Roguelike3IdentityError as exc:
+                retryable = (
+                    deadline is not None
+                    and exc.reason == "r3_field_identity_unknown"
+                    and time.monotonic() < deadline
+                )
+                if not retryable:
+                    raise
+                if not logged:
+                    self.logger.info(
+                        "r3 identity: 入场帧疑似开场演出遮 HUD，%.0fs 内重试入场识别（不发送输入）",
+                        self.R3_IDENTITY_GRACE_SECONDS,
+                    )
+                    logged = True
+                time.sleep(0.5)
+                self.frame = None
+                continue
+            break
         if snapshot is None:
             self.logger.warning("角色识别失败")
             return False
@@ -697,14 +726,40 @@ class CombatTask:
         if image is None:
             image = self._capture_frame()
         cur = self.team.current.upper()
-        display_name, _ = self._correct_role_from_field(
-            cur, self.team.cls_at(cur), image, solo=self.team.is_solo()
-        )
+        if self.roguelike3_identity_required:
+            # R03 入场校正：演出遮 HUD 的瞬时未知不在此判负，交由 tick 宽限兜底。
+            display_name = self._confirm_entry_field_identity(cur)
+        else:
+            display_name, _ = self._correct_role_from_field(
+                cur, self.team.cls_at(cur), image, solo=self.team.is_solo()
+            )
         if display_name != "未知":
             self.current_role_name = display_name
 
         self.current_field_since = time.monotonic()
         return True
+
+    def _confirm_entry_field_identity(self, color: str) -> str:
+        """R03 入场身份确认（单次）：识别得出则立即校验，识别不出交由 tick 宽限。
+
+        入场帧若恰逢开场演出遮 HUD，此处模板全 miss 属瞬时不可观察；
+        战斗循环的 refresh_field_role 宽限期会在 HUD 恢复后确认或超时拒绝，
+        期间不发送任何战斗输入（fail-closed 预算由 tick 侧守护）。
+        """
+        image = self.frame
+        if image is None:
+            image = self._capture_frame()
+        roster_cls = self.team.cls_at(color) if self.team else ""
+        display_name, detected_cls = detect_current_role(
+            self.context, image, prefer_cls=[roster_cls], on_tick=None,
+        )
+        if display_name == "未知":
+            self.logger.info("r3 identity: 入场帧未识别出上场角色，交由战斗循环宽限确认")
+            return display_name
+        self._require_roguelike3_role_identity(
+            self.roles.get(color.upper()), display_name, detected_cls,
+        )
+        return display_name
 
     def get_current_role(self) -> BaseRole | None:
         if self.team is None:

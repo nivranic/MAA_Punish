@@ -97,6 +97,8 @@ def test_real_runner_false_stops_jumpback_parent_and_next_task_has_no_policy(tmp
     Tasker.set_debug_mode(False)
     Tasker.set_save_draw(False)
     Tasker.set_save_on_error(False)
+    # unknown 场景会经历 load_team 宽限重试：压缩预算保持测试等待窗。
+    monkeypatch.setattr(CombatTask, "R3_IDENTITY_GRACE_SECONDS", 0.2)
     resource, controller, tasker = Resource(), DenyInputController(), Tasker()
     assert resource.set_cpu()
     assert resource.post_bundle(ROOT / "resource/base").wait().succeeded
@@ -163,7 +165,12 @@ def test_real_runner_false_stops_jumpback_parent_and_next_task_has_no_policy(tmp
         elif failure == "emission_error":
             assert outcome.emission_exception_type == "OSError"
         assert outcome.field_identity == "unknown"
-        assert len(detections) == (1 if failure in ("unknown", "recognition_error") else 0)
+        # unknown 走 load_team 宽限重试：至少 1 次，预算内可能多次重取帧；
+        # recognition_error 首次即抛；cleanup/emission 不触发识别。
+        if failure == "unknown":
+            assert len(detections) >= 1
+        else:
+            assert len(detections) == (1 if failure == "recognition_error" else 0)
         assert "PRIVATE" not in json.dumps(asdict(outcome))
         assert controller.inputs == [] and controller.captures >= 1
         assert not tasker.running and not tasker.stopping
