@@ -1,5 +1,6 @@
 {
     "矩阵循生": {
+        "timeout": 60000,
         "action": {
             "type": "Custom",
             "param": {
