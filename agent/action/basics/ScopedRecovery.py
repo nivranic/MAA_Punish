@@ -30,6 +30,7 @@ FRAME_SECONDS = 1.0
 MAX_RETURNS = 1
 MAX_FRAMES = 4
 MAX_HISTORY = 512
+PRIOR_RELEASE_VERIFY_SECONDS = 2.0
 
 _ROOMS = ("蔚蓝之夏", "岁雪新宵", "庭梨栖雪", "漫花清夏", "鲸律星屿", "云海空岛", "经典舱室")
 _D03_NAVIGATION = {"指挥局": "DoNothing", GUILD_NODE: "DoNothing", "打开指挥局": "Click",
@@ -70,6 +71,38 @@ class ScopedRecovery(CustomAction):
         self.last_result = None
         self._monotonic = time.monotonic
         self._sleep = time.sleep
+
+    def _confirm_prior_scope_release(self) -> bool:
+        """Confirm a retained scope holds no unresolved native work, then drop it.
+
+        Retention exists so an unconfirmed cleanup can never hand its
+        controller to a native job that may still be running. That job state
+        is queryable after the fact: once the stop request reports terminal
+        success and no contact/capture is outstanding, the retained
+        references protect nothing and permanently blocking every later
+        recovery becomes the bigger fault (缺陷B: one unconfirmed cleanup
+        used to poison all subsequent invocations for the agent's lifetime).
+        Pure attribute reads only — the scope's own methods assert thread
+        ownership that a restarted callback thread cannot satisfy.
+        """
+        retained = self._retained
+        if retained is None:
+            return True
+        _context, _scope_context, scope, _lease = retained
+        deadline = self._monotonic() + PRIOR_RELEASE_VERIFY_SECONDS
+        while True:
+            job = scope.stop_job
+            if (job is not None and job.done and job.succeeded
+                    and scope.owned_contact is None and not scope.release_pending
+                    and scope.pending_capture is None and not scope.capture_in_flight):
+                scope.discard_idle_controller()
+                self._retained = None
+                self._logger_component.logger.warning(
+                    "scoped_recovery: 前次未确认清理的作用域已验证释放（停止作业终态成功且无未决触点/截图），恢复通道解除封锁")
+                return True
+            if self._monotonic() >= deadline:
+                return False
+            self._sleep(0.05)
 
     def _task(self, context):
         # get(wait=False) reads the executing task; waiting on it here deadlocks.
@@ -191,7 +224,9 @@ class ScopedRecovery(CustomAction):
                 self._sleep(min(0.02, until - self._monotonic()))
 
         try:
-            if self._retained is not None:
+            prior_released = self._confirm_prior_scope_release()
+            report["prior_scope_released"] = prior_released
+            if not prior_released:
                 raise CombatInputError("prior_recovery_cleanup_unconfirmed")
             node = context.get_node_data(argv.node_name)
             if (argv.node_name != RECOVERY_NODE or not isinstance(node, dict)

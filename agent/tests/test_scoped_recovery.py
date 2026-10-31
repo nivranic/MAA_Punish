@@ -315,3 +315,41 @@ def test_old_pending_marker_is_unchanged_and_uncertain_controller_retained(setup
     assert action.run(other, argv).success is False
     assert action._retained is retained and other.tasker.controller_gets == 0
     assert not other.actions
+
+
+def _retain_with_failed_return(setup):
+    action, context, argv, _ = setup(GUILD, HOME)
+    context.action_result = SimpleNamespace(success=False)
+    action.run(context, argv)
+    assert action._retained is not None
+    return action, context, argv, action._retained
+
+
+def test_prior_scope_releases_once_stop_job_confirms_terminal_success(setup):
+    action, context, argv, retained = _retain_with_failed_return(setup)
+    retained[2].stop_job = SimpleNamespace(done=True, succeeded=True)
+    other = Context(context.clock, [GUILD, HOME])
+    assert action.run(other, argv).success is False
+    assert action._retained is None
+    assert action.last_result["prior_scope_released"] is True
+    assert action.last_result.get("reason") != "prior_recovery_cleanup_unconfirmed"
+
+
+def test_prior_scope_with_failed_stop_job_stays_retained(setup):
+    action, context, argv, retained = _retain_with_failed_return(setup)
+    retained[2].stop_job = SimpleNamespace(done=True, succeeded=False)
+    other = Context(context.clock, [GUILD, HOME])
+    assert action.run(other, argv).success is False
+    assert action.last_result["reason"] == "prior_recovery_cleanup_unconfirmed"
+    assert action.last_result["prior_scope_released"] is False
+    assert action._retained is retained
+
+
+def test_prior_scope_with_running_stop_job_stays_retained(setup):
+    action, context, argv, retained = _retain_with_failed_return(setup)
+    retained[2].stop_job = SimpleNamespace(done=False, succeeded=False)
+    other = Context(context.clock, [GUILD, HOME])
+    assert action.run(other, argv).success is False
+    assert action.last_result["reason"] == "prior_recovery_cleanup_unconfirmed"
+    assert action.last_result["prior_scope_released"] is False
+    assert action._retained is retained
