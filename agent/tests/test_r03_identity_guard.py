@@ -125,6 +125,15 @@ def test_r03_setup_and_tick_identity_checks_are_input_free(monkeypatch, stage, a
     if accepted:
         perform()
         assert item.field_identity == "confirmed"
+    elif stage == "refresh" and answer[0] == "未知":
+        # tick 侧瞬时未知进入宽限；预算耗尽后判负。
+        item.R3_IDENTITY_GRACE_SECONDS = 0.0
+        perform()
+        assert item.field_identity == "unknown"
+        item.r3_identity_grace_until = 0.0
+        with pytest.raises(Roguelike3IdentityError):
+            perform()
+        assert item.field_identity == "unknown"
     else:
         with pytest.raises(Roguelike3IdentityError): perform()
         assert item.field_identity == "unknown"
@@ -169,6 +178,52 @@ def test_r03_grace_resets_after_confirmed_observation(monkeypatch):
     assert role.perform() is None
     assert item.r3_identity_grace_until is not None
     assert len(item.context.actions) == actions_after_confirm
+    assert item.context.tasker.controller.clicks == []
+
+
+def test_r03_confirmed_then_single_template_miss_defers_and_reconfirms(monkeypatch):
+    """真机实证形态：连续确认后大招特效遮挡攻击图标造成单帧全 miss——
+    宽限期内跳过输入，特效散去后恢复确认，全程零判负。"""
+    import action.combat.core.session as session
+    item = combat(); role = bound(item)
+    answers = [("回音", "GeneralFight"), ("未知", "GeneralFight"), ("回音", "GeneralFight")]
+    seen = []
+
+    def flaky(*args, **kwargs):
+        answer = answers[min(len(seen), len(answers) - 1)]
+        seen.append(answer)
+        return answer
+
+    monkeypatch.setattr(session, "detect_current_role", flaky)
+    performs = []
+    monkeypatch.setattr(role, "do_perform", lambda: performs.append(1))
+    assert role.perform() is None          # 确认 → 角色动作执行
+    assert item.field_identity == "confirmed"
+    assert len(performs) == 1
+    assert role.perform() is None          # 特效 miss → 宽限跳过，不执行动作
+    assert item.field_identity == "confirmed"  # 保持最近确认值
+    assert item.r3_identity_grace_until is not None
+    assert len(performs) == 1
+    assert role.perform() is None          # 特效散去 → 再确认，预算清零
+    assert item.field_identity == "confirmed"
+    assert item.r3_identity_grace_until is None
+    assert len(performs) == 2
+    assert item.context.actions == []      # do_perform 为桩：FakeContext 层零输入
+    assert item.context.tasker.controller.clicks == []
+
+
+def test_r03_confirmed_then_sustained_miss_exhausts_grace_and_rejects(monkeypatch):
+    """持续 miss 耗尽宽限预算后仍按 unknown 判负（场外未知角色 fail-closed）。"""
+    import action.combat.core.session as session
+    item = combat(); role = bound(item)
+    item.R3_IDENTITY_GRACE_SECONDS = 0.0
+    detection(monkeypatch, session, ("未知", "GeneralFight"))
+    monkeypatch.setattr(role, "do_perform", lambda: pytest.fail("Unconfirmed identity cannot perform"))
+    assert role.perform() is None          # 首拍进宽限（预算即耗尽）
+    with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_unknown"):
+        role.perform()                     # 次拍判负
+    assert item.field_identity == "unknown"
+    assert item.context.actions == []
     assert item.context.tasker.controller.clicks == []
 
 
@@ -230,7 +285,9 @@ def test_r03_runner_consumes_task_policy_and_returns_false_after_real_cleanup(mo
 def test_r03_setup_becoming_unknown_after_provider_rejects_before_first_input(monkeypatch):
     import action.combat.core.session as session
     item = combat()
-    # 入场校正对瞬时未知放行后，需让 presence 门通过才能跑到首 tick 的拒绝。
+    # 入场校正对瞬时未知放行后，需让 presence 门通过才能跑到 tick 的拒绝；
+    # 零宽限预算：首 tick miss 进入预算即耗尽，次 tick 判负。
+    item.R3_IDENTITY_GRACE_SECONDS = 0.0
     item.context.recognition_map["战斗中"] = make_hit()
     monkeypatch.setattr(item, "_wait_in_combat", lambda: setattr(item, "_in_combat", True))
     detection(monkeypatch, provider, ("回音", "GeneralFight"))
@@ -238,8 +295,8 @@ def test_r03_setup_becoming_unknown_after_provider_rejects_before_first_input(mo
     monkeypatch.setattr(provider, "detect_visible_team_colors", lambda *_: [])
     with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_unknown"):
         item.combat_once()
-    # 入场校正单次放行 + 首 tick settled-unknown 拒绝：共两次会话级识别。
-    assert len(calls) == 2 and all(call["on_tick"] is None for call in calls)
+    # 入场校正放行 1 次 + tick1 miss 进宽限 + tick2 耗尽判负 = 共三次会话级识别。
+    assert len(calls) == 3 and all(call["on_tick"] is None for call in calls)
     assert item.outcome.callback_status == "REJECTED" and item.outcome.field_identity == "unknown"
     assert item.outcome.role_bindings[0].requested_cls_name == "GeneralFight"
     no_inputs(item.context)

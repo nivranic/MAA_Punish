@@ -439,7 +439,8 @@ class CombatTask:
         if self.r3_identity_grace_until is None:
             self.r3_identity_grace_until = now + self.R3_IDENTITY_GRACE_SECONDS
             self.logger.info(
-                "r3 identity: HUD 暂不可观察，进入 %.0fs 宽限期（不发送战斗输入）",
+                "r3 identity: 场上身份暂时不可观察（缺帧/过场遮HUD/攻击图标被特效遮挡），"
+                "进入 %.0fs 宽限期（不发送战斗输入）",
                 self.R3_IDENTITY_GRACE_SECONDS,
             )
             return True
@@ -551,7 +552,11 @@ class CombatTask:
             display_name, detected_cls = detect_current_role(
                 self.context, image, prefer_cls=[role.cls_name], on_tick=None,
             )
-            # HUD 可见仍识别不出 = settled unknown，立即拒绝。
+            if display_name == "未知":
+                # HUD 可见但攻击图标模板全 miss：大招生成特效会短暂改画攻击键图标
+                # （真机实证：连续确认 10 拍后单帧全 miss）。同一宽限预算内跳过输入，
+                # 预算耗尽仍未知才判负——真正的场外未知角色仍 fail-closed 拒绝。
+                return self._defer_r3_identity_rejection(role)
             self._require_roguelike3_role_identity(role, display_name, detected_cls)
             self.r3_identity_grace_until = None
             self._last_field_cls = detected_cls
