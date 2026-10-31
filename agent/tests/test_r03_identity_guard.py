@@ -133,15 +133,43 @@ def test_r03_setup_and_tick_identity_checks_are_input_free(monkeypatch, stage, a
 
 
 @pytest.mark.parametrize("missing", ["frame", "team", "hud"])
-def test_r03_tick_missing_identity_evidence_rejects_before_role_action(monkeypatch, missing):
+def test_r03_tick_transient_unobservable_defers_within_grace_then_rejects(monkeypatch, missing):
+    """瞬时不可观察（缺帧/缺队伍/过场遮HUD）在宽限期内跳过输入不判负，超时仍拒绝。"""
     item = combat(); role = bound(item)
     if missing == "frame": item.frame = None
     elif missing == "team": item.team = None
     else: item.context.recognition_map.clear()
-    monkeypatch.setattr(role, "do_perform", lambda: pytest.fail("Unknown identity cannot perform"))
+    monkeypatch.setattr(role, "do_perform", lambda: pytest.fail("Unconfirmed identity cannot perform"))
+    # 宽限期内：跳过本 tick（无输入、不执行角色动作、不抛错）。
+    assert role.perform() is None
+    assert item.field_identity == "unknown"
+    assert item.r3_identity_grace_until is not None
+    no_inputs(item.context)
+    # 宽限期耗尽：仍按 unknown 拒绝（fail-closed 保留）。
+    item.r3_identity_grace_until = 0.0
     with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_unknown"):
         role.perform()
     no_inputs(item.context)
+
+
+def test_r03_grace_resets_after_confirmed_observation(monkeypatch):
+    """确认一次后宽限清零：后续新的瞬时不可观察获得全新预算。"""
+    import action.combat.core.session as session
+    item = combat(); role = bound(item)
+    calls = detection(monkeypatch, session, ("回音", "GeneralFight"))
+    assert role.perform() is None
+    assert item.field_identity == "confirmed"
+    assert item.r3_identity_grace_until is None
+    assert calls and all(call["on_tick"] is None for call in calls)
+    # 确认态的 perform 会正常执行角色动作；随后新的瞬时不可观察：
+    # 不继承旧预算，重新进入宽限且不再新增任何输入。
+    item.frame = None
+    monkeypatch.setattr(role, "do_perform", lambda: pytest.fail("Unconfirmed identity cannot perform"))
+    actions_after_confirm = len(item.context.actions)
+    assert role.perform() is None
+    assert item.r3_identity_grace_until is not None
+    assert len(item.context.actions) == actions_after_confirm
+    assert item.context.tasker.controller.clicks == []
 
 
 def test_r03_factory_fallback_is_not_accepted_as_recognized_generic(monkeypatch):

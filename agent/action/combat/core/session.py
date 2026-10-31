@@ -133,6 +133,9 @@ class CombatTask:
     SWITCH_STUB = False
     SWITCH_DISABLED = False
     ROLE_BINDING_HISTORY_LIMIT = 64
+    # R03 身份守卫：瞬时不可观察（开场演出/大招过场/技能特效遮 HUD）的宽限预算。
+    # 预算内跳过输入等待观察恢复；确认后清零；超时仍按 unknown 拒绝（fail-closed）。
+    R3_IDENTITY_GRACE_SECONDS = 15.0
 
     def __init__(
         self,
@@ -164,6 +167,7 @@ class CombatTask:
 
             self.input_scope = CombatInputScope(context, self, generation=uuid4().int)
         self.field_identity = "unknown"
+        self.r3_identity_grace_until: float | None = None
         self.fresh_entry = None
         self._entry_start_attempted = False
         self.wait_combat_time = (
@@ -425,6 +429,25 @@ class CombatTask:
             raise Roguelike3IdentityError("r3_strategy_identity_mismatch")
         self.field_identity = "confirmed"
 
+    def _defer_r3_identity_rejection(self, role: BaseRole) -> bool:
+        """R03 守卫的瞬时不可观察宽限：预算内跳过输入等待观察恢复，超时仍拒绝。
+
+        开场演出/大招过场/技能特效会暂时遮住 HUD，此刻"看不到"不等于"身份不明"，
+        与普通路径的跳 tick 语义对齐；确认后清零预算，超时按 unknown 拒绝（fail-closed）。
+        """
+        now = time.monotonic()
+        if self.r3_identity_grace_until is None:
+            self.r3_identity_grace_until = now + self.R3_IDENTITY_GRACE_SECONDS
+            self.logger.info(
+                "r3 identity: HUD 暂不可观察，进入 %.0fs 宽限期（不发送战斗输入）",
+                self.R3_IDENTITY_GRACE_SECONDS,
+            )
+            return True
+        if now >= self.r3_identity_grace_until:
+            self.r3_identity_grace_until = None
+            self._require_roguelike3_role_identity(role, "未知", GENERIC_CLS_NAME)
+        return True
+
     def _correct_role_from_field(
         self, color: str, roster_cls: str, image: Any, *, solo: bool = False
     ) -> tuple[str, str]:
@@ -519,14 +542,18 @@ class CombatTask:
         protected = self.is_observation_protected()
         if self.roguelike3_identity_required:
             if self.team is None or self.frame is None:
-                self._require_roguelike3_role_identity(role, "未知", GENERIC_CLS_NAME)
+                # 瞬时不可观察：宽限期内跳过输入，不判负（fail-closed 预算在 defer 内）。
+                return self._defer_r3_identity_rejection(role)
             image = self.frame
             if not is_dodge_button_visible(self.context, image):
-                self._require_roguelike3_role_identity(role, "未知", GENERIC_CLS_NAME)
+                # 技能特效/过场会暂时遮 HUD：同上，宽限期内不输入、不判负。
+                return self._defer_r3_identity_rejection(role)
             display_name, detected_cls = detect_current_role(
                 self.context, image, prefer_cls=[role.cls_name], on_tick=None,
             )
+            # HUD 可见仍识别不出 = settled unknown，立即拒绝。
             self._require_roguelike3_role_identity(role, display_name, detected_cls)
+            self.r3_identity_grace_until = None
             self._last_field_cls = detected_cls
             self.current_role_name = display_name
             return False
