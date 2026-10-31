@@ -22,6 +22,18 @@
       ],
       "sha256": "888c6b9219adc206bf93246f75c51bbc6978083c43727e6f6457fc730b9f2815",
       "original_frame_sha256": "0db575acf5e247c1e2cc94f060338d33a65317aead55552eb36fdee6e4734188"
+    },
+    "wugui_new_master_title": {
+      "file": "wugui_new_master_title.png",
+      "rect": [
+        640,
+        96,
+        320,
+        62
+      ],
+      "sha256": "dc8ddf5a083800c815a7f8abd79e2dbb25047c1713178857a25c2fbd886b7379",
+      "original_frame_sha256": "37ae19c982d6ea2a7dbc05bac3a4f9a76f73e198aa67a8f07a9d4b58fe189b49",
+      "provenance": "segment-24: stuck frame s23-vd-t8.png after task#8 stopped on the event choice page (production OCR reads the title as 归新主, dropping 物)"
     }
   },
   "boundary": "Title-region saved pixels only; no account metadata. Offline recognition does not prove live scene, task, choice, or first battle."
