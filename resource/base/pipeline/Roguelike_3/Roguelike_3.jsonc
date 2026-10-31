@@ -418,10 +418,10 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    1083,
-                    664,
-                    66,
-                    21
+                    1020,
+                    650,
+                    180,
+                    45
                 ],
                 "expected": "Chapter",
                 "only_rec": true
