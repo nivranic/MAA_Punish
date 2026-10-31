@@ -570,7 +570,11 @@
             "一键领取_囚笼",
             "关闭囚笼奖励界面",
             "[JumpBack]领取囚笼奖励",
-            "[JumpBack]返回"
+            "[JumpBack]返回",
+            "停止任务"
+        ],
+        "on_error": [
+            "停止任务"
         ],
         "focus": {
             "Node.Recognition.Succeeded": "$focus.挑战次数不足_弹窗"
