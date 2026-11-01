@@ -1,5 +1,6 @@
 {
     "厄愿潮声": {
+        "timeout": 120000,
         "action": {
             "type": "Custom",
             "param": {

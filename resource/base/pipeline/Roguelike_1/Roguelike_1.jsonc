@@ -1,5 +1,6 @@
 {
     "宣叙妄响": {
+        "timeout": 120000,
         "action": {
             "type": "Custom",
             "param": {
