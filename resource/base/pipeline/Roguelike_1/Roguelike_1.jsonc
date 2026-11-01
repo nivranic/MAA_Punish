@@ -1548,5 +1548,49 @@
         "action": {
             "type": "Click"
         }
+    },
+    "宣叙编队_选中首个角色_宣叙妄响": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [
+                    805,
+                    440,
+                    380,
+                    100
+                ],
+                "expected": "编入队伍"
+            }
+        },
+        "action": {
+            "type": "Click",
+            "param": {
+                "target": [
+                    190,
+                    134
+                ]
+            }
+        },
+        "post_delay": 800
+    },
+    "宣叙编队_编入队伍_宣叙妄响": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [
+                    805,
+                    440,
+                    380,
+                    100
+                ],
+                "expected": "编入队伍"
+            }
+        },
+        "action": {
+            "type": "Click"
+        },
+        "post_wait_freezes": {
+            "time": 1000
+        }
     }
 }

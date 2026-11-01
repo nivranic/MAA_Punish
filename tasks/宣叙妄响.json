@@ -27,6 +27,14 @@
                     "attach": {
                         "need_multi": false
                     }
+                },
+                "未选人_寒境曙光": {
+                    "next": [
+                        "宣叙编队_选中首个角色_宣叙妄响",
+                        "宣叙编队_编入队伍_宣叙妄响",
+                        "选择角色程序",
+                        "[JumpBack]选择首发_寒境曙光"
+                    ]
                 }
             },
             "description": "$task.宣叙妄响.description",
