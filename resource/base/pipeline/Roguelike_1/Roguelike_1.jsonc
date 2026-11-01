@@ -980,6 +980,9 @@
                     299,
                     362
                 ]
+            },
+            "post_wait_freezes": {
+                "time": 1000
             }
         },
         "next": [
@@ -1021,6 +1024,9 @@
                     639,
                     362
                 ]
+            },
+            "post_wait_freezes": {
+                "time": 1000
             }
         },
         "next": [
@@ -1062,6 +1068,9 @@
                     978,
                     362
                 ]
+            },
+            "post_wait_freezes": {
+                "time": 1000
             }
         },
         "next": [
