@@ -973,6 +973,15 @@
                 "only_rec": true
             }
         },
+        "action": {
+            "type": "Click",
+            "param": {
+                "target": [
+                    299,
+                    362
+                ]
+            }
+        },
         "next": [
             "开始招募_宣叙妄响",
             "招募完成_宣叙妄响"
@@ -1005,6 +1014,15 @@
                 "only_rec": true
             }
         },
+        "action": {
+            "type": "Click",
+            "param": {
+                "target": [
+                    639,
+                    362
+                ]
+            }
+        },
         "next": [
             "开始招募_宣叙妄响",
             "招募完成_宣叙妄响"
@@ -1035,6 +1053,15 @@
                     "露西亚"
                 ],
                 "only_rec": true
+            }
+        },
+        "action": {
+            "type": "Click",
+            "param": {
+                "target": [
+                    978,
+                    362
+                ]
             }
         },
         "next": [
