@@ -34,7 +34,10 @@ LEASE_SAFETY_SECONDS = 0.5
 # derived from the validated package and this invocation's random temporary name.
 HEARTBEAT_SCRIPT = (
     'trap \'rm -f "$1"\' 0; '
-    'cat > "$1" && mv "$1" "$2" && sleep 0.3 && head -c 16385 "$3"'
+    # 2026-11-01: on-device `cat` honors adbd umask and yields 660 shell:ext_data_rw,
+    # which the app uid cannot read after the fresh reinstall (EACCES loops);
+    # `adb push` (write path above) lands 666, so normalize heartbeat files to match.
+    'cat > "$1" && chmod 666 "$1" && mv "$1" "$2" && sleep 0.3 && head -c 16385 "$3"'
 )
 TOKEN = re.compile(r"[a-f0-9]{32}\Z")
 PACKAGE = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+\Z")
@@ -252,6 +255,16 @@ class UsbAdb:
         self.verify()
         # Only our immutable delta snapshot is copied, never an entire PI tree.
         self._run("-s", self.serial, "push", str(snapshot / "stage"), operation_root, timeout=300)
+        self.verify()
+        # Pushed files land shell:ext_data_rw 660 (adbd umask), which the app uid
+        # cannot read over emulated FUSE after a fresh install; the phone-side
+        # transaction consumer walks this tree as the app, so normalize it.
+        self._run(
+            "-s", self.serial, "shell", "-T", "sh", "-c", shlex.quote(
+                'find "$1" -type d -exec chmod 777 {} + && find "$1" -type f -exec chmod 666 {} +'
+            ),
+            "maa-stage-chmod", shlex.quote(operation_root),
+        )
         self.verify()
         self._run("-s", self.serial, "push", str(snapshot / "manifest.json"), operation_root + "/manifest.tmp")
         self.verify()
