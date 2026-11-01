@@ -18,6 +18,7 @@
             "[JumpBack]选择难度_宣叙妄响",
             "[JumpBack]揭开帷幕_宣叙妄响",
             "[JumpBack]未完待续_宣叙妄响",
+            "新增剧幕提示_宣叙妄响",
             "[JumpBack]退出_肉鸽",
             "[JumpBack]打开宣叙妄响",
             "[JumpBack]打开多维演绎",
@@ -1595,5 +1596,29 @@
         "post_wait_freezes": {
             "time": 1000
         }
+    },
+    "新增剧幕提示_宣叙妄响": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [
+                    500,
+                    235,
+                    300,
+                    70
+                ],
+                "expected": "新增剧幕"
+            }
+        },
+        "action": {
+            "type": "Click",
+            "param": {
+                "target": [
+                    100,
+                    600
+                ]
+            }
+        },
+        "post_delay": 800
     }
 }
