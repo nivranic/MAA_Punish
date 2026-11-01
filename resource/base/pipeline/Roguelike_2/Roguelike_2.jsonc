@@ -2490,6 +2490,9 @@
         "action": {
             "type": "Click"
         },
+        "post_wait_freezes": {
+            "time": 1000
+        },
         "post_delay": 1000
     }
 }
