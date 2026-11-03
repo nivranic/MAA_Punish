@@ -22,6 +22,7 @@ from maa.tasker import Tasker
 
 from action.combat.core import provider
 from action.combat.core import session
+from action.combat.core.provider import CombatCheck, HpObservation
 from action.combat.core.session import CombatTask
 from action.combat.entry.runner import CombatRunner
 from test_support.native_lifecycle import stop_and_wait_idle
@@ -108,14 +109,13 @@ def test_real_runner_false_stops_jumpback_parent_and_next_task_has_no_policy(tmp
     assert tasker.bind(resource, controller)
     detections = []
 
-    def unknown(_context, _image, **kwargs):
-        detections.append(kwargs)
-        assert kwargs["on_tick"] is None
+    def unknown(_self, _context, _image):
+        detections.append(_image)
         if failure == "recognition_error":
             raise OSError("PRIVATE_NATIVE_RECOGNITION_ERROR")
-        return "未知", "GeneralFight"
+        return HpObservation(None, None, "hp_not_recognized")
 
-    monkeypatch.setattr(provider, "detect_current_role", unknown)
+    monkeypatch.setattr(CombatCheck, "read_hp_from_frame", unknown)
     original_emit = session.emit_combat_outcome
     original_wait = CombatTask._wait_in_combat
 

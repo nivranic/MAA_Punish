@@ -546,9 +546,20 @@ class CombatTask:
                 # 瞬时不可观察：宽限期内跳过输入，不判负（fail-closed 预算在 defer 内）。
                 return self._defer_r3_identity_rejection(role)
             image = self.frame
-            if not is_dodge_button_visible(self.context, image):
+            # 检查闪避 ROI 按标准战斗 HUD 标定，R03 动作 HUD 的闪避键在 ROI 之外
+            # （2026-11-03 run_101003 拒识帧实证），改用严格血量 OCR 作 HUD 在场
+            # 证据，与入口身份确认同源：血量条只在战斗 HUD 存在。
+            hp = self.combat_check.read_hp_from_frame(self.context, image)
+            if hp.maximum is None:
                 # 技能特效/过场会暂时遮 HUD：同上，宽限期内不输入、不判负。
                 return self._defer_r3_identity_rejection(role)
+            if self.team.is_solo():
+                # 单人队无切换可发生：在场连续性由游戏机制保证；模板再校验只会
+                # 死锁（确认前禁输入→无攻击帧→attack_template 永不命中）。
+                # HP 证据确认后直接放行战斗逻辑，由角色自身动作产生后续攻击帧。
+                self.field_identity = "confirmed"
+                self.r3_identity_grace_until = None
+                return False
             display_name, detected_cls = detect_current_role(
                 self.context, image, prefer_cls=[role.cls_name], on_tick=None,
             )

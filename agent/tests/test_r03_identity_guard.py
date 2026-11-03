@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from action.combat.core import provider, role_factory
-from action.combat.core.provider import CombatCheck, Roguelike3IdentityError
+from action.combat.core.provider import CombatCheck, HpObservation, Roguelike3IdentityError
 from action.combat.core.role import resolve_cls_label
 from action.combat.core.session import CombatTask
 from action.combat.core.team import TEAM_ROSTER_NODE, TeamSnapshot
@@ -72,19 +72,29 @@ def test_r03_unknown_cannot_use_published_shortcut_or_blind_attack(monkeypatch, 
     calls = detection(monkeypatch, provider, ("未知", "GeneralFight"))
     with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_unknown"):
         item.combat_check.detect_team(item.context, item)
-    assert len(calls) == 1 and calls[0]["on_tick"] is None
+    assert calls == []
     no_inputs(item.context)
 
 
-@pytest.mark.parametrize("answer", [("终焉", "Oblivion"), ("回音", "GeneralFight")])
-def test_r03_known_generic_and_specialized_fields_are_valid(monkeypatch, answer):
+def test_r03_no_roster_confirms_via_hud_as_generic_solo(monkeypatch):
+    """无名单（R03 编队未走 RoleSelection）：HUD 证据确认在战，按通用单人队应战。"""
     item = combat()
-    calls = detection(monkeypatch, provider, answer)
-    monkeypatch.setattr(provider, "detect_visible_team_colors", lambda *_: [])
+    item.context.recognition_map["检查血量"] = _hp_result("8101/8101")
+    calls = detection(monkeypatch, provider, RuntimeError("template identity must not run"))
     snapshot = item.combat_check.detect_team(item.context, item)
-    assert snapshot == TeamSnapshot.solo(answer[1])
-    assert item.current_role_name == answer[0] and item.field_identity == "confirmed"
-    assert calls[0]["on_tick"] is None
+    assert snapshot == TeamSnapshot.solo("GeneralFight")
+    assert item.field_identity == "confirmed"
+    assert item.current_role_name == resolve_cls_label("GeneralFight")
+    assert calls == []
+    no_inputs(item.context)
+
+
+def test_r03_no_roster_hp_missing_is_transient_unknown(monkeypatch):
+    item = combat()
+    calls = detection(monkeypatch, provider, ("未知", "GeneralFight"))
+    with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_unknown"):
+        item.combat_check.detect_team(item.context, item)
+    assert calls == []
     no_inputs(item.context)
 
 
@@ -112,7 +122,7 @@ def test_r03_published_roster_confirms_via_hud_evidence_without_inputs(monkeypat
 
 
 def test_r03_hud_hidden_is_transient_unknown_and_retryable(monkeypatch):
-    """闪避键不可见=过场遮 HUD，按 unknown 拒绝（宽限可重试）。"""
+    """战斗 HUD 不可读（血量 OCR 落空）=过场遮罩，按 unknown 拒绝（宽限可重试）。"""
     item = combat(roster={"R": "Oblivion", "B": "", "Y": ""})
     item.context.recognition_map.clear()
     monkeypatch.setattr(provider, "detect_visible_team_colors", lambda *_: [])
@@ -149,34 +159,37 @@ def bound(item, cls_name="GeneralFight"):
     return role
 
 
-@pytest.mark.parametrize("stage", ["correct", "refresh"])
 @pytest.mark.parametrize("answer,cls_name,accepted", [
     (("未知", "GeneralFight"), "GeneralFight", False),
     (("回音", "GeneralFight"), "GeneralFight", True),
     (("终焉", "Oblivion"), "Oblivion", True),
     (("回音", "GeneralFight"), "Oblivion", False),
 ])
-def test_r03_setup_and_tick_identity_checks_are_input_free(monkeypatch, stage, answer, cls_name, accepted):
+def test_r03_setup_and_tick_identity_checks_are_input_free(monkeypatch, answer, cls_name, accepted):
+    """入场校正路径的模板身份契约（切人/修正仍走 attack_template，零输入）。"""
     import action.combat.core.session as session
     item = combat(); role = bound(item, cls_name)
     calls = detection(monkeypatch, session, answer)
-    perform = lambda: item.refresh_field_role(role) if stage == "refresh" else item._correct_role_from_field("R", cls_name, item.frame, solo=True)
     if accepted:
-        perform()
+        item._correct_role_from_field("R", cls_name, item.frame, solo=True)
         assert item.field_identity == "confirmed"
-    elif stage == "refresh" and answer[0] == "未知":
-        # tick 侧瞬时未知进入宽限；预算耗尽后判负。
-        item.R3_IDENTITY_GRACE_SECONDS = 0.0
-        perform()
-        assert item.field_identity == "unknown"
-        item.r3_identity_grace_until = 0.0
-        with pytest.raises(Roguelike3IdentityError):
-            perform()
-        assert item.field_identity == "unknown"
     else:
-        with pytest.raises(Roguelike3IdentityError): perform()
+        with pytest.raises(Roguelike3IdentityError): item._correct_role_from_field("R", cls_name, item.frame, solo=True)
         assert item.field_identity == "unknown"
     assert calls and all(call["on_tick"] is None for call in calls)
+    no_inputs(item.context)
+
+
+def test_r03_tick_solo_hp_evidence_confirms_without_template(monkeypatch):
+    """单人队 tick：HP 证据在场即确认身份（无切换可发生，模板再校验只死锁）。"""
+    import action.combat.core.session as session
+    item = combat()
+    item.context.recognition_map["检查血量"] = _hp_result("6835/8101")
+    role = bound(item)
+    calls = detection(monkeypatch, session, ("未知", "GeneralFight"))
+    assert item.refresh_field_role(role) is False
+    assert item.field_identity == "confirmed" and item.r3_identity_grace_until is None
+    assert calls == []
     no_inputs(item.context)
 
 
@@ -204,11 +217,12 @@ def test_r03_grace_resets_after_confirmed_observation(monkeypatch):
     """确认一次后宽限清零：后续新的瞬时不可观察获得全新预算。"""
     import action.combat.core.session as session
     item = combat(); role = bound(item)
+    item.context.recognition_map["检查血量"] = _hp_result("6835/8101")
     calls = detection(monkeypatch, session, ("回音", "GeneralFight"))
     assert role.perform() is None
     assert item.field_identity == "confirmed"
     assert item.r3_identity_grace_until is None
-    assert calls and all(call["on_tick"] is None for call in calls)
+    assert calls == []  # 单人 HP 证据路径零模板调用
     # 确认态的 perform 会正常执行角色动作；随后新的瞬时不可观察：
     # 不继承旧预算，重新进入宽限且不再新增任何输入。
     item.frame = None
@@ -221,19 +235,18 @@ def test_r03_grace_resets_after_confirmed_observation(monkeypatch):
 
 
 def test_r03_confirmed_then_single_template_miss_defers_and_reconfirms(monkeypatch):
-    """真机实证形态：连续确认后大招特效遮挡攻击图标造成单帧全 miss——
+    """真机实证形态：确认后特效遮挡 HUD 造成血量单帧不可读——
     宽限期内跳过输入，特效散去后恢复确认，全程零判负。"""
-    import action.combat.core.session as session
     item = combat(); role = bound(item)
-    answers = [("回音", "GeneralFight"), ("未知", "GeneralFight"), ("回音", "GeneralFight")]
-    seen = []
+    hp_reads = {"n": 0}
 
-    def flaky(*args, **kwargs):
-        answer = answers[min(len(seen), len(answers) - 1)]
-        seen.append(answer)
-        return answer
+    def flaky_hp(context, image):
+        hp_reads["n"] += 1
+        if hp_reads["n"] == 2:
+            return HpObservation(None, None, "hp_not_recognized")
+        return HpObservation(6835, 8101, "alive")
 
-    monkeypatch.setattr(session, "detect_current_role", flaky)
+    monkeypatch.setattr(item.combat_check, "read_hp_from_frame", flaky_hp)
     performs = []
     monkeypatch.setattr(role, "do_perform", lambda: performs.append(1))
     assert role.perform() is None          # 确认 → 角色动作执行
@@ -253,10 +266,12 @@ def test_r03_confirmed_then_single_template_miss_defers_and_reconfirms(monkeypat
 
 def test_r03_confirmed_then_sustained_miss_exhausts_grace_and_rejects(monkeypatch):
     """持续 miss 耗尽宽限预算后仍按 unknown 判负（场外未知角色 fail-closed）。"""
-    import action.combat.core.session as session
     item = combat(); role = bound(item)
     item.R3_IDENTITY_GRACE_SECONDS = 0.0
-    detection(monkeypatch, session, ("未知", "GeneralFight"))
+    monkeypatch.setattr(
+        item.combat_check, "read_hp_from_frame",
+        lambda context, image: HpObservation(None, None, "hp_not_recognized"),
+    )
     monkeypatch.setattr(role, "do_perform", lambda: pytest.fail("Unconfirmed identity cannot perform"))
     assert role.perform() is None          # 首拍进宽限（预算即耗尽）
     with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_unknown"):
@@ -294,8 +309,10 @@ def test_r03_original_cleanup_and_immutable_result_remain_truthful(monkeypatch, 
     )
     def enter(): item._in_combat = True
     monkeypatch.setattr(item, "_wait_in_combat", enter)
-    error = OSError("PRIVATE_RECOGNITION_ERROR")
-    detection(monkeypatch, provider, error if failure == "recognition_error" else ("未知", "GeneralFight"))
+    if failure == "recognition_error":
+        def broken(context, image):
+            raise OSError("PRIVATE_RECOGNITION_ERROR")
+        monkeypatch.setattr(item.combat_check, "read_hp_from_frame", broken)
     monkeypatch.setattr("action.combat.core.session.emit_combat_outcome", lambda _, value: outcomes.append(value))
     with pytest.raises(OSError if failure == "recognition_error" else Roguelike3IdentityError): item.combat_once()
     item.combat_end()
@@ -324,39 +341,48 @@ def test_r03_runner_consumes_task_policy_and_returns_false_after_real_cleanup(mo
 def test_r03_setup_becoming_unknown_after_provider_rejects_before_first_input(monkeypatch):
     import action.combat.core.session as session
     item = combat()
-    # 入场校正对瞬时未知放行后，需让 presence 门通过才能跑到 tick 的拒绝；
-    # 零宽限预算：首 tick miss 进入预算即耗尽，次 tick 判负。
+    # 载入经 HUD 证据确认（首次 HP 可读）；随后血量证据消失（HUD 被遮），
+    # 零宽限下 tick1 defer 进入预算、tick2 耗尽判负。单人队无模板校验可调。
     item.R3_IDENTITY_GRACE_SECONDS = 0.0
     item.context.recognition_map["战斗中"] = make_hit()
     monkeypatch.setattr(item, "_wait_in_combat", lambda: setattr(item, "_in_combat", True))
-    detection(monkeypatch, provider, ("回音", "GeneralFight"))
+    hp_calls = {"n": 0}
+
+    def hp_once(context, image):
+        hp_calls["n"] += 1
+        if hp_calls["n"] == 1:
+            return HpObservation(8101, 8101, "alive")
+        return HpObservation(None, None, "hp_not_recognized")
+
+    monkeypatch.setattr(item.combat_check, "read_hp_from_frame", hp_once)
     calls = detection(monkeypatch, session, ("未知", "GeneralFight"))
-    monkeypatch.setattr(provider, "detect_visible_team_colors", lambda *_: [])
     with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_unknown"):
         item.combat_once()
-    # 入场校正放行 1 次 + tick1 miss 进宽限 + tick2 耗尽判负 = 共三次会话级识别。
-    assert len(calls) == 3 and all(call["on_tick"] is None for call in calls)
+    # 仅入场校正一次模板尝试（miss 放行至 tick 宽限）；tick 侧单人 HP 证据路径零模板。
+    assert len(calls) == 1 and all(call["on_tick"] is None for call in calls)
     assert item.outcome.callback_status == "REJECTED" and item.outcome.field_identity == "unknown"
     assert item.outcome.role_bindings[0].requested_cls_name == "GeneralFight"
     no_inputs(item.context)
 
 
 def test_r03_load_team_retries_transient_unknown_within_grace(monkeypatch):
-    """detect_team 入场帧演出遮HUD以unknown拒绝时，宽限内重取帧重试直至成功。"""
+    """入场帧 HUD 证据暂态不可读以unknown拒绝时，宽限内重取帧重试直至成功。"""
     import action.combat.core.session as session
     item = combat()
     monkeypatch.setattr(session.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(
+        type(item.combat_check), "_get_frame",
+        lambda self, context, cb: b"retry-pixels",
+    )
     attempts = {"n": 0}
 
-    def flaky(context, image, *, prefer_cls=None, on_tick=None, skip_cls=None):
+    def flaky_hp(context, image):
         attempts["n"] += 1
         if attempts["n"] == 1:
-            raise Roguelike3IdentityError("r3_field_identity_unknown")
-        return ("回音", "GeneralFight")
+            return HpObservation(None, None, "hp_not_recognized")
+        return HpObservation(8101, 8101, "alive")
 
-    monkeypatch.setattr(provider, "detect_current_role", flaky)
-    monkeypatch.setattr(provider, "detect_visible_team_colors", lambda *_: [])
-    detection(monkeypatch, session, ("回音", "GeneralFight"))
+    monkeypatch.setattr(item.combat_check, "read_hp_from_frame", flaky_hp)
     assert item.load_team() is True
     assert attempts["n"] == 2
     assert item.field_identity == "confirmed" and item.team is not None

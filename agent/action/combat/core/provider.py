@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING, Any
 
 from action.combat.capture import capture_frame
 from action.combat.core.role import resolve_cls_label
-from action.combat.core.role_detect import detect_current_role, is_dodge_button_visible
+from action.combat.core.role_detect import detect_current_role
 from action.combat.core.switch import (
     CHAR_CHECK_ATTACK_COUNT,
     blind_attack_click,
@@ -227,22 +227,25 @@ class BaseCombatCheck(ABC):
     def _require_r3_hud_field_identity(
         self, context: Context, image: Any, published: dict[str, str],
     ) -> None:
-        """同帧无输入身份证据：战斗 HUD 在场 + QTE 色位不超出名单 + 严格血量可解析。
+        """同帧无输入身份证据：严格血量 OCR 可解析 + QTE 色位不超出名单。
 
-        与像素身份同样 fail-closed：色位超出名单=异队，立即拒绝（mismatch 不给
-        宽限）；HUD 不可见或血量不可解析=暂态未知，交由既有宽限预算重试。
-        证据全部来自同一帧，且整个确认过程零输入。
+        血量条只在战斗 HUD 存在（过场遮罩时不可读→暂态 unknown，交由既有
+        宽限预算重试）；不依赖检查闪避模板——其 ROI 按标准战斗 HUD 标定，
+        R03 动作 HUD 的闪避键在 ROI 之外（2026-11-03 run_101003 拒识帧实证）。
+        与像素身份同样 fail-closed：色位超出名单=异队，立即拒绝（mismatch 不
+        给宽限）。名单为空（组成不可验，如 R03 编队未走 RoleSelection）时跳过
+        色位核对，战斗按通用单人队兜底。证据全部来自同一帧，且全程零输入。
         """
-        if not is_dodge_button_visible(context, image):
-            raise Roguelike3IdentityError("r3_field_identity_unknown")
         expected = {
             color for color in TEAM_COLORS if str(published.get(color) or "").strip()
         }
-        visible = detect_visible_team_colors(context, image)
-        if any(color not in expected for color in visible):
-            raise Roguelike3IdentityError("r3_field_identity_mismatch")
+        if expected:
+            visible = detect_visible_team_colors(context, image)
+            if any(color not in expected for color in visible):
+                raise Roguelike3IdentityError("r3_field_identity_mismatch")
         hp = self.read_hp_from_frame(context, image)
         if hp.maximum is None:
+            logger.info("r3 hud 证据不足: hp_reason=%s text=%r", hp.reason, hp.text)
             raise Roguelike3IdentityError("r3_field_identity_unknown")
 
     def detect_team(self, context: Context, combat: CombatTask) -> TeamSnapshot | None:
@@ -342,6 +345,17 @@ class CombatCheck(BaseCombatCheck):
                 format_team_snapshot_line(snapshot),
             )
             return snapshot
+
+        if r3_identity:
+            # R03 编队走自家节点（选择首发/编队完成），战斗队伍色位从未发布——
+            # 组成不可验，按通用单人队应战（CombatRunner 对未知角色存活）；
+            # HUD 证据（闪避键+严格血量）仍确保只在真实战斗画面放行。
+            image = self._get_frame(context, combat)
+            self._require_r3_hud_field_identity(context, image, {})
+            combat.field_identity = "confirmed"
+            combat.current_role_name = resolve_cls_label(GENERIC_CLS_NAME)
+            logger.info("进战无名单，HUD证据确认在战（通用单人队、无输入）")
+            return TeamSnapshot.solo(GENERIC_CLS_NAME)
 
         image = self._get_frame(context, combat)
         prefer: list[str] = []
