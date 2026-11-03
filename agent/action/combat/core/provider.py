@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING, Any
 
 from action.combat.capture import capture_frame
 from action.combat.core.role import resolve_cls_label
-from action.combat.core.role_detect import detect_current_role
+from action.combat.core.role_detect import detect_current_role, is_dodge_button_visible
 from action.combat.core.switch import (
     CHAR_CHECK_ATTACK_COUNT,
     blind_attack_click,
@@ -224,6 +224,27 @@ class BaseCombatCheck(ABC):
         """是否处于战斗外界面（结算、菜单、大地图等）。仅在 in_combat 未命中时调用。"""
         return False
 
+    def _require_r3_hud_field_identity(
+        self, context: Context, image: Any, published: dict[str, str],
+    ) -> None:
+        """同帧无输入身份证据：战斗 HUD 在场 + QTE 色位不超出名单 + 严格血量可解析。
+
+        与像素身份同样 fail-closed：色位超出名单=异队，立即拒绝（mismatch 不给
+        宽限）；HUD 不可见或血量不可解析=暂态未知，交由既有宽限预算重试。
+        证据全部来自同一帧，且整个确认过程零输入。
+        """
+        if not is_dodge_button_visible(context, image):
+            raise Roguelike3IdentityError("r3_field_identity_unknown")
+        expected = {
+            color for color in TEAM_COLORS if str(published.get(color) or "").strip()
+        }
+        visible = detect_visible_team_colors(context, image)
+        if any(color not in expected for color in visible):
+            raise Roguelike3IdentityError("r3_field_identity_mismatch")
+        hp = self.read_hp_from_frame(context, image)
+        if hp.maximum is None:
+            raise Roguelike3IdentityError("r3_field_identity_unknown")
+
     def detect_team(self, context: Context, combat: CombatTask) -> TeamSnapshot | None:
         """
         进战识别：场上第一人固定为红位。
@@ -303,6 +324,23 @@ class CombatCheck(BaseCombatCheck):
             combat.current_role_name = resolve_cls_label(snapshot.R)
             logger.info("进战采用选人名单，跳过 QTE 人数判断")
             logger.info(format_team_snapshot_line(snapshot))
+            return snapshot
+
+        if r3_identity and use_published:
+            # R03 身份策略禁止确认前发输入，attack_template 认角色又需要出招帧，
+            # 像素身份在首战必然死锁（2026-11-03 run_091539/092554 实证 15s
+            # 干净帧零命中）。名单+同帧 HUD 组成级证据同样 fail-closed。
+            snapshot = TeamSnapshot.from_dict({**(published or {}), "current": "R"})
+            if snapshot is None or not snapshot.R:
+                raise Roguelike3IdentityError("r3_published_roster_invalid")
+            image = self._get_frame(context, combat)
+            self._require_r3_hud_field_identity(context, image, published or {})
+            combat.field_identity = "confirmed"
+            combat.current_role_name = resolve_cls_label(snapshot.R)
+            logger.info(
+                "进战名单+HUD证据确认身份（无输入）: %s",
+                format_team_snapshot_line(snapshot),
+            )
             return snapshot
 
         image = self._get_frame(context, combat)

@@ -8,11 +8,12 @@ import pytest
 
 from action.combat.core import provider, role_factory
 from action.combat.core.provider import CombatCheck, Roguelike3IdentityError
+from action.combat.core.role import resolve_cls_label
 from action.combat.core.session import CombatTask
 from action.combat.core.team import TEAM_ROSTER_NODE, TeamSnapshot
 from action.combat.config.inverse_crown_profile import InverseCrownProfile, InverseCrownUnavailable
 from action.combat.entry.runner import CombatRunner
-from test_support.fakes import FakeContext, make_hit
+from test_support.fakes import FakeBestResult, FakeContext, FakeRecognitionResult, make_hit
 
 POLICY = {"version": 1, "require_known_field": True}
 NODE = {"attach": {"roguelike3_identity": POLICY}}
@@ -65,7 +66,7 @@ def test_policy_requires_current_node_marker_and_does_not_read_role_selection():
         assert not provider.roguelike3_identity_required(value)
 
 
-@pytest.mark.parametrize("roster", [None, {"R": "GeneralFight", "B": "", "Y": ""}, {"R": "Oblivion", "B": "", "Y": ""}])
+@pytest.mark.parametrize("roster", [None, {"R": "GeneralFight", "B": "", "Y": ""}])
 def test_r03_unknown_cannot_use_published_shortcut_or_blind_attack(monkeypatch, roster):
     item = combat(roster=roster)
     calls = detection(monkeypatch, provider, ("未知", "GeneralFight"))
@@ -87,19 +88,57 @@ def test_r03_known_generic_and_specialized_fields_are_valid(monkeypatch, answer)
     no_inputs(item.context)
 
 
-def test_r03_stale_specialized_roster_mismatch_is_rejected(monkeypatch):
+def _hp_result(text: str) -> FakeRecognitionResult:
+    best = FakeBestResult(box=(80, 20, 200, 40), text=text)
+    return FakeRecognitionResult(hit=True, best_result=best, filtered_results=[best])
+
+
+def test_r03_published_roster_confirms_via_hud_evidence_without_inputs(monkeypatch):
+    """名单+同帧 HUD 证据（闪避键+QTE色位⊆名单+严格血量）零输入确认身份。
+
+    像素身份需要出招帧而确认前禁止输入，首战必然死锁（run_091539/092554
+    实证），故名单场景改用组成级证据；模板识别全程不得被调用。
+    """
     item = combat(roster={"R": "Oblivion", "B": "", "Y": ""})
-    detection(monkeypatch, provider, ("回音", "GeneralFight"))
-    with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_mismatch"):
-        item.combat_check.detect_team(item.context, item)
+    item.context.recognition_map["检查血量"] = _hp_result("6496/8588")
+    calls = detection(monkeypatch, provider, ("终焉", "Oblivion"))
+    monkeypatch.setattr(provider, "detect_visible_team_colors", lambda *_: ["R"])
+    snapshot = item.combat_check.detect_team(item.context, item)
+    assert snapshot == TeamSnapshot.solo("Oblivion")
+    assert item.field_identity == "confirmed"
+    assert item.current_role_name == resolve_cls_label("Oblivion")
+    assert calls == []
     no_inputs(item.context)
 
 
-def test_r03_verified_published_specialized_roster_still_requires_current_pixels(monkeypatch):
+def test_r03_hud_hidden_is_transient_unknown_and_retryable(monkeypatch):
+    """闪避键不可见=过场遮 HUD，按 unknown 拒绝（宽限可重试）。"""
     item = combat(roster={"R": "Oblivion", "B": "", "Y": ""})
-    calls = detection(monkeypatch, provider, ("终焉", "Oblivion"))
-    assert item.combat_check.detect_team(item.context, item) == TeamSnapshot.solo("Oblivion")
-    assert len(calls) == 1
+    item.context.recognition_map.clear()
+    monkeypatch.setattr(provider, "detect_visible_team_colors", lambda *_: [])
+    with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_unknown"):
+        item.combat_check.detect_team(item.context, item)
+    assert item.field_identity == "unknown"
+    no_inputs(item.context)
+
+
+def test_r03_foreign_qte_color_rejected_immediately(monkeypatch):
+    """场上出现名单之外的色位=异队，mismatch 立即拒绝不给宽限。"""
+    item = combat(roster={"R": "Oblivion", "B": "", "Y": ""})
+    monkeypatch.setattr(provider, "detect_visible_team_colors", lambda *_: ["R", "B"])
+    with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_mismatch"):
+        item.combat_check.detect_team(item.context, item)
+    assert item.field_identity == "unknown"
+    no_inputs(item.context)
+
+
+def test_r03_hp_unreadable_is_transient_unknown(monkeypatch):
+    """HUD 在场但血量不可解析=证据不足，按 unknown 处理（可宽限重试）。"""
+    item = combat(roster={"R": "Oblivion", "B": "", "Y": ""})
+    monkeypatch.setattr(provider, "detect_visible_team_colors", lambda *_: ["R"])
+    with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_unknown"):
+        item.combat_check.detect_team(item.context, item)
+    assert item.field_identity == "unknown"
     no_inputs(item.context)
 
 
@@ -336,10 +375,10 @@ def test_r03_load_team_does_not_retry_mismatch(monkeypatch):
         return ("回音", "GeneralFight")
 
     monkeypatch.setattr(provider, "detect_current_role", mismatched)
-    monkeypatch.setattr(provider, "detect_visible_team_colors", lambda *_: [])
+    monkeypatch.setattr(provider, "detect_visible_team_colors", lambda *_: ["R", "B"])
     with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_mismatch"):
         item.load_team()
-    assert attempts["n"] == 1
+    assert attempts["n"] == 0
     no_inputs(item.context)
 
 
