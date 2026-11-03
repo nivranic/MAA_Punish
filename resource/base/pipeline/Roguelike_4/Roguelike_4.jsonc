@@ -1453,8 +1453,20 @@
             "[JumpBack]下一步",
             "[JumpBack]点击空白处关闭",
             "[JumpBack]确定终止_寒境曙光",
-            "[JumpBack]终止_寒境曙光"
+            "[JumpBack]终止_寒境曙光",
+            "寒境曙光_日耗尽停止"
         ]
+    },
+    "寒境曙光_日耗尽停止": {
+        "recognition": {
+            "type": "DirectHit"
+        },
+        "action": {
+            "type": "StopTask"
+        },
+        "next": [],
+        "on_error": [],
+        "enabled": true
     },
     "寒境曙光主界面": {
         "recognition": {

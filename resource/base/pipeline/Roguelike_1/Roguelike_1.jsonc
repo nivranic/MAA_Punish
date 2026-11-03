@@ -943,9 +943,19 @@
             }
         },
         "next": [
-            "确定",
-            "[JumpBack]返回"
+            "宣叙妄响_日耗尽停止"
         ]
+    },
+    "宣叙妄响_日耗尽停止": {
+        "recognition": {
+            "type": "DirectHit"
+        },
+        "action": {
+            "type": "StopTask"
+        },
+        "next": [],
+        "on_error": [],
+        "enabled": true
     },
     "一号位_名字_宣叙妄响": {
         "recognition": {

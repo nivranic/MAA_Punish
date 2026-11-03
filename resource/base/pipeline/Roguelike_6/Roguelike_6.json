@@ -64,9 +64,19 @@
             "type": "Click"
         },
         "next": [
-            "[JumpBack]返回",
-            "返回主菜单"
+            "雾夜镇魂曲_日耗尽停止"
         ]
+    },
+    "雾夜镇魂曲_日耗尽停止": {
+        "recognition": {
+            "type": "DirectHit"
+        },
+        "action": {
+            "type": "StopTask"
+        },
+        "next": [],
+        "on_error": [],
+        "enabled": true
     },
     "选择对手_雾夜镇魂曲": {
         "recognition": {

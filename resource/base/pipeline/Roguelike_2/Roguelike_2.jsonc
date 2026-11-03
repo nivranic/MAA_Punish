@@ -1907,8 +1907,19 @@
             }
         },
         "next": [
-            "下一步"
+            "厄愿潮声_日耗尽停止"
         ]
+    },
+    "厄愿潮声_日耗尽停止": {
+        "recognition": {
+            "type": "DirectHit"
+        },
+        "action": {
+            "type": "StopTask"
+        },
+        "next": [],
+        "on_error": [],
+        "enabled": true
     },
     "招募次数0_厄愿潮声_颜色": {
         "recognition": {
