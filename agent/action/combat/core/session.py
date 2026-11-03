@@ -552,11 +552,15 @@ class CombatTask:
             hp = self.combat_check.read_hp_from_frame(self.context, image)
             if hp.maximum is None:
                 # 技能特效/过场会暂时遮 HUD：同上，宽限期内不输入、不判负。
+                self.logger.info(
+                    "r3 tick hp 证据不可读: reason=%s text=%r", hp.reason, hp.text,
+                )
                 return self._defer_r3_identity_rejection(role)
             if self.team.is_solo():
                 # 单人队无切换可发生：在场连续性由游戏机制保证；模板再校验只会
                 # 死锁（确认前禁输入→无攻击帧→attack_template 永不命中）。
                 # HP 证据确认后直接放行战斗逻辑，由角色自身动作产生后续攻击帧。
+                self.logger.info("r3 tick 单人 HP 证据确认身份: text=%r", hp.text)
                 self.field_identity = "confirmed"
                 self.r3_identity_grace_until = None
                 return False

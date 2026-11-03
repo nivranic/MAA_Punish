@@ -244,8 +244,10 @@ class BaseCombatCheck(ABC):
             if any(color not in expected for color in visible):
                 raise Roguelike3IdentityError("r3_field_identity_mismatch")
         hp = self.read_hp_from_frame(context, image)
+        logger.info(
+            "r3 hud 证据: expected=%s hp=%s text=%r", sorted(expected), hp.reason, hp.text,
+        )
         if hp.maximum is None:
-            logger.info("r3 hud 证据不足: hp_reason=%s text=%r", hp.reason, hp.text)
             raise Roguelike3IdentityError("r3_field_identity_unknown")
 
     def detect_team(self, context: Context, combat: CombatTask) -> TeamSnapshot | None:

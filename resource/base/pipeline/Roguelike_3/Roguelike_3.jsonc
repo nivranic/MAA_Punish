@@ -1061,8 +1061,7 @@
             "type": "Click"
         },
         "next": [
-            "链路崩溃_reco",
-            "[JumpBack]放弃战斗_矩阵循生"
+            "矩阵循生_演算结束停止"
         ]
     },
     "放弃战斗_矩阵循生": {
@@ -1081,6 +1080,17 @@
         "action": {
             "type": "Click"
         }
+    },
+    "矩阵循生_演算结束停止": {
+        "recognition": {
+            "type": "DirectHit"
+        },
+        "action": {
+            "type": "StopTask"
+        },
+        "next": [],
+        "on_error": [],
+        "enabled": true
     },
     "战斗失败": {
         "recognition": {
@@ -1145,7 +1155,8 @@
             "[JumpBack]选择装备_矩阵循生",
             "[JumpBack]离开_寒境曙光",
             "[JumpBack]熵值通知_矩阵循生",
-            "[JumpBack]领取熵值奖励_矩阵循生"
+            "[JumpBack]领取熵值奖励_矩阵循生",
+            "肉鸽内部"
         ]
     },
     "熵值通知_矩阵循生": {
@@ -1324,7 +1335,8 @@
             "[JumpBack]领取_矩阵循生",
             "[JumpBack]确认装备_矩阵循生",
             "[JumpBack]选择装备_矩阵循生",
-            "[JumpBack]离开_寒境曙光"
+            "[JumpBack]离开_寒境曙光",
+            "肉鸽内部"
         ]
     },
     "事件完成_结束_矩阵循生": {
