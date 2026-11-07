@@ -443,10 +443,15 @@ class CombatActions:
             target = 2
         elif target < 1 or target > 8:
             return False
-        self._auto_dodge()
-        result = self.context.run_action(f"消球{target}")
-        self._invalidate_frame()
-        return result
+        try:
+            if self.context.tasker.stopping:
+                return False
+            self._auto_dodge()
+            if self.context.tasker.stopping:
+                return False
+            return self.context.run_action(f"消球{target}")
+        finally:
+            self._invalidate_frame()
 
     def ball_elimination_burst(self, target: int = 2, count: int = 5, interval: int = 0):
         """
@@ -518,20 +523,30 @@ class CombatActions:
         镜头锁定
         执行镜头锁定操作。
         """
-        self._auto_dodge()
-        result = self.context.run_action("锁定视角")
-        self._invalidate_frame()
-        return result
+        try:
+            if self.context.tasker.stopping:
+                return False
+            self._auto_dodge()
+            if self.context.tasker.stopping:
+                return False
+            return self.context.run_action("锁定视角")
+        finally:
+            self._invalidate_frame()
 
     def auxiliary_machine(self):
         """
         辅助机
         执行辅助机操作。
         """
-        self._auto_dodge()
-        result = self.context.run_action("辅助机")
-        self._invalidate_frame()
-        return result
+        try:
+            if self.context.tasker.stopping:
+                return False
+            self._auto_dodge()
+            if self.context.tasker.stopping:
+                return False
+            return self.context.run_action("辅助机")
+        finally:
+            self._invalidate_frame()
 
     def check_status(self, node: str, pipeline_override: dict | None = None, *, image: Any = None):
         """
