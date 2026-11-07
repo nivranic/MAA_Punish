@@ -1,4 +1,428 @@
 {
+    "矩阵循生_战斗就绪": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["战斗中", "矩阵循生_闪避操作图标"]}
+        },
+        "action": {"type": "DoNothing"},
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": ["战斗中"]
+    },
+    "矩阵循生_闪避操作图标": {
+        "recognition": {
+            "type": "TemplateMatch",
+            "param": {
+                "roi": [1000, 420, 250, 300],
+                "template": "战斗/闪避.png",
+                "green_mask": true,
+                "threshold": 0.6
+            }
+        }
+    },
+    "矩阵循生_场外终焉头像": {
+        "recognition": {
+            "type": "TemplateMatch",
+            "param": {
+                "roi": [1125, 110, 100, 100],
+                "template": "矩阵循生/场外终焉头像.png",
+                "threshold": 0.9
+            }
+        }
+    },
+    "矩阵循生_场外蓝位暗色标记": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["矩阵循生_场外蓝位暗色图案", "矩阵循生_场外蓝位暗色颜色"]}
+        },
+        "action": {"type": "DoNothing"}
+    },
+    "矩阵循生_场外蓝位暗色图案": {
+        "recognition": {
+            "type": "TemplateMatch",
+            "param": {"roi": [1140, 100, 100, 300], "template": "矩阵循生/场外蓝位暗色标记.png", "threshold": 0.9, "green_mask": true}
+        }
+    },
+    "矩阵循生_场外蓝位暗色颜色": {
+        "recognition": {
+            "type": "ColorMatch",
+            "param": {
+                "roi": "矩阵循生_场外蓝位暗色图案", "method": 40,
+                "lower": [100, 80, 15], "upper": [130, 255, 255], "count": 200
+            }
+        }
+    },
+    "矩阵循生_模拟演算完成": {
+        "recognition": {
+            "type": "Or",
+            "param": {"any_of": ["矩阵循生_完成提示标题", "矩阵循生_完成藏品标题"]}
+        },
+        "next": ["矩阵循生_完成结算分派"]
+    },
+    "矩阵循生_完成提示标题": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [480, 360, 320, 80], "expected": ["^模拟演算完成$", "^模擬演算完成$"]}
+        }
+    },
+    "矩阵循生_完成藏品标题": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [490, 60, 340, 80], "expected": ["^模拟演算完成$", "^模擬演算完成$"]}
+        }
+    },
+    "矩阵循生_完成结算分派": {
+        "recognition": {"type": "DirectHit"},
+        "timeout": 60000,
+        "next": [
+            "[JumpBack]矩阵循生_完成提示继续",
+            "[JumpBack]矩阵循生_完成结算下一页",
+            "矩阵循生_完成结算统计"
+        ]
+    },
+    "矩阵循生_完成提示继续": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["矩阵循生_完成提示标题", "点击继续"], "box_index": 1}
+        },
+        "action": {"type": "Click"},
+        "next": []
+    },
+    "矩阵循生_完成结算下一页": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [975, 610, 210, 90], "expected": "^下一[页頁]$"}
+        },
+        "action": {"type": "Click"},
+        "next": []
+    },
+    "矩阵循生_完成统计标题": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [85, 85, 200, 65], "expected": ["^数据统计$", "^數據統計$"]}
+        }
+    },
+    "矩阵循生_完成统计按钮": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [975, 610, 210, 90], "expected": "^完成$"}
+        }
+    },
+    "矩阵循生_完成结算统计": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["矩阵循生_完成统计标题", "矩阵循生_完成统计按钮"], "box_index": 1}
+        },
+        "action": {"type": "Click"},
+        "next": ["矩阵循生_完成结算停止"]
+    },
+    "矩阵循生_完成结算停止": {
+        "recognition": {"type": "And", "param": {"all_of": ["启程_矩阵循生"]}},
+        "action": {"type": "StopTask"},
+        "next": [],
+        "on_error": []
+    },
+    "矩阵循生_招募能量_列表": {
+        "recognition": {
+            "type": "Or",
+            "param": {"any_of": ["矩阵循生_招募能量_列表_整区", "矩阵循生_招募能量_列表_定位"]}
+        }
+    },
+    "矩阵循生_招募能量_列表_整区": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [410, 611, 63, 49],
+                "expected": "^\\d{1,2}/\\d{1,2}$",
+                "only_rec": true,
+                "color_filter": "矩阵循生_招募预算文字颜色"
+            }
+        }
+    },
+    "矩阵循生_招募能量_列表_定位": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [410, 611, 63, 49],
+                "expected": "^\\d{1,2}/\\d{1,2}$",
+                "only_rec": false,
+                "color_filter": "矩阵循生_招募预算文字颜色"
+            }
+        }
+    },
+    "矩阵循生_招募预算文字颜色": {
+        "recognition": {
+            "type": "ColorMatch",
+            "param": {
+                "method": 40,
+                "lower": [[0, 0, 0], [90, 100, 50]],
+                "upper": [[179, 255, 75], [130, 255, 255]],
+                "count": 1
+            }
+        }
+    },
+    "矩阵循生_招募能量_编队": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [103, 592, 78, 66],
+                "expected": "^\\d{1,2}/\\d{1,2}$",
+                "only_rec": true
+            }
+        }
+    },
+    "矩阵循生_角色招募消耗": {
+        "recognition": {
+            "type": "ColorMatch",
+            "param": {
+                "roi": [240, 80, 155, 32],
+                "method": 40,
+                "lower": [90, 90, 70],
+                "upper": [120, 255, 240],
+                "connected": true,
+                "count": 60
+            }
+        }
+    },
+    "矩阵循生_点选角色": {
+        "action": {"type": "Click"},
+        "post_wait_freezes": {"time": 200, "timeout": 1500},
+        "timeout": 1500,
+        "next": ["矩阵循生_选中角色"],
+        "on_error": []
+    },
+    "矩阵循生_选中角色": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["矩阵循生_选中左角", "矩阵循生_选中右角"]}
+        },
+        "next": [],
+        "on_error": []
+    },
+    "矩阵循生_选中左角": {
+        "recognition": {
+            "type": "ColorMatch",
+            "param": {
+                "roi": [128, 80, 13, 13],
+                "lower": [0, 0, 0],
+                "upper": [65, 65, 65],
+                "connected": false,
+                "count": 18
+            }
+        }
+    },
+    "矩阵循生_选中右角": {
+        "recognition": {
+            "type": "ColorMatch",
+            "param": {
+                "roi": [357, 80, 13, 13],
+                "lower": [0, 0, 0],
+                "upper": [65, 65, 65],
+                "connected": false,
+                "count": 18
+            }
+        }
+    },
+    "矩阵循生_编入角色": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["选择角色程序_矩阵循生"]}
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000,
+        "timeout": 3000,
+        "next": ["矩阵循生_编入后确认"],
+        "on_error": []
+    },
+    "矩阵循生_编入后确认": {
+        "recognition": {
+            "type": "Or",
+            "param": {"any_of": ["编队完成_矩阵循生", "矩阵循生_物归编队页"]}
+        },
+        "next": [],
+        "on_error": []
+    },
+    "矩阵循生_物归编队页": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["矩阵循生_编队标题", "矩阵循生_招募能量_编队", "确定编队_矩阵循生"]}
+        },
+        "next": [],
+        "on_error": []
+    },
+    "矩阵循生_编队标题": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [550, 45, 180, 75], "expected": ["编队", "編隊", "編成"]}
+        }
+    },
+    "矩阵循生_编队色位": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_编队标题", "矩阵循生_蓝位色标", "矩阵循生_红位色标", "矩阵循生_黄位色标"]}}
+    },
+    "矩阵循生_蓝位色标": {
+        "recognition": {"type": "ColorMatch", "param": {"roi": [145, 455, 45, 40], "method": 40, "lower": [90, 100, 100], "upper": [125, 255, 255], "count": 120}}
+    },
+    "矩阵循生_红位色标": {
+        "recognition": {"type": "ColorMatch", "param": {"roi": [534, 455, 45, 40], "method": 40, "lower": [[0, 100, 100], [170, 100, 100]], "upper": [[10, 255, 255], [180, 255, 255]], "count": 120}}
+    },
+    "矩阵循生_黄位色标": {
+        "recognition": {"type": "ColorMatch", "param": {"roi": [901, 455, 45, 40], "method": 40, "lower": [10, 100, 100], "upper": [35, 255, 255], "count": 120}}
+    },
+    "矩阵循生_蓝位空槽": {
+        "recognition": {"type": "TemplateMatch", "param": {"roi": [215, 330, 90, 90], "template": "矩阵循生/编队空位.png"}}
+    },
+    "矩阵循生_红位空槽": {
+        "recognition": {"type": "TemplateMatch", "param": {"roi": [600, 330, 90, 90], "template": "矩阵循生/编队空位.png"}}
+    },
+    "矩阵循生_黄位空槽": {
+        "recognition": {"type": "TemplateMatch", "param": {"roi": [985, 330, 90, 90], "template": "矩阵循生/编队空位.png"}}
+    },
+    "矩阵循生_红位首发": {
+        "recognition": {"type": "OCR", "param": {"roi": [663, 160, 110, 54], "expected": ["首发", "首發", "初期配置", "先発"]}}
+    },
+    "矩阵循生_打开蓝位": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_编队色位", "矩阵循生_蓝位空槽"], "box_index": 1}},
+        "action": {"type": "Click"},
+        "post_wait_freezes": {"time": 200, "timeout": 1500},
+        "timeout": 3000,
+        "next": ["矩阵循生_招募列表就绪"],
+        "on_error": []
+    },
+    "矩阵循生_打开红位": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_编队色位", "矩阵循生_红位空槽"], "box_index": 1}},
+        "action": {"type": "Click"},
+        "post_wait_freezes": {"time": 200, "timeout": 1500},
+        "timeout": 3000,
+        "next": ["矩阵循生_招募列表就绪"],
+        "on_error": []
+    },
+    "矩阵循生_打开黄位": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_编队色位", "矩阵循生_黄位空槽"], "box_index": 1}},
+        "action": {"type": "Click"},
+        "post_wait_freezes": {"time": 200, "timeout": 1500},
+        "timeout": 3000,
+        "next": ["矩阵循生_招募列表就绪"],
+        "on_error": []
+    },
+    "矩阵循生_招募列表就绪": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_招募能量_列表", "确认进入选人界面", "矩阵循生_招募操作文字"]}},
+        "next": [],
+        "on_error": []
+    },
+    "矩阵循生_招募操作文字": {
+        "recognition": {"type": "Or", "param": {"any_of": ["选择角色程序_矩阵循生", "点击下阵", "矩阵循生_替换文字"]}}
+    },
+    "矩阵循生_替换文字": {
+        "recognition": {"type": "OCR", "param": {"roi": [983, 464, 276, 244], "expected": ["替换", "替換"]}}
+    },
+    "矩阵循生_返回编队": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_招募列表就绪"]}},
+        "action": {"type": "Click", "param": {"target": [98, 36]}},
+        "post_wait_freezes": {"time": 200, "timeout": 1500},
+        "timeout": 3000,
+        "next": ["矩阵循生_编队已返回"],
+        "on_error": []
+    },
+    "矩阵循生_编队已返回": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_编队色位", "矩阵循生_招募能量_编队"]}},
+        "next": [],
+        "on_error": []
+    },
+    "矩阵循生_红位队长": {
+        "recognition": {"type": "OCR", "param": {"roi": [698, 468, 86, 52], "expected": ["队长", "隊長", "リーダー"]}}
+    },
+    "矩阵循生_红位队长首发": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_编队色位", "矩阵循生_红位队长", "矩阵循生_红位首发"]}}
+    },
+    "矩阵循生_打开队伍调整": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_编队色位", "编队完成_矩阵循生"], "box_index": 1}},
+        "action": {"type": "Click"},
+        "post_wait_freezes": {"time": 200, "timeout": 1500},
+        "timeout": 3000,
+        "next": ["矩阵循生_调整页就绪"],
+        "on_error": []
+    },
+    "矩阵循生_调整标题": {
+        "recognition": {"type": "OCR", "param": {"roi": [185, 58, 260, 90], "expected": ["队伍调整", "隊伍調整"]}}
+    },
+    "矩阵循生_调整队长标题": {
+        "recognition": {"type": "OCR", "param": {"roi": [925, 170, 75, 45], "expected": ["队长", "隊長"]}}
+    },
+    "矩阵循生_调整首发标题": {
+        "recognition": {"type": "OCR", "param": {"roi": [1048, 170, 75, 45], "expected": ["首发", "首發"]}}
+    },
+    "矩阵循生_调整红行": {
+        "recognition": {"type": "ColorMatch", "param": {"roi": [520, 360, 125, 55], "method": 40, "lower": [[0, 75, 80], [170, 75, 80]], "upper": [[10, 255, 255], [180, 255, 255]], "count": 200}}
+    },
+    "矩阵循生_调整页就绪": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_调整标题", "矩阵循生_调整队长标题", "矩阵循生_调整首发标题", "矩阵循生_调整红行"]}},
+        "next": [],
+        "on_error": []
+    },
+    "矩阵循生_红位队长勾选": {
+        "recognition": {"type": "ColorMatch", "param": {"roi": [929, 360, 55, 52], "method": 40, "lower": [100, 85, 80], "upper": [120, 255, 255], "count": 100}}
+    },
+    "矩阵循生_红位首发勾选": {
+        "recognition": {"type": "ColorMatch", "param": {"roi": [1053, 360, 55, 52], "method": 40, "lower": [100, 85, 80], "upper": [120, 255, 255], "count": 100}}
+    },
+    "矩阵循生_红位队长未勾选": {
+        "recognition": {"type": "TemplateMatch", "param": {"roi": [929, 360, 55, 52], "template": "矩阵循生/调整未勾选.png", "threshold": 0.9}}
+    },
+    "矩阵循生_红位首发未勾选": {
+        "recognition": {"type": "TemplateMatch", "param": {"roi": [1053, 360, 55, 52], "template": "矩阵循生/调整未勾选.png", "threshold": 0.9}}
+    },
+    "矩阵循生_红位队长已勾选": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_调整页就绪", "矩阵循生_红位队长勾选"]}},
+        "next": [],
+        "on_error": []
+    },
+    "矩阵循生_红位首发已勾选": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_调整页就绪", "矩阵循生_红位首发勾选"]}},
+        "next": [],
+        "on_error": []
+    },
+    "矩阵循生_设置红位队长": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_调整页就绪", "矩阵循生_红位队长未勾选"], "box_index": 1}},
+        "action": {"type": "Click"},
+        "post_wait_freezes": {"time": 200, "timeout": 1500},
+        "timeout": 3000,
+        "next": ["矩阵循生_红位队长已勾选"],
+        "on_error": []
+    },
+    "矩阵循生_设置红位首发": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_调整页就绪", "矩阵循生_红位首发未勾选"], "box_index": 1}},
+        "action": {"type": "Click"},
+        "post_wait_freezes": {"time": 200, "timeout": 1500},
+        "timeout": 3000,
+        "next": ["矩阵循生_红位首发已勾选"],
+        "on_error": []
+    },
+    "矩阵循生_调整保存": {
+        "recognition": {"type": "OCR", "param": {"roi": [847, 594, 230, 80], "expected": ["保存", "セーブ"]}}
+    },
+    "矩阵循生_保存队伍调整": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_红位队长已勾选", "矩阵循生_红位首发已勾选", "矩阵循生_调整保存"], "box_index": 2}},
+        "action": {"type": "Click"},
+        "post_wait_freezes": {"time": 200, "timeout": 1500},
+        "timeout": 3000,
+        "next": ["矩阵循生_编队已返回"],
+        "on_error": []
+    },
+    "矩阵循生_物归编队确认": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["矩阵循生_物归编队页"]}
+        },
+        "next": ["确定编队_矩阵循生"],
+        "on_error": []
+    },
+    "矩阵循生_继续招募": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_招募列表就绪"]}},
+        "action": {"type": "DoNothing"},
+        "next": ["选择角色程序_矩阵循生"],
+        "on_error": []
+    },
     "矩阵循生": {
         "timeout": 60000,
         "action": {
@@ -6,6 +430,9 @@
             "param": {
                 "custom_action": "PPOverride",
                 "custom_action_param": {
+                    "战斗中": {
+                        "action": {"param": {"custom_action": "R03CombatRunner"}}
+                    },
                     "选择模式_矩阵循生": {
                         "enabled": true
                     },
@@ -26,7 +453,11 @@
         },
         "next": [
             "[JumpBack]覆盖布局菜单",
+            "矩阵循生_模拟演算完成",
             "肉鸽内部",
+            "厄运连锁_矩阵循生",
+            "隐秘工坊_矩阵循生",
+            "[JumpBack]矩阵循生_继续招募",
             "迭变投影_矩阵循生",
             "[JumpBack]转场_矩阵循生",
             "[JumpBack]编队完成_矩阵循生",
@@ -461,6 +892,15 @@
                 ]
             }
         },
+        "action": {
+            "type": "Custom",
+            "param": {
+                "custom_action": "PPOverride",
+                "custom_action_param": {
+                    "战斗队伍色位": {"attach": {"R": "", "B": "", "Y": ""}}
+                }
+            }
+        },
         "post_delay": 1000,
         "next": [
             "矩阵循生"
@@ -533,9 +973,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    1103,
+                    1003,
                     627,
-                    63,
+                    163,
                     55
                 ],
                 "expected": "藏品"
@@ -556,9 +996,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    1103,
+                    1003,
                     627,
-                    63,
+                    163,
                     55
                 ],
                 "expected": "藏品"
@@ -601,10 +1041,10 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    1041,
-                    617,
-                    116,
-                    68
+                    983,
+                    464,
+                    276,
+                    244
                 ],
                 "expected": "编入"
             }
@@ -615,7 +1055,7 @@
                 "custom_action": "RoleSelection",
                 "custom_action_param": {
                     "selection_mode": "roguelike_3",
-                    "need_multi": false
+                    "need_multi": true
                 }
             }
         },
@@ -802,10 +1242,25 @@
                 "green_mask": true
             }
         },
+        "action": {
+            "type": "Click"
+        },
+        "timeout": 300000,
+        "rate_limit": 0,
         "next": [
-            "确认结束购物_矩阵循生",
-            "[JumpBack]终止_矩阵循生",
-            "[JumpBack]返回"
+            "厄运连锁_矩阵循生",
+            "矩阵循生_模拟演算完成",
+            "战斗完成_矩阵循生",
+            "战斗失败",
+            "[JumpBack]放弃战斗_矩阵循生",
+            "[JumpBack]算力单元不足",
+            "[JumpBack]重启_寒境曙光",
+            "[JumpBack]跳过战斗对话",
+            "[JumpBack]矩阵循生_战斗就绪",
+            "[JumpBack]出击_矩阵循生",
+            "[JumpBack]进入战斗_矩阵循生",
+            "[JumpBack]载入中",
+            "[JumpBack]通用处理-未下载弹窗-角色皮肤没下载-检测层"
         ]
     },
     "终止_矩阵循生": {
@@ -1024,13 +1479,14 @@
         "timeout": 300000,
         "rate_limit": 0,
         "next": [
+            "矩阵循生_模拟演算完成",
             "战斗完成_矩阵循生",
             "战斗失败",
             "[JumpBack]放弃战斗_矩阵循生",
             "[JumpBack]算力单元不足",
             "[JumpBack]重启_寒境曙光",
             "[JumpBack]跳过战斗对话",
-            "[JumpBack]战斗中",
+            "[JumpBack]矩阵循生_战斗就绪",
             "[JumpBack]出击_矩阵循生",
             "[JumpBack]进入战斗_矩阵循生",
             "[JumpBack]载入中",
@@ -1156,6 +1612,7 @@
             "[JumpBack]离开_寒境曙光",
             "[JumpBack]熵值通知_矩阵循生",
             "[JumpBack]领取熵值奖励_矩阵循生",
+            "[JumpBack]领取藏品",
             "肉鸽内部"
         ]
     },
@@ -1320,9 +1777,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    1103,
+                    1003,
                     627,
-                    63,
+                    163,
                     55
                 ],
                 "expected": "藏品"
@@ -1344,9 +1801,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    1103,
+                    1003,
                     627,
-                    63,
+                    163,
                     55
                 ],
                 "expected": "藏品"
@@ -1367,9 +1824,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    1103,
+                    1003,
                     627,
-                    63,
+                    163,
                     55
                 ],
                 "expected": "藏品"
@@ -1381,9 +1838,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    1103,
+                    1003,
                     627,
-                    63,
+                    163,
                     55
                 ],
                 "expected": "藏品"
@@ -1674,13 +2131,14 @@
                 "custom_action": "RoleSelection",
                 "custom_action_param": {
                     "selection_mode": "roguelike_3",
-                    "need_multi": false
+                    "need_multi": true
                 }
             }
         },
         "attach": {
             "max_try": 5
-        }
+        },
+        "next": ["编队完成_矩阵循生", "矩阵循生_物归编队确认"]
     },
     "链路崩溃_reco": {
         "recognition": {
@@ -1724,6 +2182,7 @@
             }
         },
         "next": [
+            "矩阵循生_物归编队确认",
             "开始演算",
             "转场_矩阵循生"
         ]

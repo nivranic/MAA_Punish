@@ -10,6 +10,7 @@ import pytest
 from maa.pipeline import JOr
 from maa.resource import Resource
 from maa.tasker import Tasker
+from test_support.device_evidence import evidence_path
 
 from test_r03_partner_event_title_native import (
     EVENTS, ROOT, RecognitionOnlyController, saved_title,
@@ -24,7 +25,7 @@ HANDOFF = "贴心搭档_战斗承接_矩阵循生"
 def saved_party(omit=None):
     image = np.zeros((720, 1280, 3), dtype=np.uint8)
     for key, row in PROVENANCE["crops"].items():
-        raw = (FIXTURES / row["file"]).read_bytes()
+        raw = evidence_path("r03_partner_team_handoff", row["file"]).read_bytes()
         assert hashlib.sha256(raw).hexdigest() == row["sha256"]
         crop = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
         x, y, width, height = row["rect"]

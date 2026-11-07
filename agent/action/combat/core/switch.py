@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Any
 from action.combat.capture import capture_frame
 from action.combat.core.role_detect import is_cls_on_field, is_switch_arrived
 from action.combat.timing import active_delay
+from action.combat.reactive_dodge import auto_dodge
 
 if TYPE_CHECKING:
     from maa.context import Context
@@ -82,11 +83,17 @@ def blind_attack_click(
     context: Context, *, attack_count: int = 1, combat: CombatTask | None = None
 ) -> None:
     """识别等待期间盲发普攻/闪避，走 Pipeline 节点（Win32 为 ClickKey）。"""
+    if context.tasker.stopping or (
+        combat is not None and combat.is_observation_protected()
+    ):
+        return
     image = capture_frame(context, combat)
-    need_dodge = context.run_recognition("自动闪避", image)
-    if need_dodge and need_dodge.hit:
-        context.run_action("闪避")
+    auto_dodge(context, image, combat=combat, logger=logger)
     for _ in range(max(1, attack_count)):
+        if context.tasker.stopping or (
+            combat is not None and combat.is_observation_protected()
+        ):
+            return
         context.run_action("攻击")
 
 
@@ -165,6 +172,11 @@ def attempt_switch_to_color(
     循环内不再重复识别 QTE 位置；仅截屏验证是否已切到目标角色。
     """
     target = color.upper()
+    # R03 publishes confirmed strategies. A dedicated attacker still on field
+    # cannot satisfy a GeneralFight support target before the QTE is clicked.
+    arrival_kwargs = {"strict": True} if (
+        combat is not None and combat.roguelike3_identity_required
+    ) else {}
     deadline = time.monotonic() + verify_timeout
     logger.info(
         "切人尝试: 色位=%s cls=%s 超时=%.1fs",
@@ -174,7 +186,7 @@ def attempt_switch_to_color(
     )
 
     image = capture_frame(context, combat)
-    if is_switch_arrived(context, image, target_cls):
+    if is_switch_arrived(context, image, target_cls, **arrival_kwargs):
         logger.info("切人到位: %s (%s)", target, target_cls)
         return True
 
@@ -195,7 +207,7 @@ def attempt_switch_to_color(
         context.tasker.controller.post_click(qte_x, qte_y).wait()
 
         image = capture_frame(context, combat)
-        if is_switch_arrived(context, image, target_cls):
+        if is_switch_arrived(context, image, target_cls, **arrival_kwargs):
             logger.info("切人到位: %s (%s)", target, target_cls)
             return True
 

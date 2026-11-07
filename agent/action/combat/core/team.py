@@ -133,9 +133,19 @@ def roster_from_role_selection(
     }
 
 
-def publish_team_roster(context: Context, roster: dict[str, str]) -> None:
+def publish_team_roster(
+    context: Context, roster: dict[str, str], *, role_names: dict[str, str] | None = None,
+) -> None:
     """RoleSelection 完成后写入 Pipeline attach，供战斗内读取。"""
-    attach = {color: str(roster.get(color, "")).strip() for color in TEAM_COLORS}
+    attach: dict[str, Any] = {color: str(roster.get(color, "")).strip() for color in TEAM_COLORS}
+    # A later publication without confirmed names must not retain older names,
+    # including when the new team happens to use the same strategy classes.
+    if role_names is not None:
+        attach["role_names"] = dict(role_names)
+    else:
+        current = (context.get_node_data(TEAM_ROSTER_NODE) or {}).get("attach")
+        if isinstance(current, dict) and "role_names" in current:
+            attach["role_names"] = {}
     context.override_pipeline({TEAM_ROSTER_NODE: {"attach": attach}})
     #logger.info("写入 %s: %s", TEAM_ROSTER_NODE, attach)
 
@@ -157,6 +167,30 @@ def load_team_roster_from_context(context: Context) -> dict[str, str] | None:
     if not any(roster.values()):
         return None
     return roster
+
+
+def load_confirmed_role_names(context: Context, roster: dict[str, str]) -> dict[str, str] | None:
+    """Read names only when their published classes still match the current snapshot."""
+    node = context.get_node_data(TEAM_ROSTER_NODE) or {}
+    attach = node.get("attach")
+    if not isinstance(attach, dict):
+        return None
+    names = attach.get("role_names")
+    if not isinstance(names, dict) or set(names) != set(TEAM_COLORS):
+        return None
+    confirmed = {}
+    for color in TEAM_COLORS:
+        if attach.get(color, "") != roster.get(color, "") or not isinstance(names[color], str):
+            return None
+        name = names[color].replace("[试用]", "").strip()
+        cls_name = roster.get(color, "")
+        if cls_name:
+            if not name or ROLE_ACTIONS.get(name, {}).get("cls_name") != cls_name:
+                return None
+        elif name:
+            return None
+        confirmed[color] = name
+    return confirmed
 
 
 @dataclass

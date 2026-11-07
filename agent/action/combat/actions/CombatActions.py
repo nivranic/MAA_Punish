@@ -38,6 +38,7 @@ from typing import Any
 from action.combat.config.LoadSetting import ROLE_ACTIONS
 from action.combat.capture import capture_frame
 from action.combat.input_control import CombatInputError
+from action.combat.reactive_dodge import auto_dodge
 from action.combat.actions.signal_ball_layout import (
     SIGNAL_BALL_SLOT_COUNT,
     signal_ball_slot_centers,
@@ -178,18 +179,20 @@ class CombatActions:
         """
         自动闪避
         检测到敌方攻击预警时执行闪避操作。
-        :param image: 可选，调用方已截屏时传入以避免重复截图
+        会话预检可能耗时，角色动作使用新帧；独立调用可复用传入帧。
         """
-        if image is None:
+        combat = self._combat_task()
+        if self.context.tasker.stopping or (
+            combat is not None and combat.is_observation_protected()
+        ):
+            return False
+        if combat is not None:
+            image = self._get_image(fresh=True)
+        elif image is None:
             image = self._get_image()
-        need_dodge = self.context.run_recognition("自动闪避", image)
-        if need_dodge and need_dodge.hit:
-            time.sleep(0.1)
-            self.context.run_action("闪避")
-            self._invalidate_frame()
-            self.logger.info("自动闪避")
-            return True
-        return False
+        return auto_dodge(
+            self.context, image, combat=combat, logger=self.logger,
+        )
 
     def down_attack(self, contact: int = 0):
         """按下攻击键（长按普攻起始）。"""
@@ -216,8 +219,9 @@ class CombatActions:
         攻击
         执行一次攻击操作。
         """
-        image = self._get_image()
+        image = None
         if not self.skip_combat_gate:
+            image = self._get_image()
             result = self.context.run_recognition("战斗中", image)
             if not (result and result.hit):
                 return False
@@ -252,8 +256,9 @@ class CombatActions:
         :param interval: 每次攻击间隔（毫秒），默认0（尽可能短）
         :return: True
         """
-        image = self._get_image()
+        image = None
         if not self.skip_combat_gate:
+            image = self._get_image()
             result = self.context.run_recognition("战斗中", image)
             if not (result and result.hit):
                 return False
@@ -422,7 +427,7 @@ class CombatActions:
             target = 2
         elif target < 1 or target > 8:
             return False
-        self._auto_dodge(self._get_image())
+        self._auto_dodge()
         result = self.context.run_action(f"消球{target}")
         self._invalidate_frame()
         return result
@@ -441,7 +446,7 @@ class CombatActions:
             target = 2
         elif target < 1 or target > 8:
             return False
-        self._auto_dodge(self._get_image())
+        self._auto_dodge()
         for _ in range(max(1, count)):
             self.context.run_action(f"消球{target}")
             if interval > 0:
@@ -458,7 +463,7 @@ class CombatActions:
         """
         if target not in (1, 2):
             raise ValueError("target 参数必须为 1 或 2")
-        self._auto_dodge(self._get_image())
+        self._auto_dodge()
         result = self.context.run_action(f"qte{target}")
         self._invalidate_frame()
         return result
@@ -497,7 +502,7 @@ class CombatActions:
         镜头锁定
         执行镜头锁定操作。
         """
-        self._auto_dodge(self._get_image())
+        self._auto_dodge()
         result = self.context.run_action("锁定视角")
         self._invalidate_frame()
         return result
@@ -507,7 +512,7 @@ class CombatActions:
         辅助机
         执行辅助机操作。
         """
-        self._auto_dodge(self._get_image())
+        self._auto_dodge()
         result = self.context.run_action("辅助机")
         self._invalidate_frame()
         return result

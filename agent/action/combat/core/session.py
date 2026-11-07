@@ -54,8 +54,13 @@ from action.combat.core.role_factory import (
     create_role,
     require_inverse_crown_identity,
 )
-from action.combat.core.switch import attempt_switch_to_color, blind_attack_click, CHAR_CHECK_ATTACK_COUNT
-from action.combat.core.team import GENERIC_CLS_NAME, TEAM_COLORS, TeamSnapshot
+from action.combat.core.switch import (
+    attempt_switch_to_color, blind_attack_click, CHAR_CHECK_ATTACK_COUNT,
+    detect_visible_team_colors,
+)
+from action.combat.core.team import (
+    GENERIC_CLS_NAME, TEAM_COLORS, TeamSnapshot, load_confirmed_role_names,
+)
 from action.combat.timing import active_delay
 from action.combat.config.LoadSetting import ROLE_ACTIONS
 from logger_component import LoggerComponent
@@ -313,7 +318,10 @@ class CombatTask:
 
     def is_observation_protected(self) -> bool:
         """Specialized identity/exit/wait checks may not add attack or dodge."""
-        return self.inverse_crown_profile.enabled
+        if self.inverse_crown_profile.enabled:
+            return True
+        role = self.get_current_role()
+        return role is not None and role.is_input_protected()
 
     def _require_field_identity(
         self, role: BaseRole | None, display_name: str, detected_cls: str
@@ -531,6 +539,63 @@ class CombatTask:
                     prefer.append(cls_name)
         return prefer
 
+    def _reconcile_r3_field_color(
+        self, role: BaseRole, display_name: str, detected_cls: str, image: Any,
+    ) -> bool:
+        """Select an existing, uniquely identified field role without rewriting its roster."""
+        if (
+            self.team is None
+            or role is not self.roles.get(self.team.current.upper())
+        ):
+            return False
+        matches = [color for color in self.team.filled_colors()
+                   if self.team.cls_at(color) == detected_cls]
+        if len(matches) != 1 or matches[0] == self.team.current.upper():
+            return False
+        target = matches[0]
+        names = None
+        if detected_cls == GENERIC_CLS_NAME:
+            names = load_confirmed_role_names(
+                self.context, {color: self.team.cls_at(color) for color in TEAM_COLORS},
+            )
+            if names is None or ROLE_ACTIONS[names[target]].get("name") != display_name:
+                return False
+        visible = set(detect_visible_team_colors(self.context, image))
+        if role.color.upper() == "B" and "B" not in visible:
+            # The observed dim bench badge is below the QTE detector threshold.
+            # This read-only evidence is local to R03 field reconciliation;
+            # switch permission still requires the original QTE detector.
+            marker = self.context.run_recognition("矩阵循生_场外蓝位暗色标记", image)
+            if marker and marker.hit:
+                visible.add("B")
+        if (
+            target in visible or role.color.upper() not in visible
+            or not visible.issubset(self.team.filled_colors())
+        ):
+            # The real 1978-HP frame has a blue corner badge but the same
+            # Oblivion bench portrait as the confirmed red-badge frame. Only
+            # this fully named pair may use the independent portrait evidence;
+            # this does not authorize a switch or rewrite the published roster.
+            if not (
+                role.color.upper() == "R" and target == "B" and visible == {"B"}
+                and names == {"R": "露娜·终焉", "B": "薇拉·瑰丽", "Y": ""}
+            ):
+                return False
+            portrait = self.context.run_recognition("矩阵循生_场外终焉头像", image)
+            if not (portrait and portrait.hit):
+                return False
+        target_role = self.roles.get(target)
+        self._require_roguelike3_role_identity(target_role, display_name, detected_cls)
+        previous = self.team.current
+        self.team.current = target
+        self.current_role_name = display_name
+        self.current_field_since = time.monotonic()
+        self._last_field_cls = detected_cls
+        self.r3_identity_grace_until = None
+        target_role.reset_state()
+        self.logger.info("R03 同帧场上色位校正: %s -> %s (%s)", previous, target, detected_cls)
+        return True
+
     def refresh_field_role(self, role: BaseRole) -> bool:
         """
         每 tick 校验当前角色 attack_template；失配则重识别并更新 team.current。
@@ -572,6 +637,13 @@ class CombatTask:
                 # （真机实证：连续确认 10 拍后单帧全 miss）。同一宽限预算内跳过输入，
                 # 预算耗尽仍未知才判负——真正的场外未知角色仍 fail-closed 拒绝。
                 return self._defer_r3_identity_rejection(role)
+            if (
+                hp.alive and detected_cls != role.requested_cls_name
+                and self._reconcile_r3_field_color(role, display_name, detected_cls, image)
+            ):
+                # The previous role must not execute on this observation. The
+                # next tick independently validates the existing target role.
+                return True
             self._require_roguelike3_role_identity(role, display_name, detected_cls)
             self.r3_identity_grace_until = None
             self._last_field_cls = detected_cls

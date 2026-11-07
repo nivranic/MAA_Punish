@@ -14,6 +14,8 @@ from action.basics.AuditPurchaseReconcile import AuditPurchaseReconcile
 from action.basics.ScopedRecovery import ScopedRecovery
 
 from action.combat.entry.runner import CombatRunner
+from action.combat.entry.roguelike3_resume import R03CombatRunner
+from action.combat.reactive_dodge import DodgeAfterWarning
 
 from recognition.exclusives.CheckResolution import CheckResolution
 from recognition.exclusives.AutoCounter import AutoCounter
@@ -107,6 +109,16 @@ class Agent_NextStageRecognition(NextStageRecognition):
 
 @AgentServer.custom_action("RoleSelection")
 class Agent_RoleSelection(RoleSelection):
+    pass
+
+
+@AgentServer.custom_action("R03CombatRunner")
+class Agent_R03CombatRunner(R03CombatRunner):
+    pass
+
+
+@AgentServer.custom_action("DodgeAfterWarning")
+class Agent_DodgeAfterWarning(DodgeAfterWarning):
     pass
 
 

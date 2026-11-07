@@ -17,6 +17,7 @@ from maa.controller import CustomController
 from maa.pipeline import JOr
 from maa.resource import Resource
 from maa.tasker import Tasker
+from test_support.device_evidence import evidence_path
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -37,7 +38,7 @@ class RecognitionOnlyController(CustomController):
 
 def saved_title(name):
     row = PROVENANCE["crops"][name]
-    raw = (FIXTURES / row["file"]).read_bytes()
+    raw = evidence_path("r03_partner_event_title", row["file"]).read_bytes()
     assert hashlib.sha256(raw).hexdigest() == row["sha256"]
     crop = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
     x, y, width, height = row["rect"]

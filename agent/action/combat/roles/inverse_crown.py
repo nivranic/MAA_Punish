@@ -328,6 +328,13 @@ class InverseCrown(BaseRole):
         self._post_ult_qte_used = False
         self._stationary_deadline = None
 
+    def is_input_protected(self) -> bool:
+        # Special-ball holding, its required attack settlement, and ultimate
+        # charging/casting must not receive automatic dodge or observation spam.
+        return self.inverse_crown_profile.enabled or self.phase in {
+            "special_press", "special_attack", "skill",
+        }
+
     def do_perform(self) -> None:
         if self.inverse_crown_profile.enabled:
             self._perform_stationary()

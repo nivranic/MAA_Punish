@@ -1,7 +1,7 @@
 """Real screenshot/ROI replay through SDK 5.14.2 and production And/guard.
 
 No ADB, OS input or game is involved. Only an in-memory controller can click.
-Public fixtures exclude the account/header. Optional raw pages remain ignored.
+All real crops and optional raw pages remain ignored local evidence.
 """
 
 from copy import deepcopy
@@ -25,6 +25,7 @@ from action.basics import AuditPurchase as purchase
 from recognition.exclusives import PurchaseObservation as observation
 from test_audit_purchase import Fixture
 from test_audit_purchase_native import MemoryController
+from test_support.device_evidence import evidence_path
 from test_support.native_lifecycle import stop_and_wait_idle
 
 
@@ -52,7 +53,7 @@ def page(case, kind="P1", *, raw=False):
         return cv2.imdecode(np.frombuffer(raw_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
     image = np.zeros(record["shape"], dtype=np.uint8)
     for key, (x, y, w, h) in PROVENANCE["rects"].items():
-        crop_bytes = (FIXTURES / record["crops"][key]["filename"]).read_bytes()
+        crop_bytes = evidence_path("purchase_observation", record["crops"][key]["filename"]).read_bytes()
         assert hashlib.sha256(crop_bytes).hexdigest() == record["crops"][key]["sha256"]
         crop = cv2.imdecode(np.frombuffer(crop_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
         assert crop.shape == (h, w, 3)
@@ -247,7 +248,7 @@ def test_actual_d14_nearstart_month_selector_box_is_inside_weapon_card(tmp_path,
     else:
         image = np.zeros((720, 1280, 3), dtype=np.uint8)
         x, y, w, h = record["crop"]
-        image[y:y+h, x:x+w] = cv2.imdecode(np.fromfile(FIXTURES / record["filename"], dtype=np.uint8), cv2.IMREAD_COLOR)
+        image[y:y+h, x:x+w] = cv2.imdecode(np.fromfile(evidence_path("purchase_observation", record["filename"]), dtype=np.uint8), cv2.IMREAD_COLOR)
     resource = Resource()
     assert resource.post_bundle(bundle).wait().succeeded
     assert resource.post_bundle(ROOT / "resource/base").wait().succeeded

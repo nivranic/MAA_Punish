@@ -32,10 +32,11 @@ attach / custom_action_param 可选 weight_mode：
 import time
 from maa.context import Context
 from maa.custom_action import CustomAction
-from maa.define import TemplateMatchResult, OCRResult, ColorMatchResult
+from maa.define import AndRecognitionResult, TemplateMatchResult, OCRResult, ColorMatchResult
 import datetime
 import json
 import os
+import re
 from pathlib import Path
 import numpy
 
@@ -46,9 +47,11 @@ from action.combat.core.team import (
     TEAM_ROSTER_NODE,
     load_team_roster_from_context,
     publish_team_roster,
+    role_display_name_to_cls,
     roster_from_role_selection,
 )
 from action.basics import role_cache_policy as cache_policy
+from action.basics.roguelike3_recruitment import R03Recruitment
 from logger_component import LoggerComponent
 
 
@@ -85,8 +88,8 @@ _SELECTION_MODE_TABLE: dict[str, dict] = {
     },
 }
 
-# 肉鸽3（矩阵循生）内建角色列表：不扫描、不查缓存，直接用此列表构建角色数据
-_ROGUELIKE3_ROLE_NAMES = ["终焉", "超刻", "深痕", "深谣", "囚影", "启明", "誓焰"]
+# 肉鸽3 已适配矩阵头像的候选；是否可招募仍以当前页面为准。
+_ROGUELIKE3_ROLE_NAMES = ["终焉", "超刻", "深痕", "深谣", "深红囚影", "启明", "誓焰"]
 
 
 class RoleSelection(CustomAction):
@@ -138,7 +141,7 @@ class RoleSelection(CustomAction):
 
     @classmethod
     def _build_roguelike3_role_data(cls) -> dict:
-        """肉鸽3：从内建角色列表构建角色数据，不扫描、不查缓存。"""
+        """肉鸽3：没有正式缓存时使用明确标记的试玩候选。"""
         role: dict = {}
         for short_name in _ROGUELIKE3_ROLE_NAMES:
             for full_name, action in ROLE_ACTIONS.items():
@@ -146,7 +149,7 @@ class RoleSelection(CustomAction):
                     metadata = action.get("metadata", {})
                     if not isinstance(metadata, dict):
                         metadata = {}
-                    role[full_name] = {
+                    role[full_name + "[试用]"] = {
                         **cls._cache_entry_from_metadata(metadata),
                         "power": 0,
                     }
@@ -606,10 +609,18 @@ class RoleSelection(CustomAction):
             role = self._load_cache(update_frequency)
             if role:
                 self.logger.info(f"读取文件缓存成功 (update_frequency={update_frequency})")
-        # 肉鸽3：使用内建角色列表，不扫描、不查缓存
+        # 成员缓存只提供正式角色候选，实际版本和消耗仍在招募页核验。
         elif roguelike_equivalent == 3:
-            role = self._build_roguelike3_role_data()
-            self.logger.info(f"肉鸽3内建角色列表, 共 {len(role)} 个")
+            cached_roles = self._load_cache(update_frequency) or {}
+            role = {
+                name: info for name, info in cached_roles.items()
+                if ROLE_ACTIONS.get(name, {}).get("name") in _ROGUELIKE3_ROLE_NAMES
+            }
+            if role:
+                self.logger.info(f"肉鸽3读取正式角色缓存, 共 {len(role)} 个")
+            else:
+                role = self._build_roguelike3_role_data()
+                self.logger.info(f"肉鸽3试玩候选, 共 {len(role)} 个")
 
         if not role:
             self.logger.info("未读取到缓存, 开始识别")
@@ -630,6 +641,7 @@ class RoleSelection(CustomAction):
                         role_dict,
                         cage,
                         roguelike_equivalent or 0,
+                        scan_then_return,
                     )
                 )
                 # 停止可能发生在单页扫描中，不能把部分结果当成完整缓存。
@@ -701,7 +713,32 @@ class RoleSelection(CustomAction):
         consume_cage = roguelike_equivalent is None and cage
         detour_base = self._cage_detour_count
         attacker_fielded = False
-        if attacker_name and self.find_role(
+        if roguelike_equivalent == 3:
+            if need_multi:
+                # R03 色位与预算独立于普通囚笼配队，不借用其空槽或名单合并。
+                cached_roles = cached_roles or {}
+                supports = [
+                    name if name in cached_roles else name + "[试用]"
+                    for name in ("丽芙·流光", "薇拉·瑰丽")
+                ]
+                supports.sort(key=lambda name: cached_roles.get(name, {}).get("power", 0), reverse=True)
+                team = R03Recruitment(self).recruit_team(
+                    context, role_dict, attacker_name, supports, max_try
+                ) if attacker_name else None
+                if team is None or context.tasker.stopping:
+                    self.logger.warning("肉鸽3色位编队未确认，不发布战斗名单")
+                    return CustomAction.RunResult(success=False)
+                roster = {color: role_display_name_to_cls(name) for color, name in team.items()}
+                publish_team_roster(context, roster, role_names=team)
+                self.logger.info("肉鸽3实际编队 %s，%s attach: %s", team, TEAM_ROSTER_NODE, roster)
+                return CustomAction.RunResult(success=True)
+            attacker_fielded = bool(attacker_name) and R03Recruitment(self).recruit(
+                context, role_dict, attacker_name, max_try
+            )
+            if not attacker_fielded:
+                self.logger.warning("肉鸽3角色编入未确认，不发布战斗名单")
+                return CustomAction.RunResult(success=False)
+        elif attacker_name and self.find_role(
             context, role_dict, attacker_name, 16 if roguelike_equivalent is None else 5
         ):
             attacker_fielded = self._field_role(
@@ -831,12 +868,51 @@ class RoleSelection(CustomAction):
             self.save_screenshot(error_image, f"{role_name}_{idx+1}")
         return False
 
+    def _read_member_power(
+        self, context: Context, role_name: str, role_action: dict, box,
+    ) -> int:
+        """成员页只展示当前选中者战力，先点选并核同帧型号再取值。"""
+        if context.tasker.stopping:
+            return 0
+        model_name = role_action.get("name")
+        if not isinstance(model_name, str) or not model_name.strip() or box is None:
+            return 0
+        detail = context.run_task("读取成员战力", {
+            "读取成员战力": {"action": {"param": {
+                "target": [int(box[0] + box[2] // 2), int(box[1] + box[3] // 2)],
+            }}},
+            "读取成员战力_型号": {"recognition": {"param": {
+                "expected": re.escape(model_name.strip()),
+            }}},
+        })
+        if context.tasker.stopping:
+            return 0
+        for node_id in getattr(detail, "node_id_list", None) or []:
+            node = context.tasker.get_node_detail(node_id)
+            if node is None or node.name != "读取成员战力_确认" or not node.completed:
+                continue
+            recognition = node.recognition
+            best = recognition.best_result if recognition and recognition.hit else None
+            if not isinstance(best, AndRecognitionResult):
+                continue
+            for part in best.sub_results:
+                value = part.best_result
+                if (part.name == "读取成员战力_数值" and part.hit
+                        and isinstance(value, OCRResult)
+                        and re.fullmatch(r"[1-9]\d{0,5}", value.text)):
+                    power = int(value.text)
+                    self.logger.info("成员详情战力确认: %s, power=%s", role_name, power)
+                    return power
+        self.logger.warning("成员详情未确认型号或战力: %s，战力保留为未知", role_name)
+        return 0
+
     def recognize_role(
         self,
         context: Context,
         role_actions: dict,
         cage: bool = False,
         roguelike_mode: int = 0,
+        member_details: bool = False,
     ) -> dict:
 
         # 对每个角色进行识别
@@ -931,55 +1007,62 @@ class RoleSelection(CustomAction):
                 metadata = role_action.get("metadata", {})
                 role[display_name] = self._cache_entry_from_metadata(metadata)
 
-                power_reco = context.run_recognition(
-                    entry="识别战斗参数",
-                    image=image,
-                    pipeline_override={
-                        "识别战斗参数": {
-                            "recognition": {
-                                "param": {"roi": role_reco.box},
-                            },
-                        }
-                    },
-                )
-
-                power_text = None
-                if (
-                    power_reco
-                    and power_reco.hit
-                    and isinstance(power_reco.best_result, OCRResult)
-                ):
-                    power_text = "".join(
-                        c for c in power_reco.best_result.text if c.isdigit()
+                if member_details:
+                    role[display_name]["power"] = self._read_member_power(
+                        context, role_name, role_action, role_reco.box,
                     )
-                    if power_text:
-                        role[display_name]["power"] = int(power_text)
-                    else:
-                        power_reco_2 = context.run_recognition(
-                            entry="识别战力",
-                            image=image,
-                        )
-                        if power_reco_2 and power_reco_2.hit and isinstance(
-                            power_reco_2.best_result, OCRResult
-                        ):
-                            power_text = "".join(
-                                c for c in power_reco_2.best_result.text if c.isdigit()
-                            )
-                            if power_text:
-                                role[display_name]["power"] = int(power_text)
-                            else:
-                                role[display_name]["power"] = 0
-                        else:
-                            self.logger.warning(
-                                f"角色 {display_name} 战力识别失败 "
-                                f"(hit={power_reco_2.hit if power_reco_2 else None})"
-                            )
-                            role[display_name]["power"] = 0
+                    if context.tasker.stopping:
+                        return role
                 else:
-                    self.logger.warning(
-                        f"角色 {display_name} 战力识别失败 "
-                        f"(hit={power_reco.hit if power_reco else None})"
+                    power_reco = context.run_recognition(
+                        entry="识别战斗参数",
+                        image=image,
+                        pipeline_override={
+                            "识别战斗参数": {
+                                "recognition": {
+                                    "param": {"roi": role_reco.box},
+                                },
+                            }
+                        },
                     )
+
+                    power_text = None
+                    if (
+                        power_reco
+                        and power_reco.hit
+                        and isinstance(power_reco.best_result, OCRResult)
+                    ):
+                        power_text = "".join(
+                            c for c in power_reco.best_result.text if c.isdigit()
+                        )
+                        if power_text:
+                            role[display_name]["power"] = int(power_text)
+                        else:
+                            power_reco_2 = context.run_recognition(
+                                entry="识别战力",
+                                image=image,
+                            )
+                            if power_reco_2 and power_reco_2.hit and isinstance(
+                                power_reco_2.best_result, OCRResult
+                            ):
+                                power_text = "".join(
+                                    c for c in power_reco_2.best_result.text if c.isdigit()
+                                )
+                                if power_text:
+                                    role[display_name]["power"] = int(power_text)
+                                else:
+                                    role[display_name]["power"] = 0
+                            else:
+                                self.logger.warning(
+                                    f"角色 {display_name} 战力识别失败 "
+                                    f"(hit={power_reco_2.hit if power_reco_2 else None})"
+                                )
+                                role[display_name]["power"] = 0
+                    else:
+                        self.logger.warning(
+                            f"角色 {display_name} 战力识别失败 "
+                            f"(hit={power_reco.hit if power_reco else None})"
+                        )
 
                 if cage:
                     if (

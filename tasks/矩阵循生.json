@@ -16,22 +16,36 @@
                 "返回": {
                     "post_delay": 2500
                 },
+                "打开暗属性": {
+                    "action": {
+                        "param": {
+                            "target_offset": [20, 16, -40, -32]
+                        }
+                    }
+                },
+                "打开雷属性": {
+                    "action": {
+                        "param": {
+                            "target_offset": [14, 12, -28, -24]
+                        }
+                    }
+                },
                 "选择角色程序": {
                     "next": [],
                     "attach": {
                         "selection_mode": "roguelike_3",
-                        "need_multi": false,
+                        "need_multi": true,
                         "max_try": 3
                     }
                 },
                 "选择角色程序_onlyNode": {
                     "attach": {
-                        "need_multi": false
+                        "need_multi": true
                     }
                 },
                 "选择角色程序_矩阵循生": {
                     "attach": {
-                        "need_multi": false
+                        "need_multi": true
                     }
                 },
                 "战斗中": {

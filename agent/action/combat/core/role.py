@@ -117,6 +117,10 @@ class BaseRole:
     def do_perform(self) -> None:
         self.action.attack()
 
+    def is_input_protected(self) -> bool:
+        """Whether shared warning/observation inputs would interrupt this phase."""
+        return False
+
     def on_switch_succeeded(self) -> None:
         """切人成功后的角色侧收尾（默认 reset_state 已回到 idle）。"""
 

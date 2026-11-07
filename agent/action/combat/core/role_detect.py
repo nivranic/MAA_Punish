@@ -189,12 +189,15 @@ def detect_current_role(
     return "未知", _GENERIC_CLS
 
 
-def is_switch_arrived(context: Context, image: Any, roster_cls: str) -> bool:
+def is_switch_arrived(
+    context: Context, image: Any, roster_cls: str, *, strict: bool = False,
+) -> bool:
     """
     切人到位判定。
 
     专属 cls：仅匹配目标 attack_template，未命中视为未到位（不切全 roster）。
-    roster 为 GeneralFight：全量 detect_current_role，场上为任意专属角色即视为到位。
+    roster 为 GeneralFight：全量 detect_current_role；strict 时必须匹配通用策略，
+    普通占位路径仍允许由场上的专属角色补全身份。
     """
     if roster_cls and roster_cls != _GENERIC_CLS:
         return is_cls_on_field(context, image, roster_cls)
@@ -206,7 +209,7 @@ def is_switch_arrived(context: Context, image: Any, roster_cls: str) -> bool:
     if display_name == "未知":
         return False
 
-    if roster_cls == _GENERIC_CLS and detected_cls != _GENERIC_CLS:
+    if not strict and roster_cls == _GENERIC_CLS and detected_cls != _GENERIC_CLS:
         return True
 
     return detected_cls == roster_cls

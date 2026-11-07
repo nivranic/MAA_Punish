@@ -1,7 +1,7 @@
 """Replay D06's saved Hell/zero-score page through production And/Or nodes.
 
 Set MAA_CAGE_OCR_RESOURCE to an existing resource bundle with model/ocr.
-The two public crops contain no account metadata and retain their original
+The two ignored local crops contain no account metadata and retain their original
 720p coordinates. Missing-crop cases test necessary inputs, not real game pages.
 Offline recognition does not accept stamina handling or the full Cage flow.
 """
@@ -20,6 +20,9 @@ from maa.controller import CustomController
 from maa.custom_action import CustomAction
 from maa.resource import Resource
 from maa.tasker import Tasker
+
+from test_support.device_evidence import evidence_path
+from test_support.native_lifecycle import stop_and_wait_idle
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,7 +48,7 @@ class ReadOnlyController(CustomController):
 def fixture_page(*, omit=None):
     image = np.zeros((720, 1280, 3), dtype=np.uint8)
     for key, row in PROVENANCE["crops"].items():
-        raw = (FIXTURES / row["file"]).read_bytes()
+        raw = evidence_path("cage_final_difficulty", row["file"]).read_bytes()
         assert hashlib.sha256(raw).hexdigest() == row["sha256"]
         crop = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
         x, y, width, height = row["rect"]
@@ -99,11 +102,14 @@ def replay(tmp_path, image, *, original_roi=False):
         "action": {"type": "Custom", "param": {"custom_action": "OfflineCageInspect"}},
         "next": [], "on_error": [], "pre_delay": 0, "post_delay": 0,
     }})
-    job.wait()
-    assert errors == []
-    assert job.succeeded and not tasker.running and not tasker.stopping
-    assert set(results) == set(RECOGNITIONS)
-    return results
+    try:
+        job.wait()
+        assert errors == []
+        assert job.succeeded
+        assert set(results) == set(RECOGNITIONS)
+        return results
+    finally:
+        stop_and_wait_idle(tasker)
 
 
 @pytest.mark.parametrize("original_roi,expected_hit", [(True, False), (False, True)])

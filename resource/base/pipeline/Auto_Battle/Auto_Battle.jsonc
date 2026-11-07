@@ -72,9 +72,15 @@
                 ]
             }
         },
-        "next": [
-            "攻击"
-        ]
+        "action": {
+            "type": "Custom",
+            "param": {
+                "custom_action": "DodgeAfterWarning"
+            }
+        },
+        "pre_delay": 0,
+        "post_delay": 0,
+        "next": []
     },
     "点击空白处关闭_速通": {
         "recognition": {
@@ -375,7 +381,7 @@
                 "roi": [
                     19,
                     15,
-                    141,
+                    190,
                     29
                 ],
                 "only_rec": true,

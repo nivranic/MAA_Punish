@@ -10,7 +10,7 @@
             "[JumpBack]废弃刻印",
             "[JumpBack]处理刻印过多",
             "[JumpBack]确定",
-            "[JumpBack]终止_神寂启示录",
+            "[JumpBack]继续冒险_神寂启示录",
             "[JumpBack]情报分析_神寂启示录",
             "[JumpBack]继续情报分析_神寂启示录",
             "[JumpBack]进入战斗_启示之路",
@@ -530,7 +530,7 @@
             "type": "Click"
         }
     },
-    "终止_神寂启示录": {
+    "继续冒险_神寂启示录": {
         "recognition": {
             "type": "And",
             "param": {
@@ -541,8 +541,14 @@
             }
         },
         "action": {
-            "type": "Click"
-        }
+            "type": "Click",
+            "param": {
+                "target": [640, 410]
+            }
+        },
+        "next": [
+            "神寂启示录_事件分派"
+        ]
     },
     "终止_神寂启示录_文字": {
         "recognition": {
@@ -618,6 +624,7 @@
             }
         },
         "next": [
+            "对局结束_神寂启示录",
             "主界面_神寂启示录",
             "[JumpBack]结束战斗_神寂启示录",
             "[JumpBack]退出战斗_神寂启示录",

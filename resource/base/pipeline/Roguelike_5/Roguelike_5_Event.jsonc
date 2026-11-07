@@ -80,8 +80,8 @@
             "type": "Click",
             "param": {
                 "target": [
-                    132,
-                    410
+                    175,
+                    420
                 ]
             }
         },
@@ -288,6 +288,17 @@
                 ]
             }
         },
+        "next": [
+            "神寂启示录_事件分派"
+        ],
+        "on_error": [
+            "神寂启示录"
+        ]
+    },
+    "神寂启示录_事件分派": {
+        "recognition": {
+            "type": "DirectHit"
+        },
         "timeout": 60000,
         "next": [
             "事件完成_神寂启示录",
@@ -361,17 +372,76 @@
                     120
                 ],
                 "expected": [
+                    "对局结束",
                     "對局結束"
                 ]
             }
         },
+        "action": {
+            "type": "Click"
+        },
         "next": [
+            "神寂启示录_结算分派"
+        ]
+    },
+    "神寂启示录_结算分派": {
+        "recognition": {
+            "type": "DirectHit"
+        },
+        "timeout": 60000,
+        "next": [
+            "[JumpBack]下一页_神寂启示录",
+            "[JumpBack]神寂启示录_退出结算",
+            "[JumpBack]跳过剧情",
             "神寂启示录_对局结束停止"
         ]
     },
+    "神寂启示录_退出结算": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "神寂启示录_结算线索进度",
+                    "神寂启示录_结算退出按钮"
+                ],
+                "box_index": 1
+            }
+        },
+        "action": {
+            "type": "Click"
+        }
+    },
+    "神寂启示录_结算线索进度": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [310, 480, 200, 80],
+                "expected": "^[0-9]+\\s*/\\s*[0-9]+$"
+            }
+        }
+    },
+    "神寂启示录_结算退出按钮": {
+        "recognition": {
+            "type": "ColorMatch",
+            "param": {
+                "roi": [888, 582, 190, 64],
+                "method": 4,
+                "lower": [95, 4, 4],
+                "upper": [180, 40, 40],
+                "connected": true,
+                "count": 1000
+            }
+        }
+    },
     "神寂启示录_对局结束停止": {
         "recognition": {
-            "type": "DirectHit"
+            "type": "Or",
+            "param": {
+                "any_of": [
+                    "选择成员",
+                    "进入战斗_启示之路"
+                ]
+            }
         },
         "action": {
             "type": "StopTask"
@@ -504,9 +574,9 @@
             "type": "ColorMatch",
             "param": {
                 "roi": [
-                    1065,
+                    1020,
                     632,
-                    182,
+                    227,
                     55
                 ],
                 "lower": [
@@ -529,9 +599,9 @@
             "type": "ColorMatch",
             "param": {
                 "roi": [
-                    1065,
+                    1020,
                     632,
-                    182,
+                    227,
                     55
                 ],
                 "lower": [
@@ -540,9 +610,9 @@
                     170
                 ],
                 "upper": [
-                    224,
-                    222,
-                    222
+                    255,
+                    255,
+                    255
                 ],
                 "count": 100
             }

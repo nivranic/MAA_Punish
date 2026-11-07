@@ -13,11 +13,11 @@ import re
 import jsonc
 import numpy as np
 import pytest
+from test_support.device_evidence import evidence_path
 
 
 ROOT = Path(__file__).resolve().parents[2]
 NODES = jsonc.loads((ROOT / "resource/base/pipeline/War_Zone.jsonc").read_text(encoding="utf-8"))
-FIXTURES = Path(__file__).parent / "fixtures/war_zone_rewards"
 
 
 @pytest.mark.parametrize("text,claimable", [
@@ -73,7 +73,7 @@ def test_native_ocr_replays_complete_button(
         def start_app(self, *args): raise AssertionError("No App input during OCR replay")
         def stop_app(self, *args): raise AssertionError("No App input during OCR replay")
 
-    crop = cv2.imdecode(np.fromfile(FIXTURES / fixture_name, dtype=np.uint8), cv2.IMREAD_COLOR)
+    crop = cv2.imdecode(np.fromfile(evidence_path("war_zone_rewards", fixture_name), dtype=np.uint8), cv2.IMREAD_COLOR)
     x, y, width, height = crop_rect
     assert crop.shape == (height, width, 3)
     image = np.zeros((720, 1280, 3), dtype=np.uint8)

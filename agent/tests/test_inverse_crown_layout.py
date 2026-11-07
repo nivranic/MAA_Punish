@@ -338,10 +338,10 @@ def test_native_runner_load_is_local_to_its_real_context(calibrated):
         assert resource.get_node_data("攻击")["action"]["param"]["target_offset"] == [0, 0, 0, 0]
         assert [row["技能"]["action"]["param"]["target"][1] for row in details] == [690, 634, 690, 634]
         assert [row["检查血量"]["recognition"]["param"]["roi"] for row in details] == [
-            [19, 15, 141, 29], [70, 15, 140, 29], [19, 15, 141, 29], [70, 15, 140, 29],
+            [19, 15, 190, 29], [70, 15, 140, 29], [19, 15, 190, 29], [70, 15, 140, 29],
         ]
         assert resource.get_node_data("技能")["action"]["param"]["target"][1] == 690
-        assert resource.get_node_data("检查血量")["recognition"]["param"]["roi"] == [19, 15, 141, 29]
+        assert resource.get_node_data("检查血量")["recognition"]["param"]["roi"] == [19, 15, 190, 29]
         assert path.read_bytes() == before
     finally:
         tasker.post_stop().wait()

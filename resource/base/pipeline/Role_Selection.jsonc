@@ -32,6 +32,54 @@
             }
         }
     },
+    "读取成员战力": {
+        "action": {
+            "type": "Click"
+        },
+        "post_wait_freezes": {
+            "time": 200,
+            "timeout": 1500,
+            "target": [820, 100, 420, 130]
+        },
+        "timeout": 3000,
+        "next": [
+            "读取成员战力_确认"
+        ],
+        "on_error": []
+    },
+    "读取成员战力_确认": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "读取成员战力_型号",
+                    "读取成员战力_数值"
+                ],
+                "box_index": 1
+            }
+        },
+        "next": [],
+        "on_error": []
+    },
+    "读取成员战力_型号": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [900, 132, 300, 45],
+                "expected": "^$"
+            }
+        }
+    },
+    "读取成员战力_数值": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [866, 186, 144, 36],
+                "expected": "^[1-9]\\d{0,5}$",
+                "only_rec": true
+            }
+        }
+    },
     "识别战力": {
         "recognition": {
             "type": "OCR",

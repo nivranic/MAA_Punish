@@ -18,6 +18,7 @@ from action.combat.core.provider import CombatCheck
 from action.combat.core.session import CombatTask
 from action.combat.input_control import CombatInputError, CombatInputScope
 from action.combat.roles import inverse_crown as module
+from test_support.device_evidence import evidence_path
 from test_support.fakes import FakeBestResult, FakeClock, FakeContext, FakeController, FakeRecognitionResult
 
 
@@ -250,7 +251,7 @@ PHASE_SAMPLES = json.loads((PHASE_FIXTURES / "manifest.json").read_text("utf-8")
 
 def phase_roi(name):
     sample = next(item for item in PHASE_SAMPLES if item["file"] == name + ".png")
-    raw = (PHASE_FIXTURES / sample["file"]).read_bytes()
+    raw = evidence_path("inverse_crown_phase_shape", sample["file"]).read_bytes()
     assert hashlib.sha256(raw).hexdigest() == sample["fixture_sha256"]
     roi = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
     assert roi.shape == (sample["roi"][3], sample["roi"][2], 3)
@@ -398,7 +399,7 @@ READY_SAMPLES = json.loads((READY_FIXTURES / "manifest.json").read_text("utf-8")
 def apply_ready_sample(case, sample):
     """Retain real bar/ring pixels on the existing synthetic Context canvas."""
     for crop in sample["crops"]:
-        raw = (READY_FIXTURES / crop["file"]).read_bytes()
+        raw = evidence_path("inverse_crown_ready", crop["file"]).read_bytes()
         assert hashlib.sha256(raw).hexdigest() == crop["sha256"]
         pixels = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
         x, y, width, height = crop["roi"]
