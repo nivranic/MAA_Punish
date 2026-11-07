@@ -18,7 +18,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""逆冕战斗程序"""
+"""逆冕战斗程序。
+
+普通大招先等待 ready，再单次长按并观察 empty；确认后才进入 finish，
+观察预算耗尽则拒绝本轮。固定长按时长不证明游戏内蓄力已满。
+"""
 
 from __future__ import annotations
 
@@ -854,13 +858,30 @@ class InverseCrown(BaseRole):
             else:
                 self.action.attack()
         elif self._skill_sub == "cast":
-            self.action.use_skill()
+            first_cast = self._skill_cast_ticks == 0
             self._skill_cast_ticks += 1
-            if (
-                self.action.check_status(_ENERGY_EMPTY_NODE)
-                or self._skill_cast_ticks >= _SKILL_CAST_MAX
-            ):
+            if first_cast:
+                # Match the existing cage hold as a provisional duration;
+                # only subsequent energy observation can confirm consumption.
+                result = self.action.long_press_skill(2000)
+                if self.combat.context.tasker.stopping:
+                    return
+                if result is not True and getattr(result, "success", None) is not True:
+                    raise InverseCrownUnavailable(
+                        "skill_hold_failed", actual=self.implementation_name,
+                    )
+            image = self.action._get_image()
+            if self.combat.context.tasker.stopping:
+                return
+            empty = self.action.check_status(_ENERGY_EMPTY_NODE, image=image)
+            if self.combat.context.tasker.stopping:
+                return
+            if empty:
                 self._skill_sub = "finish"
+            elif self._skill_cast_ticks >= _SKILL_CAST_MAX:
+                raise InverseCrownUnavailable(
+                    "skill_empty_not_confirmed", actual=self.implementation_name,
+                )
         elif self._skill_sub == "finish":
             #self.action.long_press_attack(4000)
             self._finish_skill()

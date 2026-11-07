@@ -391,7 +391,10 @@ class CombatActions:
         self.context.override_pipeline(
             {"长按技能": {"action": {"param": {"duration": time}}}}
         )
-        return self.context.run_action("长按技能")
+        try:
+            return self.context.run_action("长按技能")
+        finally:
+            self._invalidate_frame()
 
     def down_dodge(self, contact: int = 0):
         """
