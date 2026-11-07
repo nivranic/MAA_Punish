@@ -384,7 +384,7 @@
     },
     "矩阵循生_设置红位队长": {
         "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_调整页就绪", "矩阵循生_红位队长未勾选"], "box_index": 1}},
-        "action": {"type": "Click"},
+        "action": {"type": "Click", "param": {"target_offset": [12, 12, -24, -24]}},
         "post_wait_freezes": {"time": 200, "timeout": 1500},
         "timeout": 3000,
         "next": ["矩阵循生_红位队长已勾选"],
@@ -392,7 +392,7 @@
     },
     "矩阵循生_设置红位首发": {
         "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_调整页就绪", "矩阵循生_红位首发未勾选"], "box_index": 1}},
-        "action": {"type": "Click"},
+        "action": {"type": "Click", "param": {"target_offset": [12, 12, -24, -24]}},
         "post_wait_freezes": {"time": 200, "timeout": 1500},
         "timeout": 3000,
         "next": ["矩阵循生_红位首发已勾选"],
