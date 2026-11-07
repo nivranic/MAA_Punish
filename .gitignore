@@ -496,3 +496,11 @@ local.properties
 /.glm-router/
 /.mimosa/
 /.playwright-mcp/
+
+# Native retention sources live in a Kotlin package named log, not a log output tree.
+!/.github/android/overlays/app/src/main/java/com/aliothmoon/maafw/log/
+/.github/android/overlays/app/src/main/java/com/aliothmoon/maafw/log/*
+!/.github/android/overlays/app/src/main/java/com/aliothmoon/maafw/log/DebugEvidenceRetention.kt
+!/.github/android/overlays/app/src/test/java/com/aliothmoon/maafw/log/
+/.github/android/overlays/app/src/test/java/com/aliothmoon/maafw/log/*
+!/.github/android/overlays/app/src/test/java/com/aliothmoon/maafw/log/DebugEvidenceRetentionTest.kt

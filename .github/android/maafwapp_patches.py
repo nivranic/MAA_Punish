@@ -476,6 +476,10 @@ from maafwapp_purchase_patches import PURCHASE_PATCHES
 
 PATCHES += PURCHASE_PATCHES
 
+from maafwapp_evidence_patches import EVIDENCE_PATCHES
+
+PATCHES += EVIDENCE_PATCHES
+
 PATCHES += (
     (
         KOTLIN + "MaaFwApp.kt",
