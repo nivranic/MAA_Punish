@@ -127,54 +127,96 @@ class Pianissimo(BaseRole):
         self.action.long_press_dodge(_P2_LONG_DODGE_MS)
         return True
 
-    def _tap_attack(self) -> None:
+    def _tap_attack(self) -> bool:
         """普通攻击：只点攻击键，去掉识别和节点额外等待。"""
-        self.action.context.override_pipeline(
-            {"攻击": {"pre_delay": 0, "post_delay": 0, "rate_limit": 0}}
-        )
-        self.action.context.run_action("攻击")
+        try:
+            if self.combat.context.tasker.stopping:
+                return False
+            self.action.context.override_pipeline(
+                {"攻击": {"pre_delay": 0, "post_delay": 0, "rate_limit": 0}}
+            )
+            if self.combat.context.tasker.stopping:
+                return False
+            self.action.context.run_action("攻击")
+            return not self.combat.context.tasker.stopping
+        finally:
+            self.action._invalidate_frame()
 
-    def _tap_ball(self, slot: int) -> None:
+    def _tap_ball(self, slot: int) -> bool:
         """盲按消球位，不走排球识别。"""
-        node = f"消球{slot}"
-        self.action.context.override_pipeline(
-            {node: {"pre_delay": 0, "post_delay": 0, "rate_limit": 0}}
-        )
-        self.action.context.run_action(node)
+        try:
+            if self.combat.context.tasker.stopping:
+                return False
+            node = f"消球{slot}"
+            self.action.context.override_pipeline(
+                {node: {"pre_delay": 0, "post_delay": 0, "rate_limit": 0}}
+            )
+            if self.combat.context.tasker.stopping:
+                return False
+            self.action.context.run_action(node)
+            return not self.combat.context.tasker.stopping
+        finally:
+            self.action._invalidate_frame()
 
     def _continuous_tap_attack(
         self,
         *,
         duration_s: float = _ATTACK_BURST_S,
         should_stop: Callable[[], bool] | None = None,
-    ) -> None:
-        """兜底持续普攻：窗口内按间隔连点，避免每 tick 只打一刀。"""
-        deadline = time.monotonic() + duration_s
-        interval_s = _FARM_TICK_MS / 1000
-        while time.monotonic() < deadline:
+    ) -> bool:
+        """预警后保留完整连点窗口；False仅表示收到停止。"""
+        try:
             if self.combat.context.tasker.stopping:
-                return
-            if should_stop is not None and should_stop():
-                return
-            self._tap_attack()
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            time.sleep(min(interval_s, remaining))
+                return False
+            self.action._auto_dodge()
+            if self.combat.context.tasker.stopping:
+                return False
+            deadline = time.monotonic() + duration_s
+            interval_s = _FARM_TICK_MS / 1000
+            while time.monotonic() < deadline:
+                if self.combat.context.tasker.stopping:
+                    return False
+                condition_met = should_stop is not None and should_stop()
+                if self.combat.context.tasker.stopping:
+                    return False
+                if condition_met:
+                    return True
+                if not self._tap_attack():
+                    return False
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                time.sleep(min(interval_s, remaining))
+                if self.combat.context.tasker.stopping:
+                    return False
+            return not self.combat.context.tasker.stopping
+        finally:
+            self.action._invalidate_frame()
 
-    def _p2_farm_burst(self) -> None:
-        """p2 farm：1 秒内持续普攻 + 盲按消球2，不做任何识别。"""
-        deadline = time.monotonic() + _P2_FARM_S
-        interval_s = _FARM_TICK_MS / 1000
-        while time.monotonic() < deadline:
+    def _p2_farm_burst(self) -> bool:
+        """p2普通窗口先查一次预警，再完整连打1秒；False表示停止。"""
+        try:
             if self.combat.context.tasker.stopping:
-                return
-            self._tap_attack()
-            self._tap_ball(2)
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            time.sleep(min(interval_s, remaining))
+                return False
+            self.action._auto_dodge()
+            if self.combat.context.tasker.stopping:
+                return False
+            deadline = time.monotonic() + _P2_FARM_S
+            interval_s = _FARM_TICK_MS / 1000
+            while time.monotonic() < deadline:
+                if self.combat.context.tasker.stopping:
+                    return False
+                if not self._tap_attack() or not self._tap_ball(2):
+                    return False
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                time.sleep(min(interval_s, remaining))
+                if self.combat.context.tasker.stopping:
+                    return False
+            return not self.combat.context.tasker.stopping
+        finally:
+            self.action._invalidate_frame()
 
     def _enter_p2_ult(self, *, reason: str) -> None:
         """2 阶段检测到红/黄特球，进入开大 → 切人。"""
@@ -204,19 +246,30 @@ class Pianissimo(BaseRole):
     def _phase_idle(self) -> None:
         # 日常：锁视角后持续普攻，再按球数/阶段分流
         self.action.lens_lock()
-        self._continuous_tap_attack()
+        if self.combat.context.tasker.stopping or not self._continuous_tap_attack():
+            return
 
-        if self._in_phase2():
+        phase2 = self._in_phase2()
+        if self.combat.context.tasker.stopping:
+            return
+        if phase2:
             self.action.logger.info("希声2阶段")
-            if self._red_ball_ready():
+            red_ball_ready = self._red_ball_ready()
+            if self.combat.context.tasker.stopping:
+                return
+            if red_ball_ready:
                 self._enter_p2_ult(reason="idle")
                 return
-            if self._try_p2_long_dodge():
+            long_dodged = self._try_p2_long_dodge()
+            if self.combat.context.tasker.stopping or long_dodged:
                 return
             self._begin_p2_farm(next_after="p2_core")
             return
 
-        if self.action.count_signal_balls() > _P1_BALL_MIN:
+        ball_count = self.action.count_signal_balls()
+        if self.combat.context.tasker.stopping:
+            return
+        if ball_count > _P1_BALL_MIN:
             self.action.logger.info("希声1阶段")
             self._begin_clear(next_phase="p1_clear")
             return
@@ -226,30 +279,51 @@ class Pianissimo(BaseRole):
         self.phase = "p1_farm"
 
     def _phase_p1_farm(self) -> None:
-        if self._in_phase2() or self.action.count_signal_balls() > _P1_BALL_MIN:
+        phase2 = self._in_phase2()
+        if self.combat.context.tasker.stopping:
+            return
+        if phase2:
+            self.phase = "idle"
+            return
+        ball_count = self.action.count_signal_balls()
+        if self.combat.context.tasker.stopping:
+            return
+        if ball_count > _P1_BALL_MIN:
             self.phase = "idle"
             return
 
-        self._continuous_tap_attack()
+        if not self._continuous_tap_attack():
+            return
         self._farm_ticks += 1
         if self._farm_ticks >= _P1_FARM_MAX:
             self.phase = "idle"
 
     def _phase_p1_clear(self) -> None:
         # 1 阶段消球；中途进 2 阶段则交 idle 重新分流
-        if self._in_phase2():
+        phase2 = self._in_phase2()
+        if self.combat.context.tasker.stopping:
+            return
+        if phase2:
             self.phase = "idle"
             return
-        if not self.action.count_signal_balls() or self._clear_expired():
+        ball_count = self.action.count_signal_balls()
+        if self.combat.context.tasker.stopping:
+            return
+        if not ball_count or self._clear_expired():
             self.action.logger.info("希声1阶段消球结束")
             self.phase = "p1_core"
             return
 
-        self._continuous_tap_attack()
+        if not self._continuous_tap_attack():
+            return
         target = self.action.Arrange_Signal_Balls()
+        if self.combat.context.tasker.stopping:
+            return
         if target == -1:
             target = -2
         self.action.ball_elimination_target(target)
+        if self.combat.context.tasker.stopping:
+            return
         self.action.logger.debug("希声1阶段消球 target=%s", target)
 
     def _phase_p1_core(self) -> None:
@@ -292,19 +366,33 @@ class Pianissimo(BaseRole):
 
     def _phase_p2_farm(self) -> None:
         # 盲打窗口内不做识别；结束后查特球/长闪/球数
-        self._p2_farm_burst()
+        if not self._p2_farm_burst():
+            return
 
-        if self._red_ball_ready():
+        red_ball_ready = self._red_ball_ready()
+        if self.combat.context.tasker.stopping:
+            return
+        if red_ball_ready:
             self._enter_p2_ult(reason="p2_farm")
             return
-        if self._try_p2_long_dodge():
+        long_dodged = self._try_p2_long_dodge()
+        if self.combat.context.tasker.stopping or long_dodged:
             return
-        if not self.action.count_signal_balls() or self._clear_expired():
+        ball_count = self.action.count_signal_balls()
+        if self.combat.context.tasker.stopping:
+            return
+        if not ball_count or self._clear_expired():
             self.action.logger.info("希声2阶段 farm 结束 next=%s", self._p2_farm_next)
             if self._p2_farm_next == "switch":
                 self.action.auxiliary_machine()
+                if self.combat.context.tasker.stopping:
+                    return
                 self.action.use_skill_until_empty()
+                if self.combat.context.tasker.stopping:
+                    return
                 self.action.auxiliary_machine()
+                if self.combat.context.tasker.stopping:
+                    return
                 self.phase = "switch"
             else:
                 self.phase = self._p2_farm_next
