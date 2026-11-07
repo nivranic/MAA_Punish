@@ -353,15 +353,15 @@ class CombatTask:
         if self._should_stop():
             return
 
-        #self.logger.debug(
-        #    "dispatch loop=%s cls=%s color=%s phase=%s switch=%s cd=%.1fs",
-        #    self.loop_count,
-        #    role.cls_name,
-        #    role.color,
-        #    role.phase,
-        #    self.can_switch(),
-        #    self.switch_cooldown_remaining(),
-        #)
+        self.logger.debug(
+            "dispatch loop=%s cls=%s color=%s phase=%s switch=%s cd=%.1fs",
+            self.loop_count,
+            role.cls_name,
+            role.color,
+            role.phase,
+            self.can_switch(),
+            self.switch_cooldown_remaining(),
+        )
         role.perform()
 
     def _set_team_cls_at(self, color: str, cls_name: str) -> None:

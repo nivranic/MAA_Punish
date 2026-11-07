@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from action.combat.core import role_detect
 from action.combat.core.role_detect import (
     attack_templates_for_cls,
@@ -12,7 +14,7 @@ from action.combat.core.role_detect import (
     ordered_role_entries,
 )
 
-from test_support.fakes import FakeContext, make_hit, make_miss
+from test_support.fakes import FakeContext as BaseFakeContext, make_hit, make_miss
 
 MINI_ROLE_ACTIONS = {
     "专属·测试": {
@@ -26,6 +28,33 @@ MINI_ROLE_ACTIONS = {
         "attack_template": ["自定义战斗/通用.png"],
     },
 }
+
+
+class FakeContext(BaseFakeContext):
+    """This module exercises real node-style Or, including ordered misses."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.node_data.setdefault("检查角色", {
+            "recognition": {"type": "TemplateMatch", "param": {"roi": [0, 0, 1280, 720]}},
+        })
+
+    def run_recognition(self, entry, image=None, pipeline_override=None):
+        recognition = (pipeline_override or {}).get(entry, {}).get("recognition", {})
+        if entry != "检查角色" or recognition.get("type") != "Or":
+            return super().run_recognition(entry, image, pipeline_override)
+        self.check_role_calls.append({
+            "entry": entry, "image": image, "pipeline_override": pipeline_override,
+        })
+        rows = []
+        for child in recognition["param"]["any_of"]:
+            assert child["recognition"]["type"] == "TemplateMatch"
+            result = self.check_role_results.pop(0) if self.check_role_results else make_miss()
+            hit = bool(result and result.hit)
+            rows.append({"algorithm": "TemplateMatch", "box": [1, 2, 3, 4] if hit else None})
+            if hit:
+                break
+        return SimpleNamespace(hit=hit, algorithm="Or", raw_detail=rows)
 
 
 class TestAttackTemplatesForCls:
@@ -105,7 +134,7 @@ class TestDetectCurrentRole:
         assert len(context.check_role_calls) == 1
         templates = context.check_role_calls[0]["pipeline_override"]["检查角色"][
             "recognition"
-        ]["param"]["template"]
+        ]["param"]["any_of"][0]["recognition"]["param"]["template"]
         assert templates == ["自定义战斗/通用.png"]
 
     def test_skip_cls_omits_already_checked_role(self, monkeypatch):

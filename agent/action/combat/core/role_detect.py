@@ -27,6 +27,7 @@ MAA_Punish 战斗中识别当前角色（复用 Pipeline「检查角色」）
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from copy import deepcopy
 from typing import Any
 
 from maa.context import Context
@@ -174,9 +175,13 @@ def detect_current_role(
     默认专属 cls 优先于 GeneralFight，避免通用占位误匹配谬影。
     prefer_cls 会插到扫描队列最前（上次识别 / 队友），skip_cls 跳过已查过的 cls。
     on_tick 会在每次模板匹配前调用（如盲发普攻，避免识别空转）。
+    无 on_tick 的同帧只读扫描合并为原生 Or，仍按角色顺序首命中即止。
 
     :return: (展示名, cls_name)
     """
+    if on_tick is None:
+        return _detect_role_same_frame(context, image, prefer_cls, skip_cls)
+
     for role_name, role_info in ordered_role_entries(
         prefer_cls=prefer_cls, skip_cls=skip_cls
     ):
@@ -187,6 +192,88 @@ def detect_current_role(
             display = str(role_info.get("name") or role_name)
             return display, str(role_info.get("cls_name", _GENERIC_CLS))
     return "未知", _GENERIC_CLS
+
+
+def _detect_role_same_frame(
+    context: Context,
+    image: Any,
+    prefer_cls: Sequence[str] | None,
+    skip_cls: Sequence[str] | None,
+) -> tuple[str, str]:
+    """单次请求保留角色分组及首命中顺序；不缓存有效布局参数。"""
+    if context.tasker.stopping:
+        return "未知", _GENERIC_CLS
+    entries = ordered_role_entries(prefer_cls=prefer_cls, skip_cls=skip_cls)
+    if not entries:
+        return "未知", _GENERIC_CLS
+
+    node = context.get_node_data("检查角色")
+    if not isinstance(node, dict):
+        raise RuntimeError("检查角色 effective node is unavailable")
+    recognition = node.get("recognition")
+    if (
+        not isinstance(recognition, dict)
+        or recognition.get("type") != "TemplateMatch"
+        or not isinstance(recognition.get("param"), dict)
+        or node.get("inverse", False)
+    ):
+        raise RuntimeError("检查角色 requires a non-inverted TemplateMatch node")
+
+    children = []
+    for _, info in entries:
+        templates = _normalize_attack_templates(info.get("attack_template"))
+        child_recognition = deepcopy(recognition)
+        child_recognition["param"].update(
+            template=templates, threshold=[0.8] * len(templates),
+        )
+        # Or 子项必须为完整节点；裸 {type, param} 会被原生解释成 DirectHit。
+        children.append({"recognition": child_recognition})
+
+    result = context.run_recognition(
+        entry="检查角色",
+        image=image,
+        pipeline_override={
+            "检查角色": {
+                "recognition": {"type": "Or", "param": {"any_of": children}},
+            },
+        },
+    )
+    if context.tasker.stopping:
+        return "未知", _GENERIC_CLS
+    if result is None or getattr(result, "algorithm", None) != "Or":
+        raise RuntimeError("Unexpected native Or recognition result")
+    native_hit = getattr(result, "hit", None)
+    rows = getattr(result, "raw_detail", None)
+    if not isinstance(native_hit, bool):
+        raise RuntimeError("Unexpected native Or hit status")
+    if not isinstance(rows, list) or not 0 < len(rows) <= len(entries):
+        raise RuntimeError("Unexpected native Or child count")
+    if any(
+        not isinstance(row, dict)
+        or row.get("algorithm") != "TemplateMatch"
+        or "box" not in row
+        for row in rows
+    ):
+        raise RuntimeError("Unexpected native Or child result")
+    if any(
+        row["box"] is not None
+        and (
+            not isinstance(row["box"], list)
+            or len(row["box"]) != 4
+            or any(type(value) is not int for value in row["box"])
+        )
+        for row in rows
+    ):
+        raise RuntimeError("Unexpected native Or child box")
+    hits = [index for index, row in enumerate(rows) if row["box"] is not None]
+    if not native_hit:
+        if hits or len(rows) != len(entries):
+            raise RuntimeError("Native Or miss did not exhaust the ordered catalog")
+        return "未知", _GENERIC_CLS
+    if hits != [len(rows) - 1]:
+        raise RuntimeError("Native Or did not stop at its first matching child")
+    name, info = entries[hits[0]]
+    return str(info.get("name") or name), str(info.get("cls_name", _GENERIC_CLS))
 
 
 def is_switch_arrived(

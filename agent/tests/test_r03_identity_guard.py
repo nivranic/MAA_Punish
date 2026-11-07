@@ -383,6 +383,7 @@ def test_r03_load_team_retries_transient_unknown_within_grace(monkeypatch):
         return HpObservation(8101, 8101, "alive")
 
     monkeypatch.setattr(item.combat_check, "read_hp_from_frame", flaky_hp)
+    detection(monkeypatch, session, ("未知", "GeneralFight"))
     assert item.load_team() is True
     assert attempts["n"] == 2
     assert item.field_identity == "confirmed" and item.team is not None
