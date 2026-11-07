@@ -111,15 +111,18 @@ class CrimsonWeave(BaseRole):
 
         if self.phase in _PHASES_ATTACK_WHILE_PROBE:
             self._tap_attack()
+            if self.combat.context.tasker.stopping:
+                return
 
         # 大太刀最高优先级：无光值达标 → 登龙充能；红色无光 → 长按攻击登龙
-        if self.phase not in _PHASES_SKIP_DRAGON_PRIORITY and self._try_dragon_now():
-            return
+        if self.phase not in _PHASES_SKIP_DRAGON_PRIORITY:
+            if self._try_dragon_now() or self.combat.context.tasker.stopping:
+                return
 
         # 小太刀大招能量满 → 立即停止当前动作（登龙仍优先于大招；大太刀大招不抢连段）
         if (
             self.phase not in _PHASES_SKIP_SMALL_ULT_PRIORITY
-            and self._try_small_ult_now()
+            and (self._try_small_ult_now() or self.combat.context.tasker.stopping)
         ):
             return
 
@@ -148,13 +151,25 @@ class CrimsonWeave(BaseRole):
         else:
             self._phase_idle()
 
+    def _check_sword_status(self, node: str):
+        """形态观察先取图再检查停止，避免等待采帧时到达Stop后仍发识别。"""
+        if self.combat.context.tasker.stopping:
+            return False
+        image = self.action._get_image()
+        if self.combat.context.tasker.stopping:
+            return False
+        result = self.action.check_status(node, image=image)
+        if self.combat.context.tasker.stopping:
+            return False
+        return result
+
     def _light_bar_present(self, node: str) -> bool:
         """And/识别节点命中 → 无光条在场。"""
-        return bool(self.action.check_status(node))
+        return bool(self._check_sword_status(node))
 
     def _read_light_text(self, text_node: str) -> int | None:
         """OCR 文本节点 → 读数（含 0）；未命中 → None。"""
-        result = self.action.check_status(text_node)
+        result = self._check_sword_status(text_node)
         if not result:
             return None
         text = str(getattr(result.best_result, "text", "")).strip()  # type: ignore[union-attr]
@@ -166,19 +181,41 @@ class CrimsonWeave(BaseRole):
         self,
     ) -> tuple[str | None, int | None, int | None]:
         """探测形态：great / small / None(转换中或未识别)。同一 tick 内缓存。"""
+        if self.combat.context.tasker.stopping:
+            return None, None, None
         if self._sword_probe_cache is not None:
             return self._sword_probe_cache
 
-        great_hit = self._light_bar_present(_GREAT_LIGHT_NODE)
-        if self.phase in _PHASES_ATTACK_WHILE_PROBE:
+        guarded_attack = (
+            self.phase in _PHASES_ATTACK_WHILE_PROBE
+            and self.phase not in _PHASES_SKIP_SMALL_ULT_PRIORITY
+        )
+        if guarded_attack:
+            # Shared attack captures and invalidates frames; finish it before the
+            # complete bar/OCR observation, so one probe cannot mix frames.
             self._tap_attack()
+            if self.combat.context.tasker.stopping:
+                return None, None, None
+        great_hit = self._light_bar_present(_GREAT_LIGHT_NODE)
+        if self.combat.context.tasker.stopping:
+            return None, None, None
+        if self.phase in _PHASES_ATTACK_WHILE_PROBE and not guarded_attack:
+            self._tap_attack()
+            if self.combat.context.tasker.stopping:
+                return None, None, None
         small_hit = self._light_bar_present(_SMALL_LIGHT_NODE)
+        if self.combat.context.tasker.stopping:
+            return None, None, None
         great_light = (
             self._read_light_text(_GREAT_LIGHT_TEXT_NODE) if great_hit else None
         )
+        if self.combat.context.tasker.stopping:
+            return None, None, None
         small_light = (
             self._read_light_text(_SMALL_LIGHT_TEXT_NODE) if small_hit else None
         )
+        if self.combat.context.tasker.stopping:
+            return None, None, None
         if great_hit and great_light is None:
             great_light = 0
 
@@ -196,6 +233,8 @@ class CrimsonWeave(BaseRole):
         else:
             mode = None
 
+        if self.combat.context.tasker.stopping:
+            return None, None, None
         self._sword_probe_cache = (mode, great_light, small_light)
         return self._sword_probe_cache
 
@@ -215,7 +254,7 @@ class CrimsonWeave(BaseRole):
         return value == _LIGHT_DRAGON_EXACT or value >= _LIGHT_DRAGON_MIN
 
     def _dragon_red_ready(self) -> bool:
-        return bool(self.action.check_status(_DRAGON_RED_LIGHT_NODE))
+        return self._light_bar_present(_DRAGON_RED_LIGHT_NODE)
 
     def _try_dragon_now(self) -> bool:
         """无光值达标 → 长按闪避蓄力突进；红色无光已现 → 直接长按攻击登龙。"""
@@ -226,10 +265,13 @@ class CrimsonWeave(BaseRole):
             return False
 
         mode, great_light, _ = self._probe_sword_mode()
-        if mode != "great":
+        if self.combat.context.tasker.stopping or mode != "great":
             return False
 
-        if self._dragon_red_ready():
+        red_ready = self._dragon_red_ready()
+        if self.combat.context.tasker.stopping:
+            return False
+        if red_ready:
             self.action.logger.info("检测到登龙红色无光，长按攻击登龙")
             self._dragon_red_deadline = time.monotonic() + _DRAGON_RED_WAIT_TIMEOUT
             self.phase = "great_dragon_red"
@@ -251,7 +293,10 @@ class CrimsonWeave(BaseRole):
         return True
 
     def _phase_great_dragon_red(self) -> None:
-        if not self._dragon_red_ready():
+        red_ready = self._dragon_red_ready()
+        if self.combat.context.tasker.stopping:
+            return
+        if not red_ready:
             if time.monotonic() >= self._dragon_red_deadline:
                 self.action.logger.warning("等待登龙红色无光超时，放弃登龙")
                 self.phase = "great_ball"
@@ -260,7 +305,10 @@ class CrimsonWeave(BaseRole):
         self.action.long_press_attack(2300)
         self.action.logger.info("登龙完成")
 
-        if self.action.check_Skill_energy_bar():
+        ready = self._skill_energy_ready()
+        if self.combat.context.tasker.stopping:
+            return
+        if ready:
             self.action.use_skill_until_empty()
             self.action.auxiliary_machine()
 
@@ -271,24 +319,40 @@ class CrimsonWeave(BaseRole):
         if self.switch_next():
             return
 
-        if self.action.check_Skill_energy_bar():
+        ready = self._skill_energy_ready()
+        if self.combat.context.tasker.stopping:
+            return
+        if ready:
             self.action.logger.info("登龙后大招就绪")
             self.phase = "great_ult"
         else:
             self.phase = "great_ball"
 
+    def _skill_energy_ready(self, *, fresh: bool = False) -> bool:
+        """能量观察拆开采帧与识别；调用方仍须区分停止和普通未命中。"""
+        if self.combat.context.tasker.stopping:
+            return False
+        image = self.action._get_image(fresh=fresh)
+        if self.combat.context.tasker.stopping:
+            return False
+        ready = self.action.check_Skill_energy_bar(image=image)
+        return not self.combat.context.tasker.stopping and ready
+
     def _cast_ult_if_ready(self) -> bool:
         """大招条就绪则连放至能量空。"""
-        if not self.action.check_Skill_energy_bar():
+        ready = self._skill_energy_ready()
+        if self.combat.context.tasker.stopping or not ready:
             return False
         self.action.use_skill_until_empty()
         return True
 
     def _try_small_ult_now(self) -> bool:
         """小太刀大招就绪则立即释放并消费本 tick。返回 True 表示已进入/继续开大。"""
-        if self._is_great_sword():
+        great_sword = self._is_great_sword()
+        if self.combat.context.tasker.stopping or great_sword:
             return False
-        if not self.action.check_Skill_energy_bar():
+        ready = self._skill_energy_ready()
+        if self.combat.context.tasker.stopping or not ready:
             return False
         if self.phase != "small_ult":
             self.action.logger.info("小太刀大招就绪，立即释放")
@@ -298,15 +362,19 @@ class CrimsonWeave(BaseRole):
 
     def _maybe_leave_great_sword(self) -> bool:
         """明确识别到小太刀 → 切回小太刀。未命中时不误判。"""
-        if not self._is_small_sword():
+        small_sword = self._is_small_sword()
+        if self.combat.context.tasker.stopping or not small_sword:
             return False
         self.action.logger.info("识别到小太刀")
         self.phase = "small_dodge"
         return True
 
     def _tap_attack(self) -> None:
-        """识别空档补一刀：只点攻击键，不截屏、不自动闪避。"""
-        self.action.context.run_action("攻击")
+        """普通补攻复用共享预警；大招等待保持原补点，不插入闪避。"""
+        if self.phase in _PHASES_SKIP_SMALL_ULT_PRIORITY:
+            self.action.context.run_action("攻击")
+        else:
+            self.action.attack()
 
     def _dodge_then_attack(self) -> bool:
         """闪避起算，两秒内持续点普攻。仅小太刀大招能量满时中断；大太刀不抢。
@@ -319,11 +387,18 @@ class CrimsonWeave(BaseRole):
         while time.monotonic() < deadline:
             if self.combat.context.tasker.stopping:
                 return False
-            if self._is_small_sword() and self.action.check_Skill_energy_bar(
-                fresh=True
-            ):
-                return True
+            small_sword = self._is_small_sword()
+            if self.combat.context.tasker.stopping:
+                return False
+            if small_sword:
+                ready = self._skill_energy_ready(fresh=True)
+                if self.combat.context.tasker.stopping:
+                    return False
+                if ready:
+                    return True
             self.action.attack()
+            if self.combat.context.tasker.stopping:
+                return False
         return False
 
     def _phase_idle(self) -> None:
@@ -331,7 +406,10 @@ class CrimsonWeave(BaseRole):
         self.phase = "small_dodge"
 
     def _phase_small_dodge(self) -> None:
-        if self._dodge_then_attack():
+        ready = self._dodge_then_attack()
+        if self.combat.context.tasker.stopping:
+            return
+        if ready:
             self.action.logger.info("小太刀大招就绪，打断持续攻击")
             self.phase = "small_ult"
             self._phase_small_ult()
@@ -340,6 +418,8 @@ class CrimsonWeave(BaseRole):
 
     def _phase_small_attack(self) -> None:
         mode, great_light, _ = self._probe_sword_mode()
+        if self.combat.context.tasker.stopping:
+            return
         if mode == "great":
             self.action.logger.info(
                 "检测到大太刀无光值=%s，转入大太刀流程", great_light
@@ -353,7 +433,7 @@ class CrimsonWeave(BaseRole):
 
     def _phase_small_ult(self) -> None:
         """小太刀开大 → 进入大太刀；能量条在就持续点大招。"""
-        if self._cast_ult_if_ready():
+        if self._cast_ult_if_ready() or self.combat.context.tasker.stopping:
             return
 
         self.action.auxiliary_machine()
@@ -365,6 +445,8 @@ class CrimsonWeave(BaseRole):
     def _phase_small_ult_wait(self) -> None:
         # 明确识别到大太刀 → 转入消球；否则盲消 + 补点大招
         mode, great_light, _ = self._probe_sword_mode()
+        if self.combat.context.tasker.stopping:
+            return
         if mode == "great":
             self.action.logger.info("大太刀就绪，无光值=%s", great_light)
             self._dragon_start_blocked_until = time.monotonic() + _DRAGON_START_BLOCK
@@ -376,14 +458,17 @@ class CrimsonWeave(BaseRole):
             self.phase = "small_dodge"
             return
 
-        if self._cast_ult_if_ready():
+        if self._cast_ult_if_ready() or self.combat.context.tasker.stopping:
             return
 
         self.action.ball_elimination_target(1)
 
     def _phase_great_ball(self) -> None:
         """大太刀：有球则固定消 1 号球攒无光/大招；无球则闪避连段攒球。"""
-        if self._maybe_leave_great_sword():
+        left_great = self._maybe_leave_great_sword()
+        if self.combat.context.tasker.stopping:
+            return
+        if left_great:
             self._phase_small_dodge()
             return
 
@@ -395,11 +480,17 @@ class CrimsonWeave(BaseRole):
         self._phase_great_build_dodge()
 
     def _phase_great_build_dodge(self) -> None:
-        if self._maybe_leave_great_sword():
+        left_great = self._maybe_leave_great_sword()
+        if self.combat.context.tasker.stopping:
+            return
+        if left_great:
             self._phase_small_dodge()
             return
 
-        if self._dodge_then_attack():
+        ready = self._dodge_then_attack()
+        if self.combat.context.tasker.stopping:
+            return
+        if ready:
             self.action.logger.info("小太刀大招就绪，打断持续攻击")
             self.phase = "small_ult"
             self._phase_small_ult()
@@ -407,7 +498,10 @@ class CrimsonWeave(BaseRole):
         self.phase = "great_build_attack"
 
     def _phase_great_build_attack(self) -> None:
-        if self._maybe_leave_great_sword():
+        left_great = self._maybe_leave_great_sword()
+        if self.combat.context.tasker.stopping:
+            return
+        if left_great:
             self._phase_small_dodge()
             return
 
@@ -421,7 +515,7 @@ class CrimsonWeave(BaseRole):
 
     def _phase_great_ult(self) -> None:
         """大太刀大招；能量条在就持续点大招。"""
-        if self._cast_ult_if_ready():
+        if self._cast_ult_if_ready() or self.combat.context.tasker.stopping:
             return
 
         self.action.auxiliary_machine()
@@ -431,7 +525,10 @@ class CrimsonWeave(BaseRole):
         self.action.logger.info("大太刀大招释放完毕，等待回到小太刀")
 
     def _phase_great_ult_wait(self) -> None:
-        if self._is_small_sword():
+        small_sword = self._is_small_sword()
+        if self.combat.context.tasker.stopping:
+            return
+        if small_sword:
             self.action.logger.info("已回到小太刀")
             self.phase = "small_dodge"
             return
@@ -441,7 +538,7 @@ class CrimsonWeave(BaseRole):
             self.phase = "great_ball"
             return
 
-        if self._cast_ult_if_ready():
+        if self._cast_ult_if_ready() or self.combat.context.tasker.stopping:
             return
 
         self.action.attack()
