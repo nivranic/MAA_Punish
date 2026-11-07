@@ -330,10 +330,13 @@ class InverseCrown(BaseRole):
 
     def is_input_protected(self) -> bool:
         # Special-ball holding, its required attack settlement, and ultimate
-        # charging/casting must not receive automatic dodge or observation spam.
+        # release keep protection. Ordinary charge only attacks while waiting
+        # for readiness, so shared warning reactions must remain available.
         return self.inverse_crown_profile.enabled or self.phase in {
-            "special_press", "special_attack", "skill",
-        }
+            "special_press", "special_attack",
+        } or (
+            self.phase == "skill" and self._skill_sub in {"cast", "cage", "finish"}
+        )
 
     def do_perform(self) -> None:
         if self.inverse_crown_profile.enabled:
@@ -838,12 +841,16 @@ class InverseCrown(BaseRole):
             self.action.long_press_skill(2000)
             self._finish_skill()
         elif self._skill_sub == "charge":
-            if (
-                self._energy_almost_full()
-                or time.monotonic() >= self._skill_charge_deadline
-            ):
+            if self._energy_almost_full():
                 self._skill_sub = "cast"
                 self._skill_cast_ticks = 0
+            elif time.monotonic() >= self._skill_charge_deadline:
+                # A charge timeout does not confirm a cast or its completion.
+                self._skill_sub = ""
+                self._skill_charge_deadline = 0.0
+                self._skill_cast_ticks = 0
+                self._skill_switch_after = False
+                self.phase = "idle"
             else:
                 self.action.attack()
         elif self._skill_sub == "cast":

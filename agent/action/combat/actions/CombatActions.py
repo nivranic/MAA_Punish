@@ -226,6 +226,8 @@ class CombatActions:
             if not (result and result.hit):
                 return False
         self._auto_dodge(image)
+        if self.context.tasker.stopping:
+            return False
         action_result = self.context.run_action("攻击")
         self._invalidate_frame()
         return action_result
