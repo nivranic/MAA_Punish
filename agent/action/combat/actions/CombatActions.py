@@ -256,21 +256,35 @@ class CombatActions:
         用于把连打间隔压到最小。
         :param count: 攻击次数，默认5
         :param interval: 每次攻击间隔（毫秒），默认0（尽可能短）
-        :return: True
+        :return: True（次数用尽）/ False（战斗未命中或停止）
         """
-        image = None
-        if not self.skip_combat_gate:
-            image = self._get_image()
-            result = self.context.run_recognition("战斗中", image)
-            if not (result and result.hit):
+        try:
+            if self.context.tasker.stopping:
                 return False
-        self._auto_dodge(image)
+            image = None
+            if not self.skip_combat_gate:
+                image = self._get_image()
+                if self.context.tasker.stopping:
+                    return False
+                result = self.context.run_recognition("战斗中", image)
+                if self.context.tasker.stopping or not (result and result.hit):
+                    return False
+            self._auto_dodge(image)
+            return self._run_burst_inputs("攻击", count, interval)
+        finally:
+            self._invalidate_frame()
+
+    def _run_burst_inputs(self, node: str, count: int, interval: int) -> bool:
+        """保持原连打节奏；阻塞返回后的停止只取消尚未发起的输入。"""
         for _ in range(max(1, count)):
-            self.context.run_action("攻击")
+            if self.context.tasker.stopping:
+                return False
+            self.context.run_action(node)
+            if self.context.tasker.stopping:
+                return False
             if interval > 0:
                 time.sleep(interval / 1000)
-        self._invalidate_frame()
-        return True
+        return not self.context.tasker.stopping
 
     def long_press_attack(self, duration: int = 1000):
         """
@@ -441,20 +455,20 @@ class CombatActions:
         :param target: 消球位置（1~8），默认2
         :param count: 消球次数，默认5
         :param interval: 每次消球间隔（毫秒），默认0（尽可能短）
-        :return: True（次数用尽）/ False（位置非法）
+        :return: True（次数用尽）/ False（位置非法或停止）
         """
         target = abs(target)
         if target == 0:
             target = 2
         elif target < 1 or target > 8:
             return False
-        self._auto_dodge()
-        for _ in range(max(1, count)):
-            self.context.run_action(f"消球{target}")
-            if interval > 0:
-                time.sleep(interval / 1000)
-        self._invalidate_frame()
-        return True
+        try:
+            if self.context.tasker.stopping:
+                return False
+            self._auto_dodge()
+            return self._run_burst_inputs(f"消球{target}", count, interval)
+        finally:
+            self._invalidate_frame()
 
     def trigger_qte(self, target: int = 1):
         """

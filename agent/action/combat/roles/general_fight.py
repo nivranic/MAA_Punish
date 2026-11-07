@@ -52,10 +52,23 @@ class GeneralFight(BaseRole):
         super().reset_state()
         self._farm_ticks = 0
 
-    def _burst(self) -> None:
+    def _burst(self) -> bool:
         """一轮：连续 5 次普攻 → 连续 5 次消球，每下间隔 25ms（每段开头各做一次自动闪避判定）。"""
-        self.action.attack_burst(_ATTACK_BURST, _BURST_INTERVAL_MS)
-        self.action.ball_elimination_burst(_BALL_SLOT, _BALL_BURST, _BURST_INTERVAL_MS)
+        if not self.action.attack_burst(_ATTACK_BURST, _BURST_INTERVAL_MS):
+            return False
+        return self.action.ball_elimination_burst(
+            _BALL_SLOT, _BALL_BURST, _BURST_INTERVAL_MS
+        )
+
+    def _skill_energy_ready(self, *, fresh: bool = False) -> bool:
+        """采帧和能量识别分别检查停止，调用者再区分停止与普通未命中。"""
+        if self.combat.context.tasker.stopping:
+            return False
+        image = self.action._get_image(fresh=fresh)
+        if self.combat.context.tasker.stopping:
+            return False
+        ready = self.action.check_Skill_energy_bar(image=image)
+        return not self.combat.context.tasker.stopping and ready
 
     def do_perform(self) -> None:
         if self.combat.context.tasker.stopping:
@@ -74,12 +87,16 @@ class GeneralFight(BaseRole):
     def _phase_idle(self) -> None:
         self.action.logger.info("通用战斗: 开始")
         self.action.lens_lock()
-        self._burst()
+        if self.combat.context.tasker.stopping or not self._burst():
+            return
         self._farm_ticks = 0
         self.phase = "farm"
 
     def _phase_farm(self) -> None:
-        if self.action.check_Skill_energy_bar():
+        ready = self._skill_energy_ready()
+        if self.combat.context.tasker.stopping:
+            return
+        if ready:
             self.action.logger.info("通用战斗: 大招就绪")
             self.phase = "ult"
             return
@@ -89,7 +106,8 @@ class GeneralFight(BaseRole):
             self.phase = "switch"
             return
 
-        self._burst()
+        if not self._burst():
+            return
         self._farm_ticks += 1
 
     def _phase_ult(self) -> None:
@@ -101,21 +119,31 @@ class GeneralFight(BaseRole):
         while time.monotonic() < deadline:
             if self.combat.context.tasker.stopping:
                 self.action.logger.info("通用战斗: 大招中止 presses=%d", presses)
-                break
+                return
             self.action.use_skill()
+            if self.combat.context.tasker.stopping:
+                return
             presses += 1
-            if not self.action.check_Skill_energy_bar(fresh=True):
+            ready = self._skill_energy_ready(fresh=True)
+            if self.combat.context.tasker.stopping:
+                return
+            if not ready:
                 self.action.logger.info("通用战斗: 大招结束 presses=%d", presses)
                 break
-            self._burst()
+            if not self._burst():
+                return
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
             time.sleep(min(_ULT_POLL_INTERVAL, remaining))
+            if self.combat.context.tasker.stopping:
+                return
         else:
             self.action.logger.warning(
                 "通用战斗: 大招超时 %.0fs presses=%d", timeout, presses
             )
 
+        if self.combat.context.tasker.stopping:
+            return
         self.phase = "switch"
 
