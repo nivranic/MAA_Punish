@@ -276,10 +276,9 @@ class CombatActions:
         按住攻击键一段时间。
         :param duration: 长按时间（毫秒），默认1000
         """
-        if duration != 1000:
-            self.context.override_pipeline(
-                {"长按攻击": {"action": {"param": {"duration": duration}}}}
-            )
+        self.context.override_pipeline(
+            {"长按攻击": {"action": {"param": {"duration": duration}}}}
+        )
         return self.context.run_action("长按攻击")
 
     def dodge(self):
@@ -295,10 +294,9 @@ class CombatActions:
         按住闪避键一段时间。
         :param duration: 长按时间（毫秒），默认1000
         """
-        if duration != 1000:
-            self.context.override_pipeline(
-                {"长按闪避": {"action": {"param": {"duration": duration}}}}
-            )
+        self.context.override_pipeline(
+            {"长按闪避": {"action": {"param": {"duration": duration}}}}
+        )
         return self.context.run_action("长按闪避")
 
     def long_press_dodge_until(
@@ -388,10 +386,9 @@ class CombatActions:
         按住技能键一段时间。
         :param time: 长按时间（毫秒），默认1000
         """
-        if time != 1000:
-            self.context.override_pipeline(
-                {"长按技能": {"action": {"param": {"duration": time}}}}
-            )
+        self.context.override_pipeline(
+            {"长按技能": {"action": {"param": {"duration": time}}}}
+        )
         return self.context.run_action("长按技能")
 
     def down_dodge(self, contact: int = 0):
