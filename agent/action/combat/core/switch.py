@@ -87,9 +87,13 @@ def blind_attack_click(
         combat is not None and combat.is_observation_protected()
     ):
         return
-    image = capture_frame(context, combat)
-    auto_dodge(context, image, combat=combat, logger=logger)
     for _ in range(max(1, attack_count)):
+        if context.tasker.stopping or (
+            combat is not None and combat.is_observation_protected()
+        ):
+            return
+        image = capture_frame(context, combat)
+        auto_dodge(context, image, combat=combat, logger=logger)
         if context.tasker.stopping or (
             combat is not None and combat.is_observation_protected()
         ):

@@ -108,10 +108,17 @@ class Aegis(BaseRole):
             return
 
         self.action.use_qte()
-        if self.action.count_signal_balls() == self._combo_ball_count:
+        if self.combat.context.tasker.stopping:
+            return
+        ball_count = self.action.count_signal_balls()
+        if self.combat.context.tasker.stopping:
+            return
+        if ball_count == self._combo_ball_count:
             self.action.dodge()
             self.action.ball_elimination_target()
         self.action.use_qte()
+        if self.combat.context.tasker.stopping:
+            return
         self.action.auxiliary_machine()
         self._loop_ticks += 1
         self.phase = "loop"

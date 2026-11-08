@@ -284,7 +284,7 @@ def test_provider_detection_keeps_normal_keepalive_but_protected_detection_is_pu
         return "逆冕", "InverseCrown"
     monkeypatch.setattr("action.combat.core.provider.detect_current_role", detect)
     CombatCheck().detect_team(combat.context, combat)
-    assert combat.context.actions == ([] if enabled else ["闪避", "攻击", "攻击"])
+    assert combat.context.actions == ([] if enabled else ["闪避", "攻击", "闪避", "攻击"])
 
 
 def test_wait_callback_is_pure_when_protected(monkeypatch):

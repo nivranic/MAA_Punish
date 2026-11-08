@@ -103,6 +103,14 @@ class Effulgence(BaseRole):
             if self.combat.context.tasker.stopping:
                 self.phase = "combat"
                 return
+            if self.combat.is_observation_protected():
+                return
+            self.action._auto_dodge()
+            if self.combat.context.tasker.stopping:
+                self.phase = "combat"
+                return
+            if self.combat.is_observation_protected():
+                return
             self.action.context.run_action("攻击")
             self.action._invalidate_frame()
             if self._has_p2_core_bar():

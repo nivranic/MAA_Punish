@@ -492,12 +492,19 @@ class CombatActions:
     def use_qte(self):
         """
         同时使用 QTE（低代码 qte1 + qte2，上方/下方 QTE 键位各触发一次）。
-        不识别、不自动闪避，仅 run_action。
+        每次派发前检查共享预警；受保护阶段跳过预警，保留角色自身 QTE。
         """
-        self.context.run_action("qte1")
-        result = self.context.run_action("qte2")
-        self._invalidate_frame()
-        return result
+        try:
+            for node in ("qte1", "qte2"):
+                if self.context.tasker.stopping:
+                    return False
+                self._auto_dodge()
+                if self.context.tasker.stopping:
+                    return False
+                result = self.context.run_action(node)
+            return result
+        finally:
+            self._invalidate_frame()
 
     def _role_switch(self, color: str) -> bool:
         role = getattr(self, "_role", None)
