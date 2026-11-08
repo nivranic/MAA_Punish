@@ -605,6 +605,7 @@ class RoleSelection(CustomAction):
         role_dict = ROLE_ACTIONS.copy()
 
         role = None
+        scanned_full: dict | None = None
         if roguelike_equivalent is None and not scan_then_return:
             role = self._load_cache(update_frequency)
             if role:
@@ -618,9 +619,8 @@ class RoleSelection(CustomAction):
             }
             if role:
                 self.logger.info(f"肉鸽3读取正式角色缓存, 共 {len(role)} 个")
-            else:
-                role = self._build_roguelike3_role_data()
-                self.logger.info(f"肉鸽3试玩候选, 共 {len(role)} 个")
+            # 缓存为空（如 ISO 周翻转失效）时不预填试玩候选：
+            # 落入下方识别扫描分支按当前招募页重建，试玩候选仅作扫描无适配候选时的末位兜底。
 
         if not role:
             self.logger.info("未读取到缓存, 开始识别")
@@ -663,6 +663,7 @@ class RoleSelection(CustomAction):
                 self.logger.error(message)
                 self.send_msg(context, message)
                 return CustomAction.RunResult(success=False)
+            scanned_full = dict(role)
 
             if scan_then_return:
                 for r in role.values():
@@ -680,6 +681,22 @@ class RoleSelection(CustomAction):
                 if context.tasker.stopping:
                     return CustomAction.RunResult(success=True)
                 context.run_action("反向滑动_选人")
+
+        if roguelike_equivalent == 3:
+            # 权重池必须收窄到矩阵适配候选：扫描/缓存可能含非适配角色，
+            # 其模板在招募页不成立，选出即招募必然失败。
+            r3_candidates = {
+                name: info for name, info in role.items()
+                if ROLE_ACTIONS.get(name.replace("[试用]", ""), {}).get("name")
+                in _ROGUELIKE3_ROLE_NAMES
+            }
+            if r3_candidates:
+                role = r3_candidates
+                if scanned_full is not None:
+                    self.logger.info(f"肉鸽3按扫描结果收窄适配候选, 共 {len(role)} 个")
+            else:
+                role = self._build_roguelike3_role_data()
+                self.logger.info(f"肉鸽3扫描无适配候选, 降级试玩候选, 共 {len(role)} 个")
 
         role_weight = self.calculate_weight(role, condition)
         self.logger.info(f"根据识别结果计算权重完成, 共 {len(role_weight)} 个角色")
@@ -716,7 +733,8 @@ class RoleSelection(CustomAction):
         if roguelike_equivalent == 3:
             if need_multi:
                 # R03 色位与预算独立于普通囚笼配队，不借用其空槽或名单合并。
-                cached_roles = cached_roles or {}
+                # 缓存为空时以本次扫描全量结果解析 support（含试玩标记，键名即页面事实）。
+                cached_roles = cached_roles or scanned_full or {}
                 supports = [
                     name if name in cached_roles else name + "[试用]"
                     for name in ("丽芙·流光", "薇拉·瑰丽")
