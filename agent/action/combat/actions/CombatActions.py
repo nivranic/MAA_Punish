@@ -251,9 +251,8 @@ class CombatActions:
 
     def attack_burst(self, count: int = 5, interval: int = 0) -> bool:
         """
-        连打普攻（少识别版）
-        只在开头做一次自动闪避判定，随后连续发「攻击」动作，不再逐次识别，
-        用于把连打间隔压到最小。
+        连打普攻，每次普通输入前使用新帧检查共享预警。
+        战斗门只在段首检查，保留原输入次数与间隔。
         :param count: 攻击次数，默认5
         :param interval: 每次攻击间隔（毫秒），默认0（尽可能短）
         :return: True（次数用尽）/ False（战斗未命中或停止）
@@ -269,7 +268,6 @@ class CombatActions:
                 result = self.context.run_recognition("战斗中", image)
                 if self.context.tasker.stopping or not (result and result.hit):
                     return False
-            self._auto_dodge(image)
             return self._run_burst_inputs("攻击", count, interval)
         finally:
             self._invalidate_frame()
@@ -277,6 +275,9 @@ class CombatActions:
     def _run_burst_inputs(self, node: str, count: int, interval: int) -> bool:
         """保持原连打节奏；阻塞返回后的停止只取消尚未发起的输入。"""
         for _ in range(max(1, count)):
+            if self.context.tasker.stopping:
+                return False
+            self._auto_dodge()
             if self.context.tasker.stopping:
                 return False
             self.context.run_action(node)
@@ -455,8 +456,7 @@ class CombatActions:
 
     def ball_elimination_burst(self, target: int = 2, count: int = 5, interval: int = 0):
         """
-        连续消同一位球（少识别版）
-        只在开头做一次自动闪避判定，随后连续点同一位球，不再逐次识别。
+        连续消同一位球，每次普通输入前使用新帧检查共享预警。
         :param target: 消球位置（1~8），默认2
         :param count: 消球次数，默认5
         :param interval: 每次消球间隔（毫秒），默认0（尽可能短）
@@ -470,7 +470,6 @@ class CombatActions:
         try:
             if self.context.tasker.stopping:
                 return False
-            self._auto_dodge()
             return self._run_burst_inputs(f"消球{target}", count, interval)
         finally:
             self._invalidate_frame()

@@ -178,14 +178,14 @@ def test_input_failure_propagates_and_invalidates_frame(monkeypatch, kind, node)
 
 @pytest.mark.parametrize("kind,node", (("attack", "攻击"), ("ball", "消球2")))
 @pytest.mark.parametrize("mode", ("miss", "hit", "protected"))
-def test_normal_burst_keeps_one_warning_and_exact_input_timing(monkeypatch, kind, node, mode):
+def test_normal_burst_keeps_per_input_warning_and_exact_intervals(monkeypatch, kind, node, mode):
     fight = ScriptedBurst(monkeypatch, warning_at=(1,) if mode == "hit" else (),
                           protected=mode == "protected")
 
     assert fight.burst(kind) is True
 
     assert fight.context.actions == (["闪避"] if mode == "hit" else []) + [node] * 5
-    assert fight.counts.get("自动闪避", 0) == (0 if mode == "protected" else 1)
+    assert fight.counts.get("自动闪避", 0) == (0 if mode == "protected" else 5)
     assert [event[1] for event in fight.events if event[0] == "sleep"] == [0.025] * 5
     assert fight.combat.frame is None
 
@@ -199,7 +199,7 @@ def test_ball_target_and_count_contract_is_unchanged(monkeypatch, target, count,
 
     assert fight.burst("ball", target=target, count=count, interval=0) is bool(expected)
     assert fight.context.actions == [node] * expected
-    assert fight.counts.get("自动闪避", 0) == bool(expected)
+    assert fight.counts.get("自动闪避", 0) == expected
 
 
 @pytest.mark.parametrize("count", (0, -2))
@@ -218,7 +218,7 @@ def test_combat_gate_miss_remains_distinct_from_warning_miss(monkeypatch, gate_h
 
     assert fight.burst("attack") is gate_hit
     assert fight.context.actions == ["攻击"] * (5 if gate_hit else 0)
-    assert fight.counts.get("自动闪避", 0) == int(gate_hit)
+    assert fight.counts.get("自动闪避", 0) == (5 if gate_hit else 0)
 
 
 @pytest.mark.parametrize("phase", ("idle", "farm", "ult"))
@@ -288,6 +288,6 @@ def test_normal_role_keeps_burst_order_and_existing_phase_progress(monkeypatch, 
     elif phase == "ult":
         expected = ["技能"] + expected + ["技能"]
     assert fight.context.actions == expected
-    assert fight.counts["自动闪避"] == (3 if phase == "idle" else 2)
+    assert fight.counts["自动闪避"] == (11 if phase == "idle" else 10)
     assert fight.role.phase == ("switch" if phase == "ult" else "farm")
     assert fight.role._farm_ticks == {"idle": 0, "farm": 8, "ult": 7}[phase]

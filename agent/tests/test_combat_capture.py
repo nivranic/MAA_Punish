@@ -183,6 +183,7 @@ def test_actions_may_reuse_valid_frame_but_failed_refresh_discards_it():
 def test_switch_failure_after_first_click_stops_followup_input(monkeypatch):
     combat = _combat(
         _ScreenshotJob(image=_image()),
+        _ScreenshotJob(image=_image()),  # Fresh warning before the first QTE.
         _ScreenshotJob(image=_image(), succeeded=False),
     )
     combat.context.recognition_map["切换红色QTE"] = make_hit()

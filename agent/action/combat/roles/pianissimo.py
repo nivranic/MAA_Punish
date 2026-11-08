@@ -164,23 +164,28 @@ class Pianissimo(BaseRole):
         duration_s: float = _ATTACK_BURST_S,
         should_stop: Callable[[], bool] | None = None,
     ) -> bool:
-        """预警后保留完整连点窗口；False仅表示收到停止。"""
+        """逐次输入前检查预警；首次预警后只启动一次连点窗口。"""
         try:
             if self.combat.context.tasker.stopping:
                 return False
-            self.action._auto_dodge()
-            if self.combat.context.tasker.stopping:
-                return False
-            deadline = time.monotonic() + duration_s
+            deadline = None
             interval_s = _FARM_TICK_MS / 1000
-            while time.monotonic() < deadline:
+            while deadline is None or time.monotonic() < deadline:
                 if self.combat.context.tasker.stopping:
                     return False
-                condition_met = should_stop is not None and should_stop()
+                condition_met = duration_s > 0 and should_stop is not None and should_stop()
                 if self.combat.context.tasker.stopping:
                     return False
                 if condition_met:
                     return True
+                self.action._auto_dodge()
+                if self.combat.context.tasker.stopping:
+                    return False
+                now = time.monotonic()
+                if deadline is None:
+                    deadline = now + duration_s
+                if not now < deadline:
+                    break
                 if not self._tap_attack():
                     return False
                 remaining = deadline - time.monotonic()
@@ -194,19 +199,31 @@ class Pianissimo(BaseRole):
             self.action._invalidate_frame()
 
     def _p2_farm_burst(self) -> bool:
-        """p2普通窗口先查一次预警，再完整连打1秒；False表示停止。"""
+        """p2普通窗口逐次检查预警，共用首次预警后的1秒期限。"""
         try:
             if self.combat.context.tasker.stopping:
                 return False
-            self.action._auto_dodge()
-            if self.combat.context.tasker.stopping:
-                return False
-            deadline = time.monotonic() + _P2_FARM_S
+            deadline = None
             interval_s = _FARM_TICK_MS / 1000
-            while time.monotonic() < deadline:
+            while deadline is None or time.monotonic() < deadline:
                 if self.combat.context.tasker.stopping:
                     return False
-                if not self._tap_attack() or not self._tap_ball(2):
+                self.action._auto_dodge()
+                if self.combat.context.tasker.stopping:
+                    return False
+                now = time.monotonic()
+                if deadline is None:
+                    deadline = now + _P2_FARM_S
+                if now >= deadline:
+                    break
+                if not self._tap_attack():
+                    return False
+                self.action._auto_dodge()
+                if self.combat.context.tasker.stopping:
+                    return False
+                if time.monotonic() >= deadline:
+                    break
+                if not self._tap_ball(2):
                     return False
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:

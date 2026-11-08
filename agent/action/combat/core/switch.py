@@ -203,11 +203,31 @@ def attempt_switch_to_color(
     logger.info("切人 QTE 已识别: 色位=%s 坐标=(%s, %s)", target, qte_x, qte_y)
 
     while time.monotonic() < deadline:
-        if should_stop is not None and should_stop():
+        if (
+            context.tasker.stopping
+            or (should_stop is not None and should_stop())
+            or (combat is not None and combat.is_observation_protected())
+        ):
             return False
 
         if attacker_callback is not None:
             attacker_callback()
+        if (
+            context.tasker.stopping
+            or (should_stop is not None and should_stop())
+            or (combat is not None and combat.is_observation_protected())
+        ):
+            return False
+        warning_image = capture_frame(context, combat)
+        auto_dodge(context, warning_image, combat=combat, logger=logger)
+        if (
+            context.tasker.stopping
+            or (should_stop is not None and should_stop())
+            or (combat is not None and combat.is_observation_protected())
+        ):
+            return False
+        if time.monotonic() >= deadline:
+            break
         context.tasker.controller.post_click(qte_x, qte_y).wait()
 
         image = capture_frame(context, combat)

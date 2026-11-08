@@ -119,13 +119,14 @@ class WindowFight:
 
 @pytest.mark.parametrize("kind,duration,attacks", [("p1", 0.5, 20), ("p2", 1.0, 40)])
 @pytest.mark.parametrize("mode", ["hit", "miss", "protected"])
-def test_window_warns_once_before_original_inputs(monkeypatch, kind, duration, attacks, mode):
+def test_window_warns_before_each_original_input(monkeypatch, kind, duration, attacks, mode):
     fight = WindowFight(monkeypatch, warning=mode == "hit", protected=mode == "protected")
     assert fight.window(kind) is True
-    expected = (["闪避"] if mode == "hit" else [])
-    expected += (["攻击"] if kind == "p1" else ["攻击", "消球2"]) * attacks
+    nodes = ["攻击"] if kind == "p1" else ["攻击", "消球2"]
+    expected = [item for _ in range(attacks) for node in nodes
+                for item in (["闪避", node] if mode == "hit" else [node])]
     assert fight.context.actions == expected
-    assert fight.counts.get(("recognition", "自动闪避"), 0) == (0 if mode == "protected" else 1)
+    assert fight.counts.get(("recognition", "自动闪避"), 0) == (0 if mode == "protected" else attacks * len(nodes))
     assert fight.clock.now == pytest.approx(100.0 + duration)
     assert fight.combat.frame is None
     for patch in fight.context.pipeline_overrides:
@@ -133,15 +134,24 @@ def test_window_warns_once_before_original_inputs(monkeypatch, kind, duration, a
 
 
 @pytest.mark.parametrize("kind,duration,attacks", [("p1", 0.5, 20), ("p2", 1.0, 40)])
-def test_slow_warning_does_not_consume_input_window(monkeypatch, kind, duration, attacks):
+def test_slow_first_warning_does_not_consume_input_window(monkeypatch, kind, duration, attacks):
     fight = WindowFight(monkeypatch, warning_seconds=2.5)
+    recognize = fight.recognize
+
+    def first_warning_slow(name, image, pipeline_override=None):
+        result = recognize(name, image, pipeline_override)
+        if name == "自动闪避":
+            fight.warning_seconds = 0.0
+        return result
+
+    monkeypatch.setattr(fight.context, "run_recognition", first_warning_slow)
     assert fight.window(kind) is True
     assert fight.clock.now == pytest.approx(102.5 + duration)
     inputs = [event for event in fight.events if event[0] == "input_request" and event[1] == "攻击"]
     assert len(inputs) == attacks
     assert inputs[0][3] == pytest.approx(102.5)
     assert inputs[-1][3] == pytest.approx(102.5 + duration - 0.025)
-    assert fight.counts[("recognition", "自动闪避")] == 1
+    assert fight.counts[("recognition", "自动闪避")] == attacks * (1 if kind == "p1" else 2)
 
 
 @pytest.mark.parametrize("kind", ["p1", "p2"])
@@ -237,7 +247,7 @@ def test_four_phases_do_not_advance_after_observation_stop(monkeypatch, phase, n
 @pytest.mark.parametrize("stage", ["capture", "recognition"])
 @pytest.mark.parametrize("condition_hit", [False, True])
 def test_should_stop_observation_cancellation_is_not_plain_condition(monkeypatch, stage, condition_hit):
-    boundary = ("capture", None, 2) if stage == "capture" else ("recognition", "检查希声红球", 1)
+    boundary = ("capture", None, 1) if stage == "capture" else ("recognition", "检查希声红球", 1)
     fight = WindowFight(monkeypatch, stop_at=boundary)
     if condition_hit:
         fight.observation_hits.add("检查希声红球")
@@ -272,11 +282,12 @@ def test_plain_should_stop_condition_ends_normally_without_attack(monkeypatch):
 def test_next_observation_does_not_reuse_preinput_warning_frame(monkeypatch, kind):
     fight = WindowFight(monkeypatch)
     assert fight.window(kind) is True
-    warning_frame = fight.observation_frames[0][1]
+    warning_frame = fight.observation_frames[-1][1]
+    captures_before = fight.counts[("capture", None)]
     fight.role.action.check_status("post_window_probe")
     assert fight.observation_frames[-1][0] == "post_window_probe"
     assert fight.observation_frames[-1][1] is not warning_frame
-    assert fight.counts[("capture", None)] == 2
+    assert fight.counts[("capture", None)] == captures_before + 1
 
 
 @pytest.mark.parametrize("kind", ["p1", "p2"])

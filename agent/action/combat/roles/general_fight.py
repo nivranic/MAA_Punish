@@ -53,7 +53,7 @@ class GeneralFight(BaseRole):
         self._farm_ticks = 0
 
     def _burst(self) -> bool:
-        """一轮：连续 5 次普攻 → 连续 5 次消球，每下间隔 25ms（每段开头各做一次自动闪避判定）。"""
+        """一轮：连续 5 次普攻 → 连续 5 次消球，每下间隔 25ms，每次输入前检查共享预警。"""
         if not self.action.attack_burst(_ATTACK_BURST, _BURST_INTERVAL_MS):
             return False
         return self.action.ball_elimination_burst(
