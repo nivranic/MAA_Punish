@@ -621,6 +621,17 @@ class CombatTask:
                     "r3 tick hp 证据不可读: reason=%s text=%r", hp.reason, hp.text,
                 )
                 return self._defer_r3_identity_rejection(role)
+            if hp.current == 0:
+                # 死亡期不判身份、不发输入：死亡演出/意识重启弹窗帧上的识别结果
+                # 不来自在场角色，严格失配会把可复活的死亡误判成策略失配
+                # （run_20261108_132443 实证 0HP 后 8 秒即 REJECTED，宽限预算
+                # 因 HP 仍可读而完全不生效）。交回每 tick 先行的 0HP 退战预算；
+                # 复活点击由 pipeline 的重启 overlay 节点接管，宽限超时仍 fail-closed。
+                self.logger.info(
+                    "r3 tick 血量为 0（text=%r），死亡期跳过身份判定，等待 0HP 退战",
+                    hp.text,
+                )
+                return self._defer_r3_identity_rejection(role)
             if self.team.is_solo():
                 # 单人队无切换可发生：在场连续性由游戏机制保证；模板再校验只会
                 # 死锁（确认前禁输入→无攻击帧→attack_template 永不命中）。

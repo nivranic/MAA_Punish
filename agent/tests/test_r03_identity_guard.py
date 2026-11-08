@@ -469,3 +469,42 @@ def test_canonical_task_adds_only_local_policy_and_stop_sink():
     assert patch["战斗中"] == {**NODE, "on_error": ["矩阵循生_身份拒绝停止"]}
     assert patch["矩阵循生_身份拒绝停止"] == dict(recognition=dict(type="DirectHit"), action=dict(type="StopTask"), next=[], on_error=[], enabled=True)
     assert all("战斗中" not in row["pipeline_override"] for row in task["option"]["选择模式"]["cases"])
+
+
+def test_r03_tick_dead_hp_skips_identity_judgment_and_inputs(monkeypatch):
+    """死亡期（严格血量 0）不判身份、不发输入（run_20261108_132443 实证：
+    死亡弹窗帧的模板误读曾把可复活死亡 8 秒内误判成策略失配）。
+
+    0HP 退战预算（HP_ZERO_TIMEOUT=5s < R3_IDENTITY_GRACE_SECONDS=15s）先到，
+    会话按 hp_zero 优雅退出，复活点击交回 pipeline 重启 overlay 节点；
+    宽限超时仍按 unknown 拒绝（fail-closed 保留）。
+    """
+    import action.combat.core.session as session
+    item = combat()
+    item.team = TeamSnapshot(R="Oblivion", B="GeneralFight", Y="", current="R")
+    role = role_factory.create_role(item, "R", "Oblivion")
+    item.roles = {"R": role}
+    item.context.recognition_map["检查血量"] = _hp_result("0/8588")
+    calls = detection(
+        monkeypatch, session,
+        AssertionError("dead frame must not run template identity"))
+    monkeypatch.setattr(role, "do_perform", lambda: pytest.fail("dead frame must not perform"))
+    assert item.refresh_field_role(role) is True
+    assert item.field_identity == "unknown"
+    assert item.r3_identity_grace_until is not None
+    assert calls == []
+    no_inputs(item.context)
+    # 复活后（严格血量 >0）恢复常规确认路径：模板识别在场角色并放行战斗逻辑。
+    item.context.recognition_map["检查血量"] = _hp_result("8101/8588")
+    detection(monkeypatch, session, ("终焉", "Oblivion"))
+    assert item.refresh_field_role(role) is False
+    assert item.field_identity == "confirmed"
+    assert item.r3_identity_grace_until is None
+    no_inputs(item.context)
+    # 仍死亡且宽限耗尽：保持 fail-closed 未知拒绝。
+    item.context.recognition_map["检查血量"] = _hp_result("0/8588")
+    assert item.refresh_field_role(role) is True
+    item.r3_identity_grace_until = 0.0
+    with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_unknown"):
+        item.refresh_field_role(role)
+    no_inputs(item.context)
