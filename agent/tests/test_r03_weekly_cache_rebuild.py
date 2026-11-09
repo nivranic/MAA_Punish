@@ -14,6 +14,7 @@ from unittest.mock import Mock
 import pytest
 
 from action.basics.RoleSelection import RoleSelection
+from action.basics import RoleSelection as role_selection_module
 from action.basics.roguelike3_recruitment import R03Recruitment
 from test_support.fakes import FakeContext
 
@@ -137,11 +138,26 @@ def test_r03_day_memo_reuses_scan_within_same_game_day(selector, monkeypatch):
 
 
 def test_r03_day_memo_expires_across_game_days(selector, monkeypatch):
-    """跨游戏日（05:00 刷新对齐）记忆失效，重新扫描。"""
+    """跨游戏日（05:00 刷新对齐）记忆失效，重新扫描。
+
+    冻结时钟到白天（12:00），使游戏日键确定等于当日日期；否则在
+    00:00-05:00 真实运行时游戏日=昨天，改写键恰好命中当日记忆而假失败。
+    """
+    frozen = dt.datetime(2026, 11, 10, 12, 0, 0)
+
+    class _FrozenDateTime(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return frozen
+
+    monkeypatch.setattr(
+        role_selection_module, "datetime",
+        SimpleNamespace(datetime=_FrozenDateTime, timedelta=dt.timedelta),
+    )
     run_selector(selector, make_context(), monkeypatch, {ATTACKER: {"power": 7200}})
     assert RoleSelection._R3_SCAN_MEMO, "扫描成功必须写入当日记忆"
 
-    yesterday = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+    yesterday = (frozen.date() - dt.timedelta(days=1)).isoformat()
     RoleSelection._R3_SCAN_MEMO[yesterday] = RoleSelection._R3_SCAN_MEMO.pop(
         next(iter(RoleSelection._R3_SCAN_MEMO)))
     result, team = run_selector(selector, make_context(), monkeypatch, {ATTACKER: {"power": 7300}})
