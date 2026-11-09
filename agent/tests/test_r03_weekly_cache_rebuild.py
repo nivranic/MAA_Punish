@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import datetime as dt
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -38,9 +39,11 @@ def run_selector(selector, context, monkeypatch, scanned):
 
 @pytest.fixture
 def selector(tmp_path):
+    RoleSelection._R3_SCAN_MEMO.clear()
     instance = RoleSelection()
     instance._cache_path = Mock(return_value=tmp_path / "absent-role-cache.json")
-    return instance
+    yield instance
+    RoleSelection._R3_SCAN_MEMO.clear()
 
 
 def test_r03_empty_cache_scans_and_recruits_real_attacker(selector, monkeypatch):
@@ -104,3 +107,66 @@ def test_r03_valid_cache_skips_scan_unchanged(selector, monkeypatch):
     trial_builder.assert_not_called()
     assert team.call_args.args[2] == ATTACKER
     assert team.call_args.args[3] == ["丽芙·流光", "薇拉·瑰丽[试用]"]
+
+
+def test_r03_day_memo_reuses_scan_within_same_game_day(selector, monkeypatch):
+    """当日扫描记忆：同进程第二次招募复用扫描结果，不再整页重扫。"""
+    scans = []
+
+    def counting_scan(*args):
+        scans.append(1)
+        return {ATTACKER: {"power": 7200}, "丽芙·流光": {"power": 456}}
+
+    monkeypatch.setattr(selector, "recognize_role", counting_scan)
+    monkeypatch.setattr(selector, "send_msg", Mock())
+    monkeypatch.setattr(selector, "save_screenshot", Mock(return_value=True))
+    team = Mock(return_value=TEAM)
+    monkeypatch.setattr(R03Recruitment, "recruit_team", team)
+
+    first = make_context()
+    result = selector.run(first, SimpleNamespace(node_name="pick", custom_action_param="{}"))
+    assert result.success
+    assert len(scans) == 1
+
+    second = make_context()
+    result = selector.run(second, SimpleNamespace(node_name="pick", custom_action_param="{}"))
+    assert result.success
+    # 复用记忆，未再次扫描
+    assert len(scans) == 1
+    assert team.call_args.args[2] == ATTACKER
+
+
+def test_r03_day_memo_expires_across_game_days(selector, monkeypatch):
+    """跨游戏日（05:00 刷新对齐）记忆失效，重新扫描。"""
+    run_selector(selector, make_context(), monkeypatch, {ATTACKER: {"power": 7200}})
+    assert RoleSelection._R3_SCAN_MEMO, "扫描成功必须写入当日记忆"
+
+    yesterday = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+    RoleSelection._R3_SCAN_MEMO[yesterday] = RoleSelection._R3_SCAN_MEMO.pop(
+        next(iter(RoleSelection._R3_SCAN_MEMO)))
+    result, team = run_selector(selector, make_context(), monkeypatch, {ATTACKER: {"power": 7300}})
+    assert result.success
+    # 第二次 run 的 mock 是新实例：call_count==1 即重新扫描发生了（memo 命中则为 0）
+    assert selector.recognize_role.call_count == 1
+    assert team.call_args.args[2] == ATTACKER
+
+
+def test_r03_day_memo_not_written_on_empty_scan(selector, monkeypatch):
+    """扫描全空快速失败：不得把空表写入当日记忆。"""
+    result, _team = run_selector(selector, make_context(), monkeypatch, {})
+    assert not result.success
+    assert not RoleSelection._R3_SCAN_MEMO
+
+
+def test_r03_day_memo_not_written_by_standard_scan(selector, monkeypatch, tmp_path):
+    """standard 模式扫描不写 R3 记忆（互不污染）。"""
+    selector.send_msg = Mock()
+    context = FakeContext(node_data={"pick": {"attach": {"selection_mode": "standard"}}})
+    monkeypatch.setattr(selector, "_cache_path", Mock(return_value=tmp_path / "absent.json"))
+    monkeypatch.setattr(selector, "recognize_role", Mock(return_value={"甲": {"power": 1}}))
+    monkeypatch.setattr(selector, "find_role", Mock(return_value=True))
+    monkeypatch.setattr(selector, "_field_role", Mock(return_value=True))
+    monkeypatch.setattr(selector, "_publish_combat_team_roster", Mock())
+    result = selector.run(context, SimpleNamespace(node_name="pick", custom_action_param="{}"))
+    assert result.success
+    assert not RoleSelection._R3_SCAN_MEMO

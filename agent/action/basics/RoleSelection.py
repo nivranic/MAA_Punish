@@ -156,6 +156,25 @@ class RoleSelection(CustomAction):
                     break
         return role
 
+    # 肉鸽3 当日扫描记忆（进程内，见 run() 中使用处）；键为游戏日（按刷新时刻对齐）。
+    _R3_SCAN_MEMO: dict[str, dict[str, dict]] = {}
+
+    @classmethod
+    def _r3_memo_game_day(cls, refresh_hour: int) -> str:
+        shifted = datetime.datetime.now() - datetime.timedelta(hours=max(0, refresh_hour))
+        return shifted.date().isoformat()
+
+    @classmethod
+    def _r3_memo_today(cls, refresh_hour: int) -> dict[str, dict]:
+        return cls._R3_SCAN_MEMO.get(cls._r3_memo_game_day(refresh_hour)) or {}
+
+    @classmethod
+    def _r3_memo_store(cls, scanned: dict, refresh_hour: int) -> None:
+        cls._R3_SCAN_MEMO.clear()
+        cls._R3_SCAN_MEMO[cls._r3_memo_game_day(refresh_hour)] = {
+            name: dict(info) for name, info in scanned.items()
+        }
+
     def _current_week(self) -> int:
         return datetime.date.today().isocalendar().week
 
@@ -622,6 +641,16 @@ class RoleSelection(CustomAction):
             # 缓存为空（如 ISO 周翻转失效）时不预填试玩候选：
             # 落入下方识别扫描分支按当前招募页重建，试玩候选仅作扫描无适配候选时的末位兜底。
 
+        if not role and roguelike_equivalent == 3:
+            # 当日扫描记忆：招募页为类别筛选视图，扫描结果不落盘共享缓存
+            # （会以部分表覆盖 CacheRole 全量缓存，劣化 standard/囚笼配池），
+            # 仅在同进程同游戏日内复用，跨日/进程重启自然失效。
+            memo = self._r3_memo_today(self._refresh_hour)
+            if memo:
+                scanned_full = {name: dict(info) for name, info in memo.items()}
+                role = dict(scanned_full)
+                self.logger.info(f"肉鸽3当日扫描记忆命中, 共 {len(role)} 个, 跳过整页重扫")
+
         if not role:
             self.logger.info("未读取到缓存, 开始识别")
             role = {}
@@ -664,6 +693,8 @@ class RoleSelection(CustomAction):
                 self.send_msg(context, message)
                 return CustomAction.RunResult(success=False)
             scanned_full = dict(role)
+            if roguelike_equivalent == 3:
+                self._r3_memo_store(scanned_full, self._refresh_hour)
 
             if scan_then_return:
                 for r in role.values():
