@@ -40,6 +40,7 @@ from action.combat.capture import capture_frame
 from action.combat.input_control import CombatInputError
 from action.combat.reactive_dodge import auto_dodge
 from action.combat.actions.signal_ball_layout import (
+    SIGNAL_BALL_SLOT_CENTERS,
     SIGNAL_BALL_SLOT_COUNT,
     signal_ball_slot_centers,
     slot_index_from_box,
@@ -471,6 +472,56 @@ class CombatActions:
             if self.context.tasker.stopping:
                 return False
             return self._run_burst_inputs(f"消球{target}", count, interval)
+        finally:
+            self._invalidate_frame()
+
+    def find_signal_ball_slot(self, color: str = "red") -> int:
+        """
+        查找指定颜色的信号球槽位
+        返回最右侧（最新）该颜色球的槽位编号（1~8），未识别到返回 0。
+        :param color: 球颜色（red|blue|yellow），默认red
+        :return: int，槽位编号；识别失败或无该颜色返回 0
+        """
+        if color not in ("red", "blue", "yellow"):
+            return 0
+        image = self._get_image()
+        ball_status = self._detect_signal_ball_status(image)
+        if not ball_status:
+            return 0
+        for index in range(len(ball_status) - 1, -1, -1):
+            if ball_status[index] == color:
+                return index + 1
+        return 0
+
+    def long_press_ball(self, slot: int, duration: int = 3000):
+        """
+        长按指定槽位信号球
+        长按球行指定槽位（逆冕长按红球全消的输入类别）。
+        :param slot: 槽位（1~8）
+        :param duration: 长按时间（毫秒），默认3000
+        :return: 派发结果；槽位非法返回 False
+        """
+        slot = abs(slot)
+        if slot < 1 or slot > SIGNAL_BALL_SLOT_COUNT:
+            return False
+        target = list(SIGNAL_BALL_SLOT_CENTERS[slot - 1])
+        self.context.override_pipeline(
+            {"长按信号球": {"action": {"param": {"target": target, "duration": duration}}}}
+        )
+        try:
+            return self.context.run_action("长按信号球")
+        finally:
+            self._invalidate_frame()
+
+    def tap_inverse_crown_special(self):
+        """
+        点按逆冕特殊键
+        点击蓝圈特殊键（红环就绪时的点按施法入口，坐标取自实机观察）。
+        """
+        try:
+            if self.context.tasker.stopping:
+                return False
+            return self.context.run_action("逆冕特殊键")
         finally:
             self._invalidate_frame()
 

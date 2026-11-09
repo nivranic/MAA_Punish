@@ -455,6 +455,7 @@ def test_persistent_unknown_exhausts_observation_budget_without_success(monkeypa
 @pytest.mark.parametrize("phase,method", [
     ("idle", "_phase_idle"), ("ball_dump", "_phase_ball_dump"),
     ("special_press", "_phase_special_press"), ("special_attack", "_phase_special_attack"),
+    ("burst_hold", "_phase_burst_hold"), ("burst_slash", "_phase_burst_slash"),
     ("skill", "_phase_skill"), ("farm", "_phase_farm"), ("unexpected", "_phase_idle"),
 ])
 def test_ordinary_dispatch_unchanged(monkeypatch, phase, method):

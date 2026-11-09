@@ -22,6 +22,10 @@
 
 普通大招先等待 ready，再单次长按并观察 empty；确认后才进入 finish，
 观察预算耗尽则拒绝本轮。固定长按时长不证明游戏内蓄力已满。
+
+输出循环（2026-11-10 依用户手录 60Hz 视频实证升级；阈值与时长为临时
+先验，待真机验收）：普攻积球 → 红环 ≈12/16 → 长按红球全消 →
+长按普攻蓄力横扫 → 大招分派（cage=长按大招 / 其余=红环即点循环）。
 """
 
 from __future__ import annotations
@@ -49,8 +53,13 @@ _SPECIAL_ATK_TIMEOUT = 5.0
 _SKILL_CHARGE_TIMEOUT = 10.0
 _SKILL_CAST_MAX = 20
 _FARM_MAX_TICKS = 20
-_FULL_BALL_THRESHOLD = 16
 _SPECIAL_BALL_MIN = 7
+# 红环就绪阈值：手录视频实证特殊球 ≈12/16 时蓝圈亮红环（非 16 满）。
+_RED_RING_READY = 12
+# 以下时长为临时先验，未经真机标定；只作输入预算，不证明游戏内状态。
+_BURST_HOLD_MS = 3000
+_CHARGED_SLASH_MS = 4000
+_TAP_CAST_MAX = 6
 
 # Provisional local safety budgets, not measured skill durations. Live gates
 # remain closed until the real detectors and device transitions are accepted.
@@ -337,9 +346,11 @@ class InverseCrown(BaseRole):
         # release keep protection. Ordinary charge only attacks while waiting
         # for readiness, so shared warning reactions must remain available.
         return self.inverse_crown_profile.enabled or self.phase in {
-            "special_press", "special_attack",
+            "special_press", "special_attack", "burst_hold", "burst_slash",
         } or (
-            self.phase == "skill" and self._skill_sub in {"cast", "cage", "finish"}
+            self.phase == "skill" and self._skill_sub in {
+                "cast", "cage", "finish", "tap_cast",
+            }
         )
 
     def do_perform(self) -> None:
@@ -357,6 +368,10 @@ class InverseCrown(BaseRole):
             self._phase_special_press()
         elif self.phase == "special_attack":
             self._phase_special_attack()
+        elif self.phase == "burst_hold":
+            self._phase_burst_hold()
+        elif self.phase == "burst_slash":
+            self._phase_burst_slash()
         elif self.phase == "skill":
             self._phase_skill()
         elif self.phase == "farm":
@@ -777,11 +792,16 @@ class InverseCrown(BaseRole):
             return False
         return bool(node.get("attach", {}).get("cage", False))
 
-    def _enter_skill(self, *, switch_after: bool) -> None:
+    def _enter_skill(self, *, switch_after: bool, ring_ready: bool = False) -> None:
         self._skill_switch_after = switch_after
         if self._is_cage_mode():
             self.action.logger.info("cage: True")
             self._skill_sub = "cage"
+        elif ring_ready:
+            # 红环已确认就绪：跳过等待失效能量节点，直接红环即点循环。
+            self.action.logger.info("cage: False 红环就绪，点按施法")
+            self._skill_sub = "tap_cast"
+            self._skill_cast_ticks = 0
         else:
             self.action.logger.info("cage: False")
             self._skill_sub = "charge"
@@ -807,9 +827,9 @@ class InverseCrown(BaseRole):
             return
 
         ball_count = self.action.count_signal_balls()
-        if ball_count >= _FULL_BALL_THRESHOLD:
-            self.action.logger.info("球数满足条件，进行球消")
-            self.phase = "ball_dump"
+        if ball_count >= _RED_RING_READY:
+            self.action.logger.info("红环就绪(%s/16)，进入红球全消爆发", ball_count)
+            self.phase = "burst_hold"
             return
 
         if ball_count > _SPECIAL_BALL_MIN and self._special_ball_ready():
@@ -839,6 +859,23 @@ class InverseCrown(BaseRole):
             self._enter_skill(switch_after=True)
             return
         self.action.attack()
+
+    def _phase_burst_hold(self) -> None:
+        """长按红球全消；识别不到红球时回退既有指定消球。"""
+        slot = self.action.find_signal_ball_slot("red")
+        if slot:
+            self.action.logger.info("长按红球全消: 槽位%s", slot)
+            self.action.long_press_ball(slot, _BURST_HOLD_MS)
+        else:
+            self.action.logger.info("未识别到红球，回退指定消球")
+            self.action.ball_elimination_target()
+        self.phase = "burst_slash"
+
+    def _phase_burst_slash(self) -> None:
+        """长按普攻蓄力横扫，随后按 cage/普通分派大招。"""
+        self.action.logger.info("长按普攻蓄力横扫")
+        self.action.long_press_attack(_CHARGED_SLASH_MS)
+        self._enter_skill(switch_after=True, ring_ready=True)
 
     def _phase_skill(self) -> None:
         if self._skill_sub == "cage":
@@ -882,6 +919,19 @@ class InverseCrown(BaseRole):
                 raise InverseCrownUnavailable(
                     "skill_empty_not_confirmed", actual=self.implementation_name,
                 )
+        elif self._skill_sub == "tap_cast":
+            self._skill_cast_ticks += 1
+            if self.combat.context.tasker.stopping:
+                return
+            self.action.tap_inverse_crown_special()
+            if self.combat.context.tasker.stopping:
+                return
+            ball_count = self.action.count_signal_balls()
+            if (
+                ball_count < _RED_RING_READY
+                or self._skill_cast_ticks >= _TAP_CAST_MAX
+            ):
+                self._skill_sub = "finish"
         elif self._skill_sub == "finish":
             #self.action.long_press_attack(4000)
             self._finish_skill()
