@@ -487,3 +487,24 @@ PATCHES += (
         "    fun postCreate(koin: Koin) {\n        koin.get<DevReloadCoordinator>().setup()\n        koin.get<DevReloadMailboxBridge>().setup()\n",
     ),
 )
+
+# 首页概览：版本行区分为 App 版本与资源版本（资源版本读 pi/hotfix.manifest.json，
+# 由本仓热更新流程写入；实现见 overlays 的 ResourceVersion.kt）。
+PATCHES += (
+    (
+        "app/src/main/res/values/strings.xml",
+        '<string name="settings_version">版本</string>',
+        '<string name="settings_version">App版本</string>\n    <string name="settings_version_resource">资源版本</string>',
+    ),
+    (
+        "app/src/main/res/values-en/strings.xml",
+        '<string name="settings_version">Version</string>',
+        '<string name="settings_version">App version</string>\n    <string name="settings_version_resource">Resource version</string>',
+    ),
+    (
+        KOTLIN + "ui/home/HomeScreen.kt",
+        "        MaaInfoRow(stringResource(R.string.settings_version), BuildConfig.VERSION_NAME)",
+        "        MaaInfoRow(stringResource(R.string.settings_version), BuildConfig.VERSION_NAME)\n"
+        "        MaaInfoRow(stringResource(R.string.settings_version_resource), resourceVersionLabel(context))",
+    ),
+)
