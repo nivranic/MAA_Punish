@@ -504,3 +504,6 @@ local.properties
 !/.github/android/overlays/app/src/test/java/com/aliothmoon/maafw/log/
 /.github/android/overlays/app/src/test/java/com/aliothmoon/maafw/log/*
 !/.github/android/overlays/app/src/test/java/com/aliothmoon/maafw/log/DebugEvidenceRetentionTest.kt
+
+# mimosa 安全扫描插件本地会话状态
+.mimosa/
