@@ -21,7 +21,8 @@ def mine_version(tags: list[str], commit_count: int) -> str:
     if commit_count <= 0:
         raise ValueError("Git 提交数必须是正整数")
     major, minor, patch = max(versions)
-    return f"v{major}.{minor}.{patch + 1}-iqoo.{commit_count}"
+    # 版本三元组完全跟随上游正式 tag（fork 不加不减）；fork 只追加 -iqoo.<提交数> 后缀
+    return f"v{major}.{minor}.{patch}-iqoo.{commit_count}"
 
 
 def version_for_repo(root: Path) -> str:
