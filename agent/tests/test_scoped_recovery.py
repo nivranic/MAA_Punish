@@ -76,7 +76,7 @@ class Context:
             recovery.RECOVERY_NODE: {"action": {"type": "Custom", "param": {"custom_action": "ScopedRecovery"}},
                                      "next": [], "on_error": []},
             recovery.BACK_NODE: {"recognition": {"type": "TemplateMatch", "param": {
-                                    "roi": [27, 10, 51, 53], "template": "指挥局/返回.png"}},
+                                    "roi": [27, 10, 118, 53], "template": "指挥局/返回.png"}},
                                  "action": {"type": "Click"}},
         }
 
@@ -257,7 +257,7 @@ def test_last_sdk_read_cannot_authorize_late_or_stopped_return(setup, fault):
     assert context.tasker.stop_requests <= 1
 
 
-@pytest.mark.parametrize("box", [(100, 200, 40, 40), (27, 10, 100, 10), (30, 12, 0, 20),
+@pytest.mark.parametrize("box", [(100, 200, 40, 40), (27, 10, 120, 10), (30, 12, 0, 20),
                                (30, 12, True, 20), "bad"])
 def test_untrusted_return_box_does_not_touch_another_button(setup, box):
     action, context, argv, _ = setup(GUILD)
