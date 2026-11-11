@@ -605,6 +605,9 @@
         "next": [
             "作战开始"
         ],
+        "on_error": [
+            "任务失败优雅退出"
+        ],
         "attach": {
             "cage": false,
             "need_element": "",
@@ -635,6 +638,9 @@
                 }
             }
         },
+        "on_error": [
+            "任务失败优雅退出"
+        ],
         "attach": {
             "cage": false,
             "need_element": "",

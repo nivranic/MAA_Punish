@@ -3,6 +3,12 @@
 The callback always fails the original task. Android must separately consume
 the task's recovery-node history before posting another task; post_stop alone
 does not provide that round-level guarantee in MaaFramework 5.14.2.
+
+2026-11-11 状态：日常管线已全部改挂「任务失败优雅退出」（General.jsonc），本恢复器在
+日常链路零引用（仅测试与 D03 指挥局历史路径保留）。原因：导航策略仅覆盖 entry==指挥局，
+其他 entry 一律 fail-closed（L254 page_or_task_has_no_navigation_policy），且恢复流程中的
+_ContextTaskerReverseRequest 反向调用曾实测挂死 native 管线 1135 秒（台账 2.312 缺陷②③）。
+新增日常任务失败兜底请勿再引用 返回主菜单_err/本恢复器，改用「任务失败优雅退出」。
 """
 
 from __future__ import annotations

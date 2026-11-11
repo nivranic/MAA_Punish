@@ -171,6 +171,25 @@
             "Node.Recognition.Succeeded": "$focus.返回主菜单_err"
         }
     },
+    // 通用失败兜底：尽力导航回主菜单后 StopTask 优雅收尾（任务记成功，不杀后续任务组）。
+    // 用于战斗类任务（囚笼/围剿/历战/自动战斗/角色选择）的 on_error 终位——ScopedRecovery 仅支持
+    // 指挥局 entry，其他 entry 挂它只会 fail-closed 停全组（2026-11-11 台账 2.312 缺陷②③）。
+    "任务失败优雅退出": {
+        "recognition": {
+            "type": "DirectHit"
+        },
+        "timeout": 20000,
+        "next": [
+            "[JumpBack]从战斗中返回",
+            "[JumpBack]返回",
+            "[JumpBack]返回主菜单_reco",
+            "[JumpBack]关闭奖励",
+            "停止任务"
+        ],
+        "on_error": [
+            "停止任务"
+        ]
+    },
     "从战斗中返回": {
         "recognition": {
             "type": "TemplateMatch",
@@ -309,7 +328,7 @@
         "next": [
             "点击频率过快_确认",
             "点击频率过快",
-            "返回主菜单_err"
+            "任务失败优雅退出"
         ]
     },
     "点击频率过快_确认": {
@@ -325,7 +344,7 @@
             "type": "Click"
         },
         "next": [
-            "返回主菜单_err"
+            "任务失败优雅退出"
         ]
     },
     "识别体力": {
