@@ -8,6 +8,7 @@
         "rate_limit": 0,
         "next": [
             "吃体力药",
+            "拟战场域_作战任务",
             "[JumpBack]返回主菜单",
             "[JumpBack]返回"
         ]
