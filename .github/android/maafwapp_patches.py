@@ -183,6 +183,15 @@ PATCHES = (
         '    <string name="settings_update_channel_beta">公测版</string>\n',
         '    <string name="settings_update_channel_beta">公测版</string>\n    <string name="settings_update_channel_iqoo16" translatable="false">iQOO 16 适配版</string>\n',
     ),
+    (
+        KOTLIN + "project/PiInstaller.kt",
+        "            readRoots(rootsFile).forEach { File(target, it).deleteRecursively() }\n            pruneStaleLogs(target)\n",
+        "            readRoots(rootsFile).forEach { File(target, it).deleteRecursively() }\n            pruneStaleLogs(target)\n"
+        "            // 重解包=新基线生效：旧热更清单描述的覆盖已被新基线吸收/移除，留着会让首页\n"
+        "            // 资源版本一直显示过期热更号（ResourceVersion 读 base_pi_version+次数）；\n"
+        "            // 热更流程再推时会重写清单。wipe 路径整体删除已天然覆盖。\n"
+        '            File(target, "hotfix.manifest.json").delete()\n',
+    ),
 )
 
 # USB development sessions are opt-in through a foreground App + authorized
