@@ -70,6 +70,7 @@
         },
         "选择区域": {
             "label": "$option.选择区域.label",
+            "default_case": "终级区",
             "cases": [
                 {
                     "name": "高级区",
@@ -113,7 +114,7 @@
         "自行选择编队_囚笼_高级区": {
             "label": "$option.自行选择编队_囚笼_高级区.label",
             "type": "select",
-            "default_case": "自动选择",
+            "default_case": "选择编队",
             "description": "$option.自行选择编队_囚笼_高级区.description",
             "cases": [
                 {
@@ -160,7 +161,7 @@
         "自行选择编队_囚笼_终级区": {
             "label": "$option.自行选择编队_囚笼_终级区.label",
             "type": "select",
-            "default_case": "自动选择",
+            "default_case": "选择编队",
             "description": "$option.自行选择编队_囚笼_终级区.description",
             "cases": [
                 {
@@ -209,7 +210,7 @@
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
                     "pattern_msg": "$input.选择A区编队_囚笼.编队名.pattern_msg",
-                    "default": "编队1"
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {
@@ -252,7 +253,7 @@
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
                     "pattern_msg": "$input.选择B区编队_囚笼.编队名.pattern_msg",
-                    "default": "编队1"
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {
@@ -295,7 +296,7 @@
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
                     "pattern_msg": "$input.选择C区编队_囚笼.编队名.pattern_msg",
-                    "default": "编队1"
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {
@@ -1550,7 +1551,7 @@
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
                     "pattern_msg": "$input.选择火队_囚笼.编队名.pattern_msg",
-                    "default": "编队1"
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {
@@ -1583,7 +1584,7 @@
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
                     "pattern_msg": "$input.选择雷队_囚笼.编队名.pattern_msg",
-                    "default": "编队1"
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {
@@ -1616,7 +1617,7 @@
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
                     "pattern_msg": "$input.选择冰队_囚笼.编队名.pattern_msg",
-                    "default": "编队1"
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {
@@ -1649,7 +1650,7 @@
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
                     "pattern_msg": "$input.选择暗队_囚笼.编队名.pattern_msg",
-                    "default": "编队1"
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {
@@ -1682,7 +1683,7 @@
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
                     "pattern_msg": "$input.选择物理队_囚笼.编队名.pattern_msg",
-                    "default": "编队1"
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {
@@ -1715,7 +1716,7 @@
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
                     "pattern_msg": "$input.选择无分类队伍_囚笼.编队名.pattern_msg",
-                    "default": "编队1"
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {

@@ -59,7 +59,7 @@
         "自行选择编队_战区": {
             "label": "$option.自行选择编队_战区.label",
             "type": "select",
-            "default_case": "自动选择",
+            "default_case": "选择编队",
             "description": "$option.自行选择编队_战区.description",
             "cases": [
                 {
@@ -115,7 +115,8 @@
                     "label": "$input.选择火队_战区.编队名.label",
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
-                    "pattern_msg": "$input.选择火队_战区.编队名.pattern_msg"
+                    "pattern_msg": "$input.选择火队_战区.编队名.pattern_msg",
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {
@@ -147,7 +148,8 @@
                     "label": "$input.选择雷队_战区.编队名.label",
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
-                    "pattern_msg": "$input.选择雷队_战区.编队名.pattern_msg"
+                    "pattern_msg": "$input.选择雷队_战区.编队名.pattern_msg",
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {
@@ -179,7 +181,8 @@
                     "label": "$input.选择冰队_战区.编队名.label",
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
-                    "pattern_msg": "$input.选择冰队_战区.编队名.pattern_msg"
+                    "pattern_msg": "$input.选择冰队_战区.编队名.pattern_msg",
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {
@@ -211,7 +214,8 @@
                     "label": "$input.选择暗队_战区.编队名.label",
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
-                    "pattern_msg": "$input.选择暗队_战区.编队名.pattern_msg"
+                    "pattern_msg": "$input.选择暗队_战区.编队名.pattern_msg",
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {
@@ -243,7 +247,8 @@
                     "label": "$input.选择空队_战区.编队名.label",
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
-                    "pattern_msg": "$input.选择空队_战区.编队名.pattern_msg"
+                    "pattern_msg": "$input.选择空队_战区.编队名.pattern_msg",
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {
@@ -275,7 +280,8 @@
                     "label": "$input.选择物理队_战区.编队名.label",
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
-                    "pattern_msg": "$input.选择物理队_战区.编队名.pattern_msg"
+                    "pattern_msg": "$input.选择物理队_战区.编队名.pattern_msg",
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {
@@ -307,7 +313,8 @@
                     "label": "$input.选择特性队_战区.编队名.label",
                     "pipeline_type": "string",
                     "verify": "^\\s*\\S.*$",
-                    "pattern_msg": "$input.选择特性队_战区.编队名.pattern_msg"
+                    "pattern_msg": "$input.选择特性队_战区.编队名.pattern_msg",
+                    "default": "冰power"
                 }
             ],
             "pipeline_override": {

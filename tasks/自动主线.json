@@ -32,7 +32,7 @@
             "label": "$option.作战编队_自动主线.label",
             "description": "$option.作战编队_自动主线.description",
             "type": "select",
-            "default_case": "默认选人",
+            "default_case": "指定编队",
             "cases": [
                 {
                     "name": "默认选人",
@@ -57,7 +57,7 @@
                     "name": "编队名",
                     "label": "$input.输入作战编队_自动主线.编队名.label",
                     "pipeline_type": "string",
-                    "default": "编队1",
+                    "default": "冰power",
                     "verify": "^\\s*\\S.*$",
                     "pattern_msg": "$input.输入作战编队_自动主线.编队名.pattern_msg"
                 }
