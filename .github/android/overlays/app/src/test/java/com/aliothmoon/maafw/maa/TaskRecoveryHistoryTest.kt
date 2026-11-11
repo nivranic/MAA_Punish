@@ -199,7 +199,30 @@ class TaskRecoveryHistoryTest {
     }
 
     @Test fun `placeholder blank node cannot be classified as normal`() {
-        val f = NativeFixture().apply { nodes = listOf(Node(1, "", 0)) }
+        // 失败终态下的空名节点仍是数据不完整：容忍只授予 SUCCEEDED 终态的末位占位。
+        val f = NativeFixture().apply {
+            nodes = listOf(Node(1, "", 0))
+            status = MaaStatus.FAILED
+        }
+        assertEquals("node_detail_invalid", f.inspect(waitStatus = MaaStatus.FAILED).reason)
+    }
+
+    @Test fun `stop task tail placeholder at terminal success permits next task`() {
+        // StopTask 终止正在执行节点留下的末位无名占位（MaaFw 5.14.2）：SUCCEEDED 终态容忍，
+        // 让「任务失败优雅退出」链收尾的任务不杀后续任务组。
+        val f = NativeFixture().apply {
+            nodes = listOf(Node(1, "任务失败优雅退出"), Node(2, "停止任务"), Node(3, "", 0))
+        }
+        val result = f.inspect()
+        assertTrue(result.complete)
+        assertFalse(result.recoverySeen)
+        val gate = RecoveryDispatchGate()
+        assertTrue(gate.success(MaaStatus.SUCCEEDED, result))
+        assertFalse(gate.aborted)
+    }
+
+    @Test fun `blank node mid history stays invalid at terminal success`() {
+        val f = NativeFixture().apply { nodes = listOf(Node(1, ""), Node(2, "停止任务")) }
         assertEquals("node_detail_invalid", f.inspect().reason)
     }
 

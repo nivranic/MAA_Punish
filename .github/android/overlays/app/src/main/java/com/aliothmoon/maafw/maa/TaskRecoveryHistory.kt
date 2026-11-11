@@ -97,7 +97,16 @@ object TaskRecoveryHistory {
                         return unknown("node_detail_unavailable")
                     }
                     val name = lib.MaaStringBufferGet(nameBuffer)
-                    if (name.isNullOrBlank() || completed.value.toInt() !in 0..1) return unknown("node_detail_invalid")
+                    if (name.isNullOrBlank() || completed.value.toInt() !in 0..1) {
+                        // StopTask 终止时正在执行的节点在 MaaFw 5.14.2 会留下无名占位（与
+                        // ScopedRecovery 注释记载的 Next-timeout 占位同源）。仅当原生终态已
+                        // SUCCEEDED 且占位位于历史末位时容忍；其余无效详情仍 fail-closed。
+                        val stopTaskTailPlaceholder = name.isNullOrBlank() &&
+                            nodeId == ids.last() &&
+                            MaaStatus.isDone(firstStatus) && firstStatus == MaaStatus.SUCCEEDED
+                        if (!stopTaskTailPlaceholder) return unknown("node_detail_invalid")
+                        continue
+                    }
                     if (name == RECOVERY_NODE) recoverySeen = true
                     // Native completed=false also describes an executed action failure. A named
                     // node in a stable terminal history is not a missing/unfinished query result.
