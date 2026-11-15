@@ -1,4 +1,4 @@
-"""Per-run InverseCrown configuration; the specialized strategy is not ready yet.
+"""Per-run InverseCrown configuration for the opt-in single-target strategy.
 
 The 战斗辅助 task's opt-in options supply the called ``CombatRunner`` node's
 ``attach.inverse_crown_profile`` (currently 战斗中). Facts describe this battle,
@@ -33,8 +33,8 @@ class InverseCrownUnavailable(RuntimeError):
 class InverseCrownProfile:
     """Validated snapshot; unknown facts do not grant higher-rank capabilities.
 
-Only ``enabled`` currently changes execution. Scene and confirmed battle facts
-are carried to the role for the forthcoming strategy, not proof of its readiness.
+``enabled`` and ``scene`` select the single-target consumer. Confirmed battle
+facts remain separate from live resource observations and action outcomes.
 """
 
     enabled: bool = False

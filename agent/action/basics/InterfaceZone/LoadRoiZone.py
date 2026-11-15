@@ -27,6 +27,7 @@ from action.basics.InterfaceZone.hud_roi_calibration import (
     HUD_CALIBRATION_KEY,
     HudRoiCalibrationError,
     hud_overrides_from_cache,
+    skill_energy_override_from_cache,
 )
 
 _ZONE_MAP_PATH = Path(__file__).with_name("combat_roi_zone_map.json")
@@ -118,6 +119,25 @@ class LoadRoiZone(CustomAction):
             hud_overrides_from_cache(offset_data, controller, hud_screen_size)
             if hud_screen_size is not None else {}
         )
+        ordinary_hud_overrides = {}
+        if isinstance(offset_data.get(HUD_CALIBRATION_KEY), dict):
+            try:
+                size = hud_screen_size
+                if size is None:
+                    image = getattr(context.tasker.controller, "cached_image", None)
+                    shape = getattr(image, "shape", ())
+                    if len(shape) != 3 or shape[2] != 3:
+                        raise HudRoiCalibrationError("hud_screen_geometry_unavailable")
+                    size = (int(shape[1]), int(shape[0]))
+                bound_hud = hud_overrides_from_cache(offset_data, controller, size)
+                ordinary_hud_overrides = {
+                    "检查血量": bound_hud["检查血量"],
+                    **skill_energy_override_from_cache(offset_data, controller, size),
+                }
+            except HudRoiCalibrationError as exc:
+                # Ordinary loading has always treated HUD calibration as
+                # optional. Never apply stale geometry or mutate its cache.
+                self.logger.warning("普通战斗血量与技能能量校准未应用: %s", exc)
 
         node_zone_map = _get_node_zone_map()
         resource_nodes = set(context.tasker.resource.node_list)
@@ -145,6 +165,7 @@ class LoadRoiZone(CustomAction):
                 overrides[node_name]["action"] = {"param": action_offsets}
 
         overrides.update(hud_overrides)
+        overrides.update(ordinary_hud_overrides)
 
         if overrides:
             context.override_pipeline(overrides)

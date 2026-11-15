@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from action.combat.capture import FrameMetadata
-from action.combat.config.inverse_crown_profile import InverseCrownProfile, InverseCrownUnavailable
+from action.combat.config.inverse_crown_profile import InverseCrownProfile
 from action.combat.core.provider import CombatCheck
 from action.combat.core.session import CombatTask
 from action.combat.input_control import CombatInputScope
@@ -145,7 +145,7 @@ def test_context_read_failure_is_unknown_without_retaining_previous_geometry():
 
 
 @pytest.mark.parametrize("color", ["blue", "red"])
-def test_color_alone_cannot_emit_down_or_unlock_either_live_gate(color, monkeypatch):
+def test_color_observation_alone_cannot_emit_down(color, monkeypatch):
     clock = FakeClock()
     controller = FakeController(image=synthetic(color))
     context = FakeContext(
@@ -161,11 +161,8 @@ def test_color_alone_cannot_emit_down_or_unlock_either_live_gate(color, monkeypa
     monkeypatch.setattr(controller, "post_screencap", lambda: pytest.fail("unexpected extra capture"))
     role = InverseCrown(combat, "R", "InverseCrown")
     assert role._read_stationary_signals(combat.frame).special_color == color
-    role.do_perform()
+    role._perform_stationary()
     assert role.phase == "prepare"
     assert controller.touches == controller.clicks == context.actions == []
-    with pytest.raises(InverseCrownUnavailable, match="strategy_not_ready"):
-        role.perform()
-    with pytest.raises(InverseCrownUnavailable, match="strategy_not_ready"):
-        combat.combat_once()
+    combat.ensure_strategy_ready(role)
     assert controller.touches == controller.clicks == context.actions == []

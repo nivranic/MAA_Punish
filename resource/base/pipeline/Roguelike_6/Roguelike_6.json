@@ -4,7 +4,7 @@
         "next": [
             "[JumpBack]雾夜镇魂曲内部",
             "[JumpBack]终止_雾夜镇魂曲",
-            "[JumpBack]跳过剧情",
+            "[JumpBack]跳过剧情_雾夜镇魂曲",
             "[JumpBack]进入战斗_雾夜镇魂曲",
             "[JumpBack]开始战斗_雾夜镇魂曲",
             "[JumpBack]选择对手_雾夜镇魂曲",
@@ -172,7 +172,7 @@
             "[JumpBack]变速_雾夜镇魂曲",
             "[JumpBack]结束战斗_雾夜镇魂曲",
             "[JumpBack]战斗中_雾夜镇魂曲",
-            "[JumpBack]跳过剧情",
+            "[JumpBack]跳过剧情_雾夜镇魂曲",
             "[JumpBack]滑动事件"
         ]
     },
@@ -523,6 +523,75 @@
         "action": {
             "type": "Click"
         }
+    },
+    "跳过剧情_雾夜镇魂曲": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["跳过剧情"]
+            }
+        },
+        "action": {
+            "type": "Click"
+        },
+        "post_delay": 1000,
+        "next": [
+            "确认跳过",
+            "[JumpBack]剧情选项_雾夜镇魂曲",
+            "跳过剧情_雾夜镇魂曲",
+            "空任务"
+        ]
+    },
+    "剧情选项_雾夜镇魂曲": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "跳过剧情",
+                    "剧情选项_雾夜镇魂曲_颜色",
+                    "剧情选项_雾夜镇魂曲_文字"
+                ],
+                "box_index": 1
+            }
+        },
+        "action": {
+            "type": "Click"
+        },
+        "timeout": 5000,
+        "next": ["剧情选项消失_雾夜镇魂曲"]
+    },
+    "剧情选项_雾夜镇魂曲_颜色": {
+        "recognition": {
+            "type": "ColorMatch",
+            "param": {
+                "roi": [700, 180, 550, 400],
+                "method": 4,
+                "lower": [245, 245, 245],
+                "upper": [255, 255, 255],
+                "count": 10000,
+                "connected": true,
+                "order_by": "Vertical",
+                "index": 0
+            }
+        }
+    },
+    "剧情选项_雾夜镇魂曲_文字": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": "剧情选项_雾夜镇魂曲_颜色",
+                "expected": ".+"
+            }
+        }
+    },
+    "剧情选项消失_雾夜镇魂曲": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["剧情选项_雾夜镇魂曲"]
+            }
+        },
+        "inverse": true
     },
     "滑动事件": {
         "recognition": {

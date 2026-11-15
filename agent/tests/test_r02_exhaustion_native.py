@@ -1,4 +1,4 @@
-"""Real recruitment-counter recognition and R02 exhaustion routing."""
+"""Private-frame recruitment-counter recognition and R02 resume routing."""
 from contextlib import contextmanager
 import os
 from pathlib import Path
@@ -94,25 +94,6 @@ def test_recruitment_exhaustion_requires_actual_zero_on_invitation_page(tmp_path
         }}).wait()
         assert job.succeeded and not expired
         assert hits == [remaining == 0 and with_title] and not inputs
-
-
-@pytest.mark.parametrize("entry", ["厄愿潮声", "邀约选择_厄愿潮声"])
-def test_zero_recruitment_stops_before_advancing_or_selecting(tmp_path, entry):
-    with native_counter(tmp_path, 0) as (_, tasker, frame, inputs, expired):
-        # Start after entry setup/card selection, with the real exhausted page.
-        # Production next order, counter recognition and StopTask stay intact.
-        job = tasker.post_task(entry, {entry: {
-            "recognition": {"type": "DirectHit"},
-            "action": {"type": "DoNothing"},
-        }}).wait()
-        assert job.succeeded and not expired, {"inputs": inputs, "watchdog": expired}
-        assert not inputs
-        detail = tasker.get_task_detail(job.job_id)
-        names = [tasker.get_node_detail(n).name for n in detail.node_id_list]
-        assert names[-1] == "厄愿潮声_日耗尽停止"
-        assert "招募次数0_厄愿潮声" in names
-        assert "下一步_厄愿潮声" not in names
-        assert "返回主菜单_err" not in names
 
 
 @pytest.mark.parametrize("with_title", [True, False])

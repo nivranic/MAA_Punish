@@ -111,6 +111,20 @@
             }
         }
     },
+    "识别囚笼耐力条": {
+        "recognition": {
+            "type": "ColorMatch",
+            "param": {
+                "roi": [140, 166, 250, 18],
+                "method": 40,
+                "lower": [95, 150, 120],
+                "upper": [110, 255, 255],
+                "connected": true,
+                "order_by": "Area",
+                "count": 50
+            }
+        }
+    },
     "识别囚笼次数1": {
         "recognition": {
             "type": "ColorMatch",

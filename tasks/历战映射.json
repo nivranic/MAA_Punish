@@ -11,6 +11,11 @@
                 "刷取次数_历战映射"
             ],
             "pipeline_override": {
+                "战斗中": {
+                    "on_error": [
+                        "历战映射_异常收尾"
+                    ]
+                },
                 "战斗队伍色位": {
                     "attach": {
                         "R": "GeneralFight",

@@ -1,7 +1,7 @@
 """R03 recruitment: real form/cost/selection pixels and fail-closed bookkeeping."""
 import os
 from pathlib import Path
-from test_support.device_evidence import EVIDENCE_DIR, require_device_evidence
+from test_support.device_evidence import evidence_path, require_device_evidence
 from threading import Timer
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -31,11 +31,11 @@ def native_probe(tmp_path, probe, *, field=False, event_team=False, opening=None
     frames = {}
     for name in ("owned", "selected", "cost1", "cost2", "team", "event_team", "event_filled",
                  "flow_owned", "flow_trial", "guili_owned"):
-        frame = cv2.imread(str(EVIDENCE_DIR / f"r03_recruitment_{name}.png"))
+        frame = cv2.imread(str(evidence_path(f"r03_recruitment_{name}.png")))
         assert frame is not None and frame.shape == (720, 1280, 3)
         frames[name] = frame
     for name in ("formation_empty", "formation_red", "formation_two", "formation_leader", "formation_unset", "adjustment"):
-        frame = cv2.imread(str(EVIDENCE_DIR / f"r03_recruitment_{name}.png"))
+        frame = cv2.imread(str(evidence_path(f"r03_recruitment_{name}.png")))
         assert frame is not None and frame.shape == (720, 1280, 3)
         frames[name] = frame
     # Relocated real tick pixels simulate the two clicks, not an observed device transition.

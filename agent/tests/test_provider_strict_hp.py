@@ -141,3 +141,64 @@ def test_ordinary_parse_and_read_keep_existing_compatibility(text, expected):
     assert parse_hp_current(text) == expected
     assert check.read_current_hp(context, SimpleNamespace(frame=object())) == expected
     assert not check.read_hp_from_frame(context, object()).alive
+
+
+@pytest.mark.parametrize("raw,filtered,reason", [
+    ("251219832", "2512/9832", "alive"),
+    ("251279832", "2512/9832", "alive"),
+    ("019832", "0/9832", "dead"),
+    ("125919832", "1759/9832", "hp_not_recognized"),
+    ("10509105", "10509/105", "hp_not_recognized"),
+    ("251219832", "2512/9832 extra", "hp_not_recognized"),
+    ("251219832", "251219832", "hp_not_recognized"),
+])
+def test_separator_reread_requires_same_frame_and_unchanged_numeric_fields(monkeypatch, raw, filtered, reason):
+    image = object()
+    raw_ocr = OCRResult(box=[20, 16, 190, 29], score=0.99, text=raw)
+    context = FakeContext()
+    child = FakeContext()
+    calls = []
+    context.clone = lambda: child
+    monkeypatch.setattr(context, "run_recognition", lambda *_: SimpleNamespace(hit=False, all_results=[raw_ocr]))
+    def reread(name, supplied):
+        calls.append((name, supplied))
+        return SimpleNamespace(hit=True, best_result=SimpleNamespace(text=filtered))
+    child.run_recognition = reread
+    child.override_pipeline = lambda patch: child.pipeline_overrides.append(patch) or True
+    value = CombatCheck().read_hp_from_frame(context, image)
+    assert value.reason == reason
+    assert calls == [("检查血量", image)]
+    assert not context.pipeline_overrides and not context.actions and not child.actions
+    assert child.pipeline_overrides == [{"检查血量": {"recognition": {"param": {"color_filter": "检查血量_白字"}}}}]
+
+
+@pytest.mark.parametrize("raw", ["", "2512/", "HP251219832", "12345678901234", "2512/9832"])
+def test_separator_reread_does_not_guess_other_failed_text(monkeypatch, raw):
+    context = FakeContext()
+    ocr = OCRResult(box=[20, 16, 190, 29], score=0.99, text=raw)
+    context.clone = lambda: pytest.fail("unrelated OCR failures must not reread")
+    monkeypatch.setattr(context, "run_recognition", lambda *_: SimpleNamespace(hit=False, all_results=[ocr]))
+    assert not CombatCheck().read_hp_from_frame(context, object()).alive
+
+
+@pytest.mark.parametrize("failure", ["clone", "override", "recognition", "stopped"])
+def test_separator_reread_failure_or_stop_stays_unknown(monkeypatch, failure):
+    context, child = FakeContext(), FakeContext()
+    ocr = OCRResult(box=[20, 16, 190, 29], score=0.99, text="251219832")
+    monkeypatch.setattr(context, "run_recognition", lambda *_: SimpleNamespace(hit=False, all_results=[ocr]))
+    def clone():
+        if failure == "clone":
+            raise RuntimeError("clone unavailable")
+        return child
+    context.clone = clone
+    child.override_pipeline = lambda _: failure != "override"
+    def recognize(*_):
+        if failure == "recognition":
+            raise RuntimeError("OCR unavailable")
+        if failure == "stopped":
+            context.tasker.stopping = True
+        return SimpleNamespace(hit=True, best_result=SimpleNamespace(text="2512/9832"))
+    child.run_recognition = recognize
+    value = CombatCheck().read_hp_from_frame(context, object())
+    assert value.reason == "hp_not_recognized" and not value.alive
+    assert not context.actions and not child.actions

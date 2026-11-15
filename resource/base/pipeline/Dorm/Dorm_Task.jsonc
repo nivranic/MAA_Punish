@@ -592,7 +592,16 @@
         },
         "action": {
             "type": "Click"
-        }
+        },
+        "next": ["打开宿舍_已进入总览"]
+    },
+    "打开宿舍_已进入总览": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["宿舍内部"]}
+        },
+        "next": [],
+        "on_error": []
     },
     "打开委托界面": {
         "recognition": {

@@ -248,7 +248,12 @@ class UsbAdb:
         operation_root = f"{self.root}/reload/{session_id}/{operation_id}"
         # Fixed script and positional, quoted paths only. Every existing parent
         # must be a real directory; never stage through a symlink into live PI.
-        script = 'for p do if [ -L "$p" ]; then exit 9; fi; done; mkdir -p "$3" && mkdir "$4"'
+        # mkdir also inherits adbd's restrictive umask. The app must traverse the
+        # reload and session parents to validate a stage and enumerate journals.
+        script = (
+            'for p do if [ -L "$p" ]; then exit 9; fi; done; '
+            'mkdir -p "$3" && mkdir "$4" && chmod 777 "$2" "$3"'
+        )
         parents = [self.root, f"{self.root}/reload", f"{self.root}/reload/{session_id}", operation_root]
         self._run("-s", self.serial, "shell", "-T", "sh", "-c", shlex.quote(script), "maa-stage",
                   *(shlex.quote(path) for path in parents))

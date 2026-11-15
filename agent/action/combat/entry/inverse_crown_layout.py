@@ -95,9 +95,8 @@ def _recognition_rect(context, name, expected_offset, screen):
 def require_inverse_crown_layout(context) -> None:
     """Apply and read back the existing calibration before any combat input.
 
-    cached_image supplies only scaled screen bounds. A future strategy must
-    bind these bounds to its first successful new frame before issuing input.
-    This gate deliberately does not remove ``strategy_not_ready``.
+    cached_image supplies scaled screen bounds. The single-target strategy
+    observes a successful new frame before its first primary input.
     """
     try:
         _require(not context.tasker.stopping, "task_stopping")

@@ -104,8 +104,7 @@ class BaseRole:
         self.action._role = self
 
     def perform(self) -> None:
-        # Direct role entry must not bypass the session's temporary readiness
-        # guard and execute the legacy InverseCrown rotation.
+        # Direct role entry also validates the supported specialized scene.
         self.combat.ensure_strategy_ready(self)
         if self.phase == self.SWITCH_PHASE:
             self.combat.request_role_switch(self)

@@ -275,6 +275,74 @@ def test_strict_unknown_or_mismatched_field_identity_stops_without_rebinding(mon
     assert combat.context.actions == []
 
 
+def test_ordinary_protected_unknown_waits_without_input_and_recovers_on_new_frame(monkeypatch):
+    combat = _combat(False)
+    role = combat.roles["R"]
+    role.phase = "special_attack"
+    clock = [10.0]
+    monkeypatch.setattr("action.combat.core.session.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("action.combat.core.session.is_cls_on_field", lambda *_args: False)
+    monkeypatch.setattr(
+        "action.combat.core.session.detect_current_role",
+        lambda *args, **kwargs: ("未知", "GeneralFight"),
+    )
+    performed = []
+    monkeypatch.setattr(role, "do_perform", lambda: performed.append(True))
+    role.perform()
+    assert performed == []
+    assert combat.field_identity == "unknown"
+    assert combat.context.actions == []
+    assert combat.context.tasker.controller.clicks == []
+
+    clock[0] += 1.0
+    combat.frame = b"new-frame"
+    monkeypatch.setattr("action.combat.core.session.is_cls_on_field", lambda *_args: True)
+    role.perform()
+    assert performed == [True]
+    assert combat.field_identity == "confirmed"
+    assert combat._ordinary_identity_unknown_since is None
+    assert combat.team.current == "R"
+    assert role.phase == "special_attack"
+
+
+def test_ordinary_protected_unknown_still_rejects_at_existing_observation_deadline(monkeypatch):
+    combat = _combat(False)
+    role = combat.roles["R"]
+    role.phase = "special_attack"
+    clock = [10.0]
+    monkeypatch.setattr("action.combat.core.session.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("action.combat.core.session.is_cls_on_field", lambda *_args: False)
+    monkeypatch.setattr(
+        "action.combat.core.session.detect_current_role",
+        lambda *args, **kwargs: ("未知", "GeneralFight"),
+    )
+    assert combat.refresh_field_role(role) is True
+    clock[0] += combat.combat_ui_lost_timeout
+    with pytest.raises(InverseCrownUnavailable, match="field_identity_unknown"):
+        combat.refresh_field_role(role)
+    assert combat.context.actions == []
+    assert combat.context.tasker.controller.clicks == []
+    combat._clear_combat_state()
+    assert combat._ordinary_identity_unknown_since is None
+
+
+def test_ordinary_protected_known_mismatch_still_rejects_immediately(monkeypatch):
+    combat = _combat(False)
+    role = combat.roles["R"]
+    role.phase = "special_attack"
+    monkeypatch.setattr("action.combat.core.session.is_cls_on_field", lambda *_args: False)
+    monkeypatch.setattr(
+        "action.combat.core.session.detect_current_role",
+        lambda *args, **kwargs: ("灼惘", "Geiravor"),
+    )
+    with pytest.raises(InverseCrownUnavailable, match="field_identity_mismatch"):
+        combat.refresh_field_role(role)
+    assert combat._ordinary_identity_unknown_since is None
+    assert combat.team.current == "R"
+    assert combat.context.actions == []
+    assert combat.context.tasker.controller.clicks == []
+
+
 @pytest.mark.parametrize("enabled", [False, True])
 def test_provider_detection_keeps_normal_keepalive_but_protected_detection_is_pure(monkeypatch, enabled):
     combat = _combat(enabled)

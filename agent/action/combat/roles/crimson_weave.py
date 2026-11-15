@@ -406,6 +406,23 @@ class CrimsonWeave(BaseRole):
         self.phase = "small_dodge"
 
     def _phase_small_dodge(self) -> None:
+        small_sword = self._is_small_sword()
+        if self.combat.context.tasker.stopping:
+            return
+        if small_sword:
+            image = self.action._get_image()
+            if self.combat.context.tasker.stopping:
+                return
+            count = self.action.count_signal_balls(image=image)
+            if self.combat.context.tasker.stopping:
+                return
+            if count >= 3:
+                # Small sword sorts usable blue balls first. Spend one group,
+                # then let the next tick recheck HP, identity and ultimate.
+                self.action.logger.info("小太刀积球(%s)，单次消球后复核必杀", count)
+                self.action.ball_elimination_target(1)
+                return
+
         ready = self._dodge_then_attack()
         if self.combat.context.tasker.stopping:
             return
@@ -437,7 +454,11 @@ class CrimsonWeave(BaseRole):
             return
 
         self.action.auxiliary_machine()
-        self.action.use_qte()
+        if self.combat.context.tasker.stopping:
+            return
+        self.action.use_ready_qte()
+        if self.combat.context.tasker.stopping:
+            return
         self._ult_wait_deadline = time.monotonic() + _SMALL_ULT_WAIT_TIMEOUT
         self.phase = "small_ult_wait"
         self.action.logger.info("小太刀大招释放完毕，等待大太刀无光值出现")
@@ -519,7 +540,11 @@ class CrimsonWeave(BaseRole):
             return
 
         self.action.auxiliary_machine()
-        self.action.use_qte()
+        if self.combat.context.tasker.stopping:
+            return
+        self.action.use_ready_qte()
+        if self.combat.context.tasker.stopping:
+            return
         self._ult_wait_deadline = time.monotonic() + _ULT_WAIT_TIMEOUT
         self.phase = "great_ult_wait"
         self.action.logger.info("大太刀大招释放完毕，等待回到小太刀")

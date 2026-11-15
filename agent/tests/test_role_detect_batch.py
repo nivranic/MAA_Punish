@@ -118,7 +118,7 @@ def test_effective_parameters_are_fresh_and_local(monkeypatch):
     assert all(child["recognition"]["param"]["roi"] == [30, 40, 50, 60] for child in children)
 
 
-def test_callback_keeps_serial_ticks_before_attempts_and_stops_at_first_hit(monkeypatch):
+def test_callback_runs_once_before_the_same_frame_native_batch(monkeypatch):
     monkeypatch.setattr(role_detect, "ROLE_ACTIONS", CATALOG)
     context, observations = RoleContext(["b.png"]), []
 
@@ -126,10 +126,21 @@ def test_callback_keeps_serial_ticks_before_attempts_and_stops_at_first_hit(monk
         observations.append(len(context.check_role_calls))
 
     assert role_detect.detect_current_role(context, b"same-frame", on_tick=tick) == ("second-key", "Second")
-    assert observations == [0, 1]
-    assert context.get_calls == []
-    assert [call["image"] for call in context.check_role_calls] == [b"same-frame", b"same-frame"]
-    assert all("type" not in call["pipeline_override"]["检查角色"]["recognition"] for call in context.check_role_calls)
+    assert observations == [0]
+    assert context.get_calls == ["检查角色"]
+    assert [call["image"] for call in context.check_role_calls] == [b"same-frame"]
+    assert context.check_role_calls[0]["pipeline_override"]["检查角色"]["recognition"]["type"] == "Or"
+
+
+def test_callback_stop_prevents_the_native_scan(monkeypatch):
+    monkeypatch.setattr(role_detect, "ROLE_ACTIONS", CATALOG)
+    context = RoleContext(["a.png"])
+
+    def stop():
+        context.tasker.stopping = True
+
+    assert role_detect.detect_current_role(context, b"image", on_tick=stop) == ("未知", "GeneralFight")
+    assert context.get_calls == context.check_role_calls == []
 
 
 def test_empty_catalog_does_not_request_node_or_recognition(monkeypatch):
@@ -209,7 +220,7 @@ def test_real_native_or_all_miss_and_ordered_template_groups(tmp_path, monkeypat
             "next": [], "on_error": [], "pre_delay": 0, "post_delay": 0},
     }
     (bundle / "pipeline" / "test.json").write_text(json.dumps(nodes) + "\n", encoding="utf-8")
-    inputs, errors, expired, observed = [], [], [], []
+    inputs, errors, expired, observed, ticks = [], [], [], [], []
 
     class Controller(CustomController):
         def connect(self): return True
@@ -243,10 +254,12 @@ def test_real_native_or_all_miss_and_ordered_template_groups(tmp_path, monkeypat
                 only_c = empty.copy()
                 only_c[20:36, 70:86] = templates["c"]
                 assert role_detect.detect_current_role(proxy, only_c) == ("首位", "First")
+                assert role_detect.detect_current_role(proxy, frame, on_tick=lambda: ticks.append(1)) == ("首位", "First")
+                assert ticks == [1]
                 assert context.get_node_data("检查角色") == before
-                assert len(observed) == 4
-                assert [item["algorithm"] for item in observed] == ["Or"] * 4
-                assert [item["hit"] for item in observed] == [True, True, False, True]
+                assert len(observed) == 5
+                assert [item["algorithm"] for item in observed] == ["Or"] * 5
+                assert [item["hit"] for item in observed] == [True, True, False, True, True]
                 assert len(observed[2]["rows"]) == 3
                 assert all(row["algorithm"] == "TemplateMatch" and row["box"] is None for row in observed[2]["rows"])
                 return True

@@ -32,6 +32,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from maa.define import OCRResult
+
 from action.combat.capture import capture_frame
 from action.combat.core.role import resolve_cls_label
 from action.combat.core.role_detect import detect_current_role
@@ -71,6 +73,10 @@ class Roguelike3IdentityError(RuntimeError):
     def __init__(self, reason: str):
         self.reason = reason
         super().__init__(reason)
+
+
+class CombatExitPolicyError(ValueError):
+    """The current task supplied an invalid recognition-only exit list."""
 
 
 def roguelike3_identity_required(node_data: dict | None) -> bool:
@@ -161,6 +167,8 @@ def parse_hp_fraction(text: Any) -> HpObservation:
 class BaseCombatCheck(ABC):
     """战斗识别基类。"""
 
+    exit_nodes: tuple[str, ...] = ()
+
     def _get_frame(self, context: Context, combat: CombatTask) -> Any:
         """优先复用 combat.frame，避免同轮循环重复截屏。"""
         if combat.frame is not None:
@@ -172,9 +180,9 @@ class BaseCombatCheck(ABC):
         """是否识别到战斗 UI（如闪避键）。动画遮挡导致短暂未命中时，框架不会立刻退战。"""
 
     def match_exit_overlay(self, context: Context, combat: CombatTask) -> str | None:
-        """命中固定退战 overlay（如肉鸽重启界面）时返回节点名。"""
+        """识别固定退战界面和本任务的交接条件；不执行节点动作。"""
         image = self._get_frame(context, combat)
-        for name in COMBAT_EXIT_OVERLAY_NODES:
+        for name in (*COMBAT_EXIT_OVERLAY_NODES, *self.exit_nodes):
             result = context.run_recognition(name, image)
             if result and result.hit:
                 logger.info("识别到战斗退出界面: %s", name)
@@ -196,6 +204,9 @@ class BaseCombatCheck(ABC):
         """Read strict HP from the supplied frame and current Context HP node.
 
         No capture, Controller lookup, ROI override, or fallback to cached_image.
+        An ambiguous numeric run or trailing background letters may be reread
+        with a white-text filter in an isolated Context. Both observed numeric
+        fields must remain unchanged.
         The caller owns frame provenance and any device-specific calibration.
         """
         if image is None:
@@ -211,14 +222,75 @@ class BaseCombatCheck(ABC):
             if type(hit) is not bool:
                 return HpObservation(None, None, "hp_detail_invalid")
             if not hit:
+                recovered = self._reread_hp_fraction(context, image, result)
+                if recovered is not None:
+                    return recovered
                 return HpObservation(None, None, "hp_not_recognized")
             best = getattr(result, "best_result", None)
             text = getattr(best, "text", None)
             if best is None or not isinstance(text, str):
                 return HpObservation(None, None, "hp_detail_invalid")
+            hp = parse_hp_fraction(text)
+            if hp.reason == "hp_text_invalid":
+                recovered = self._reread_hp_fraction(context, image, result)
+                if recovered is not None:
+                    return recovered
         except Exception as exc:
             return HpObservation(None, None, "hp_detail_invalid", error_type=type(exc).__name__)
-        return parse_hp_fraction(text)
+        return hp
+
+    @staticmethod
+    def _reread_hp_fraction(context: Context, image: Any, result: Any) -> HpObservation | None:
+        """Resolve observed slash/background ambiguity without guessing digits.
+
+        Filtering all HP reads loses valid low-HP/death text. Restrict the
+        second pass to one failed all-digit result or a complete fraction with
+        trailing letters. Require exact agreement of both numeric fields.
+        """
+        readings = getattr(result, "all_results", None)
+        if not isinstance(readings, list) or len(readings) != 1:
+            return None
+        raw = readings[0]
+        if not isinstance(raw, OCRResult) or not isinstance(raw.text, str):
+            return None
+        separator_error = (
+            result.hit is False and re.fullmatch(r"[0-9]{3,13}", raw.text) is not None
+        )
+        trailing = None
+        if result.hit is True and getattr(result.best_result, "text", None) == raw.text:
+            trailing = re.fullmatch(r"\s*([0-9]+)\s*/\s*([0-9]+)\s*[A-Za-z]+\s*", raw.text)
+            if trailing and parse_hp_fraction(f"{trailing[1]}/{trailing[2]}").reason not in {"alive", "dead"}:
+                return None
+        if not separator_error and trailing is None:
+            return None
+        if getattr(context.tasker, "stopping", False):
+            return None
+        try:
+            child = context.clone()
+            if not child.override_pipeline({COMBAT_HP_NODE: {
+                "recognition": {"param": {"color_filter": "检查血量_白字"}},
+            }}):
+                return None
+            reread = child.run_recognition(COMBAT_HP_NODE, image)
+            if getattr(context.tasker, "stopping", False):
+                return None
+            if not reread or reread.hit is not True:
+                return None
+            text = getattr(reread.best_result, "text", None)
+            hp = parse_hp_fraction(text)
+            if hp.reason not in {"alive", "dead"}:
+                return None
+            match = _STRICT_HP_FRACTION_RE.fullmatch(text)
+            if trailing is not None:
+                if match.groups() != trailing.groups():
+                    return None
+            elif raw.text not in {match[1] + separator + match[2] for separator in ("1", "7")}:
+                return None
+            logger.info("同帧血量复核: %s -> %s", raw.text, text)
+            return hp
+        except Exception:
+            # An unavailable second read never converts unknown HP to alive.
+            return None
 
     def in_outer_interface(self, context: Context, combat: CombatTask) -> bool:
         """是否处于战斗外界面（结算、菜单、大地图等）。仅在 in_combat 未命中时调用。"""
@@ -288,6 +360,13 @@ class BaseCombatCheck(ABC):
 
 class CombatCheck(BaseCombatCheck):
     """战斗识别实现。在此类中编写/调整识别逻辑。"""
+
+    def __init__(self, *, exit_nodes: tuple[str, ...] | list[str] = ()):
+        if not isinstance(exit_nodes, (tuple, list)) or any(
+            not isinstance(name, str) or not name.strip() for name in exit_nodes
+        ):
+            raise CombatExitPolicyError("combat_exit_nodes must be a list of node names")
+        self.exit_nodes = tuple(dict.fromkeys(exit_nodes))
 
     def in_combat(self, context: Context, combat: CombatTask) -> bool:
         """

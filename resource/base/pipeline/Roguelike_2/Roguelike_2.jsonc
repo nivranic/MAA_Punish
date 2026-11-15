@@ -1921,7 +1921,8 @@
             }
         },
         "next": [
-            "厄愿潮声_日耗尽停止"
+            "离开招募页_厄愿潮声",
+            "招募完成下一步_厄愿潮声"
         ]
     },
     "厄愿潮声_招募页标题": {
@@ -1933,16 +1934,37 @@
             }
         }
     },
-    "厄愿潮声_日耗尽停止": {
+    "招募完成下一步_厄愿潮声": {
         "recognition": {
-            "type": "DirectHit"
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "招募次数0_厄愿潮声",
+                    "下一步_厄愿潮声"
+                ],
+                "box_index": 1
+            }
         },
         "action": {
-            "type": "StopTask"
+            "type": "Click"
         },
-        "next": [],
-        "on_error": [],
-        "enabled": true
+        "next": [
+            "离开招募页_厄愿潮声"
+        ]
+    },
+    "离开招募页_厄愿潮声": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "厄愿潮声_招募页标题"
+                ]
+            }
+        },
+        "inverse": true,
+        "next": [
+            "厄愿潮声"
+        ]
     },
     "招募次数0_厄愿潮声_颜色": {
         "recognition": {

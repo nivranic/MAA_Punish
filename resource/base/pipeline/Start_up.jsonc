@@ -2,22 +2,143 @@
     "启动": {
         "timeout": 60000,
         "next": [
+            "[JumpBack]矩阵循生_确认离开演算",
             "[JumpBack]MAS联动处理-检查到维护公告_将发送假通知",
             "[JumpBack]关闭点击空白弹窗",
             "[JumpBack]关闭纷争战区通知",
             "[JumpBack]游戏初始化",
             "检查主界面",
+            "[JumpBack]关闭奖励_矩阵循生",
             "[JumpBack]关闭奖励",
+            "[JumpBack]转场_矩阵循生",
             "[JumpBack]进入游戏",
             "[JumpBack]进入游戏_云战双",
             "[JumpBack]启动_点击确定弹窗",
             "[JumpBack]更新中",
             "[JumpBack]返回主菜单",
+            "[JumpBack]启动_从指挥局返回",
+            "[JumpBack]启动_从寒境港口返回",
+            "[JumpBack]启动_从雾夜事件返回",
+            "[JumpBack]启动_从矩阵装备返回",
+            "[JumpBack]启动_从矩阵搭档返回",
+            "[JumpBack]启动_从矩阵编队返回",
+            "[JumpBack]启动_从矩阵难度返回",
+            "[JumpBack]启动_从矩阵地图返回",
             "[JumpBack]用户账号登录失败",
             "[JumpBack]打开应用",
             "[JumpBack]计数器",
             "[JumpBack]重启任务"
         ]
+    },
+    "矩阵循生_难度选择标题": {
+        "recognition": {"type": "OCR", "param": {"roi": [525, 30, 230, 65], "expected": "^[选選][择擇][难難]度$"}}
+    },
+    "矩阵循生_堆栈潜伏名称": {
+        "recognition": {"type": "OCR", "param": {"roi": [65, 295, 200, 60], "expected": "堆[栈棧][潜潛]伏"}}
+    },
+    "启动_从矩阵难度返回": {
+        "recognition": {"type": "And", "param": {
+            "all_of": ["矩阵循生_难度选择标题", "矩阵循生_堆栈潜伏名称", "返回_文字"], "box_index": 2
+        }},
+        "action": {"type": "Click"},
+        "post_delay": 1500
+    },
+    "启动_从矩阵编队返回": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["矩阵循生_编队色位", "矩阵循生_招募能量_编队", "返回_文字"], "box_index": 2}
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1500
+    },
+    "启动_从矩阵装备返回": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["选择装备_矩阵循生", "矩阵循生_指定穿戴位标题", "返回_文字"], "box_index": 2}
+        },
+        "action": {"type": "Click"},
+        "timeout": 5000,
+        "next": ["启动_矩阵装备离开弹窗已出现"],
+        "on_error": []
+    },
+    "启动_矩阵装备离开弹窗已出现": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_离开演算标题"]}},
+        "action": {"type": "DoNothing"},
+        "next": [],
+        "on_error": []
+    },
+    "矩阵循生_指定穿戴位标题": {
+        "recognition": {"type": "OCR", "param": {"roi": [1065, 34, 175, 55], "expected": "^指定穿戴位$"}}
+    },
+    "启动_从矩阵地图返回": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["肉鸽内部", "更换人物", "返回_文字"],
+                "box_index": 2
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1500
+    },
+    "启动_从矩阵搭档返回": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["贴心搭档_矩阵循生", "返回_文字"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1500
+    },
+    "启动_从雾夜事件返回": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "雾夜镇魂曲内部条件1",
+                    "返回_文字"
+                ],
+                "box_index": 1
+            }
+        },
+        "action": {
+            "type": "Click"
+        },
+        "post_delay": 1500
+    },
+    "启动_从寒境港口返回": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "港口异常点_寒境曙光",
+                    "退出_寒境曙光"
+                ],
+                "box_index": 1
+            }
+        },
+        "action": {
+            "type": "Click"
+        },
+        "post_delay": 1000
+    },
+    "启动_从指挥局返回": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "检查是否在指挥局内部",
+                    "返回_文字"
+                ],
+                "box_index": 1
+            }
+        },
+        "action": {
+            "type": "Click"
+        },
+        "post_delay": 1500
     },
     "游戏初始化": {
         "recognition": {
@@ -360,13 +481,23 @@
     },
     "切换主界面状态": {
         "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["主界面_战斗节点", "切换主界面状态_按钮"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"}
+    },
+    "切换主界面状态_按钮": {
+        "recognition": {
             "type": "TemplateMatch",
             "param": {
                 "roi": [
-                    1165,
-                    476,
-                    77,
-                    62
+                    1090,
+                    460,
+                    170,
+                    100
                 ],
                 "template": [
                     "启动/切换主界面状态_默认.png",
@@ -382,9 +513,6 @@
                     "启动/切换主界面状态_溺梦游歌.png"
                 ]
             }
-        },
-        "action": {
-            "type": "Click"
         }
     },
     "空任务": {

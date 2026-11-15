@@ -1,4 +1,10 @@
 {
+    "矩阵循生_继续演算按钮": {
+        "recognition": {"param": {"expected": ["^続ける$", "^继续$", "^繼續$"]}}
+    },
+    "矩阵循生_未完演算标记": {
+        "recognition": {"param": {"expected": ["^終了$", "^終止$", "^终止$"]}}
+    },
     "返回_矩阵循生": {
         "recognition": {
             "param": {

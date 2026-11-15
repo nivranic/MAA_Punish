@@ -93,3 +93,20 @@ def test_empty_cache_write_preserves_existing_file(scan):
     selector.save_cache({})
 
     assert path.read_bytes() == original
+
+
+def test_cage_reservation_preserves_the_last_complete_update(scan):
+    selector, _, _, path, _ = scan
+    previous = {
+        "focus": {"囚影": {"cage": 2, "power": 8123}},
+        "main_update_at": 1,
+        "cage_update_week": 202646,
+    }
+    path.write_text(json.dumps(previous), encoding="utf-8")
+
+    selector._consume_cage_for_role("囚影", "never")
+
+    updated = json.loads(path.read_text(encoding="utf-8"))
+    assert updated["main_update_at"] == 1
+    assert updated["cage_update_week"] == 202646
+    assert updated["focus"] == {"囚影": {"cage": 0, "power": 8123}}

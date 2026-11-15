@@ -81,13 +81,12 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    666,
-                    79,
-                    153,
-                    44
+                    610,
+                    74,
+                    300,
+                    60
                 ],
-                "expected": "鲨鲨特卖",
-                "only_rec": true
+                "expected": "鲨鲨特卖"
             }
         },
         "next": [

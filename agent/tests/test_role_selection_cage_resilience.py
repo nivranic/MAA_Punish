@@ -64,11 +64,12 @@ def fielding(tmp_path, monkeypatch):
         SUPPORT: {"ice": 100, "cage": 3},
     }
     monkeypatch.setattr(selector, "_load_cache", lambda freq: dict(cache))
+    monkeypatch.setattr(selector, "recognize_role", lambda *args: dict(cache))
     monkeypatch.setattr(
-        selector, "save_cache", lambda data, freq: cache.update(data)
+        selector, "save_cache", lambda data, freq, **kwargs: cache.update(data)
     )
 
-    context = FakeContext(node_data={"pick": {"attach": dict(ATTACH)}})
+    context = FakeContext(node_data={"pick": {"attach": {**ATTACH, "max_try": 1}}})
     # 槽位默认成功：进入选人界面已确认
     context.run_task_results["打开黄色位置"] = FakeTaskDetail(
         "打开黄色位置", ["打开黄色位置", "确认进入选人界面"]
@@ -89,6 +90,72 @@ def published_roster(context: FakeContext) -> dict[str, str]:
 def run_standard(selector, context, argv):
     argv.custom_action_param = json.dumps({"selection_mode": "standard"})
     return selector.run(context, argv)
+
+
+@pytest.mark.parametrize("available", [0, 1, 2])
+def test_cage_selection_refreshes_insufficient_cached_stamina(fielding, monkeypatch, available):
+    selector, context, argv, cache = fielding
+    live = {name: {**info, "cage": 3} for name, info in cache.items()}
+    for index, info in enumerate(cache.values()):
+        info["cage"] = 1 if index < available else 0
+    scan = Mock(return_value=live)
+    monkeypatch.setattr(selector, "recognize_role", scan)
+    monkeypatch.setattr(selector, "select_best_team", RoleSelection.select_best_team.__get__(selector))
+
+    assert run_standard(selector, context, argv).success
+
+    scan.assert_called_once()
+    assert scan.call_args.args[2] is True
+    assert all(published_roster(context).values())
+
+
+def test_usable_cage_candidates_keep_the_cached_path(fielding, monkeypatch):
+    selector, context, argv, _cache = fielding
+    scan = Mock(side_effect=AssertionError("Usable cached candidates should not trigger a full scan"))
+    monkeypatch.setattr(selector, "recognize_role", scan)
+
+    assert run_standard(selector, context, argv).success
+
+    scan.assert_not_called()
+
+
+def test_live_cage_scan_updates_counts_and_preserves_member_metadata(fielding, monkeypatch):
+    selector, context, argv, cache = fielding
+    live = {name: {**info, "cage": 2, "power": 0} for name, info in cache.items()}
+    for info in cache.values():
+        info["cage"] = 0
+        info["power"] = 7123
+    original = {"focus": cache, "main_update_at": 1, "cage_update_week": 202646}
+    selector._cache_path().write_text(json.dumps(original), encoding="utf-8")
+    monkeypatch.setattr(selector, "recognize_role", Mock(return_value=live))
+
+    assert run_standard(selector, context, argv).success
+
+    updated = json.loads(selector._cache_path().read_text(encoding="utf-8"))
+    assert updated["main_update_at"] == 1
+    assert updated["cage_update_week"] == 202646
+    assert all(info["cage"] == 2 for info in updated["focus"].values())
+    assert all(info["power"] == 7123 for info in updated["focus"].values())
+
+
+def test_stopped_cage_scan_preserves_counts_and_member_metadata(fielding, monkeypatch):
+    selector, context, argv, cache = fielding
+    for info in cache.values():
+        info["cage"] = 0
+    path = selector._cache_path()
+    path.write_text(json.dumps({"focus": cache, "main_update_at": 1}), encoding="utf-8")
+    original = path.read_bytes()
+
+    def partial_scan(*args):
+        context.tasker.stopping = True
+        return {ATTACKER: {"cage": 3}}
+
+    monkeypatch.setattr(selector, "recognize_role", partial_scan)
+
+    assert run_standard(selector, context, argv).success
+
+    assert path.read_bytes() == original
+    selector.find_role.assert_not_called()
 
 
 def test_clean_fielding_consumes_cache_and_claims_all_slots(fielding):
@@ -244,7 +311,7 @@ def test_exclusive_slot_open_failure_skips_claim(tmp_path, monkeypatch):
     }
     monkeypatch.setattr(selector, "_load_cache", lambda freq: dict(cache))
     monkeypatch.setattr(
-        selector, "save_cache", lambda data, freq: cache.update(data)
+        selector, "save_cache", lambda data, freq, **kwargs: cache.update(data)
     )
     context = FakeContext(node_data={"pick": {"attach": dict(ATTACH)}})
     context.run_task_results["打开黄色位置"] = FakeTaskDetail(

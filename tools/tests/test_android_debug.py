@@ -1222,6 +1222,15 @@ class StageTransportTest(unittest.TestCase):
         self.assertFalse(any(path.endswith("manifest.json") for path in self.process.files))
         self.assertFalse(any("mv" in call for call in self.process.calls))
 
+    def test_stage_parents_are_app_traversable_before_upload(self):
+        self.adb.upload_stage(self.snapshot, "a" * 32, "b" * 32)
+        setup = next(call for call in self.process.calls if call[3:6] == ["shell", "-T", "sh"])
+        self.assertIn('chmod 777 "$2" "$3"', setup[7])
+        self.assertEqual(self.adb.root + "/reload", setup[-3])
+        self.assertEqual(self.adb.root + "/reload/" + "a" * 32, setup[-2])
+        upload = next(call for call in self.process.calls if len(call) > 3 and call[3] == "push")
+        self.assertLess(self.process.calls.index(setup), self.process.calls.index(upload))
+
     def test_apk_version_uses_exact_package_instead_of_prefix_match(self):
         self.assertEqual(2209, self.adb.apk_version())
 

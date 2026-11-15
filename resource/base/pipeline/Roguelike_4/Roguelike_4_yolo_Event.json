@@ -761,15 +761,8 @@
         "recognition": {
             "type": "OCR",
             "param": {
-                "roi": "事件标题_寒境曙光_yolo_颜色",
-                "roi_offset": [
-                    -2,
-                    -2,
-                    4,
-                    4
-                ],
-                "expected": "汇合",
-                "only_rec": true
+                "roi": [680, 60, 250, 80],
+                "expected": "汇合"
             }
         }
     }

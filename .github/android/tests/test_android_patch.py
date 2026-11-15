@@ -79,13 +79,13 @@ class PatchSafetyTest(unittest.TestCase):
 
 class MineVersionTest(unittest.TestCase):
     def test_commit_count_is_numeric_and_rerun_is_stable(self):
-        self.assertEqual("v3.12.6-iqoo.2185", version_module.mine_version(["v3.12.5"], 2185))
-        self.assertEqual("v3.12.6-iqoo.2186", version_module.mine_version(["v3.12.5"], 2186))
-        self.assertEqual("v3.12.6-iqoo.2185", version_module.mine_version(["v3.12.5"], 2185))
+        self.assertEqual("v3.12.5-iqoo.2185", version_module.mine_version(["v3.12.5"], 2185))
+        self.assertEqual("v3.12.5-iqoo.2186", version_module.mine_version(["v3.12.5"], 2186))
+        self.assertEqual("v3.12.5-iqoo.2185", version_module.mine_version(["v3.12.5"], 2185))
 
     def test_upstream_progress_and_numeric_version_sort(self):
         tags = ["v3.9.99", "v3.12.5", "v3.12.6", "mine-v99.0.0-iqoo.9999", "v4.0.0-beta.1"]
-        self.assertEqual("v3.12.7-iqoo.2190", version_module.mine_version(tags, 2190))
+        self.assertEqual("v3.12.6-iqoo.2190", version_module.mine_version(tags, 2190))
 
     def test_missing_stable_baseline_and_invalid_count_fail_explicitly(self):
         for tags, count in (([], 2185), (["v3.12.6-beta.1"], 2185), (["v03.12.5"], 2185), (["v3.12.5"], 0)):

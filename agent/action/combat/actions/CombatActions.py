@@ -39,6 +39,7 @@ from action.combat.config.LoadSetting import ROLE_ACTIONS
 from action.combat.capture import capture_frame
 from action.combat.input_control import CombatInputError
 from action.combat.reactive_dodge import auto_dodge
+from action.combat.qte_release import click_any_release_qte
 from action.combat.actions.signal_ball_layout import (
     SIGNAL_BALL_SLOT_CENTERS,
     SIGNAL_BALL_SLOT_COUNT,
@@ -556,6 +557,24 @@ class CombatActions:
         finally:
             self._invalidate_frame()
 
+    def use_ready_qte(self) -> bool:
+        """仅点击当前帧已就绪的一个支援 QTE，避免固定队友坐标触发换人。"""
+        try:
+            if self.context.tasker.stopping:
+                return False
+            self._auto_dodge()
+            if self.context.tasker.stopping:
+                return False
+            image = self._get_image(fresh=True)
+            if self.context.tasker.stopping:
+                return False
+            color = click_any_release_qte(self.context, image)
+            if color is not None:
+                self.logger.info("QTE 就绪点击: %s", color)
+            return color is not None
+        finally:
+            self._invalidate_frame()
+
     def _role_switch(self, color: str) -> bool:
         role = getattr(self, "_role", None)
         if role is None:
@@ -694,7 +713,7 @@ class CombatActions:
             self.logger.exception("消球决策异常")
             return 0
 
-    def count_signal_balls(self) -> int:
+    def count_signal_balls(self, *, image: Any = None) -> int:
         """
         统计当前信号球数量
         识别当前场景信号球数量。
@@ -770,7 +789,8 @@ class CombatActions:
                     return two
             return _from_prefix(s[:1])
 
-        image = self._get_image()
+        if image is None:
+            image = self._get_image()
         result = self.context.run_recognition("统计信号球数量", image)
 
         if (

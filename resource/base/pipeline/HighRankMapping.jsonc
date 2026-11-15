@@ -1,4 +1,94 @@
 {
+    "历战映射_异常收尾": {
+        "timeout": 20000,
+        "next": [
+            "返回主菜单",
+            "[JumpBack]战斗失败_历战",
+            "[JumpBack]历战映射_异常结算",
+            "[JumpBack]关闭奖励",
+            "[JumpBack]历战映射_异常撤退",
+            "[JumpBack]历战映射_异常暂停",
+            "[JumpBack]历战映射_异常确定",
+            "[JumpBack]返回"
+        ],
+        "on_error": [
+            "任务失败优雅退出"
+        ]
+    },
+    "历战映射_异常暂停": {
+        "max_hit": 2,
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["战斗中"]
+            }
+        },
+        "action": {
+            "type": "Click"
+        },
+        "post_delay": 500
+    },
+    "历战映射_异常撤退": {
+        "max_hit": 2,
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["历战映射_撤退文字", "历战映射_重新开始文字"]
+            }
+        },
+        "action": {
+            "type": "Click"
+        },
+        "post_delay": 500
+    },
+    "历战映射_撤退文字": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [960, 640, 260, 80],
+                "expected": "撤退"
+            }
+        }
+    },
+    "历战映射_重新开始文字": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [700, 640, 250, 80],
+                "expected": "重新开始"
+            }
+        }
+    },
+    "历战映射_异常确定": {
+        "max_hit": 2,
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["确定"]
+            }
+        },
+        "action": {
+            "type": "Click"
+        },
+        "post_delay": 1000
+    },
+    "历战映射_异常结算": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "结算"
+                ]
+            }
+        },
+        "action": {
+            "type": "Click"
+        },
+        "post_wait_freezes": {
+            "time": 500,
+            "timeout": 2000
+        }
+    },
     "历战映射": {
         "on_error": [
             "返回主菜单",

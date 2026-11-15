@@ -132,3 +132,21 @@ def hud_overrides_from_cache(cache_data: Any, controller: str,
                                           "roi_offset": [0, 0, 0, 0]}}}
         for name, rect in expected["nodes"].items()
     }
+
+
+def skill_energy_override_from_cache(cache_data: Any, controller: str,
+                                     screen_size: Any) -> dict:
+    """Reuse the bound energy-bar geometry, including its ready glow.
+
+    The empty-bar calibration covers the inner three-pixel strip. Ready
+    pulses also occupy its lower edge and right cap; the old broad default
+    can both clip that cap after a HUD move and match the arena to its left.
+    Keep the existing color/count predicate and restrict its search area.
+    """
+    hud = hud_overrides_from_cache(cache_data, controller, screen_size)
+    x, y, width, height = hud["检查逆冕能量空"]["recognition"]["param"]["roi"]
+    roi = _rect([x, y - 3, width + 12, height + 7],
+                _screen_size(screen_size), "hud_skill_energy_roi_out_of_bounds")
+    return {"技能_能量条": {"recognition": {"param": {
+        "roi": roi, "roi_offset": [0, 0, 0, 0],
+    }}}}

@@ -1,0 +1,8 @@
+{
+    "每日助理交流_入口文字": {
+        "recognition": {"param": {"expected": "^Chat$"}}
+    },
+    "每日助理交流_档案文字": {
+        "recognition": {"param": {"expected": "Basic Info"}}
+    }
+}

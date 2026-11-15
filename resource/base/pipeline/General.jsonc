@@ -68,7 +68,13 @@
         },
         "post_delay": 1000,
         "next": [
+            "[JumpBack]关闭点击空白弹窗",
             "检查主界面2",
+            "[JumpBack]关闭奖励_矩阵循生",
+            "[JumpBack]转场_矩阵循生",
+            "[JumpBack]启动_从矩阵编队返回",
+            "[JumpBack]启动_从矩阵难度返回",
+            "[JumpBack]启动_从矩阵地图返回",
             "[JumpBack]关闭奖励",
             "[JumpBack]确定",
             "[JumpBack]返回主菜单_reco"
@@ -171,7 +177,7 @@
             "Node.Recognition.Succeeded": "$focus.返回主菜单_err"
         }
     },
-    // 通用失败兜底：尽力导航回主菜单后 StopTask 优雅收尾（任务记成功，不杀后续任务组）。
+    // 通用失败兜底：尽力导航回主菜单后 StopTask 收尾；Android 根据历史记失败并继续后续任务。
     // 用于战斗类任务（囚笼/围剿/历战/自动战斗/角色选择）的 on_error 终位——ScopedRecovery 仅支持
     // 指挥局 entry，其他 entry 挂它只会 fail-closed 停全组（2026-11-11 台账 2.312 缺陷②③）。
     "任务失败优雅退出": {
@@ -180,6 +186,7 @@
         },
         "timeout": 20000,
         "next": [
+            "[JumpBack]矩阵循生_确认离开演算",
             "[JumpBack]从战斗中返回",
             "[JumpBack]返回",
             "[JumpBack]返回主菜单_reco",

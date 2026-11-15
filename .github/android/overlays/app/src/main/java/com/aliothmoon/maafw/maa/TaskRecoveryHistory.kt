@@ -9,6 +9,7 @@ import com.sun.jna.ptr.LongByReference
 /** Reads this task's retained native history; asynchronous sink delivery is not a dispatch gate. */
 object TaskRecoveryHistory {
     private const val RECOVERY_NODE = "返回主菜单_err"
+    private val GRACEFUL_FAILURE_NODES = setOf("任务失败优雅退出", "历战映射_异常收尾", "矩阵循生_身份拒绝停止")
     private const val MAX_NODES = 65_536L
     private const val QUERY_NANOS = 2_000_000_000L
 
@@ -20,6 +21,7 @@ object TaskRecoveryHistory {
         val nodeCount: Long? = null,
         val completedFalseCount: Long = 0,
         val singleEntryCompleted: Boolean = false,
+        val gracefulFailureSeen: Boolean = false,
     ) {
         val mustAbort: Boolean get() = !complete || recoverySeen
     }
@@ -40,11 +42,13 @@ object TaskRecoveryHistory {
     ): Result {
         val started = nanoTime()
         var recoverySeen = false
+        var gracefulFailureSeen = false
         var observedStatus: Int? = null
         var observedCount: Long? = null
         var completedFalseCount = 0L
         var singleEntryCompleted = false
-        fun unknown(reason: String) = Result(false, recoverySeen, reason, observedStatus, observedCount, completedFalseCount)
+        fun unknown(reason: String) = Result(false, recoverySeen, reason, observedStatus, observedCount,
+            completedFalseCount, gracefulFailureSeen = gracefulFailureSeen)
         fun active(): Boolean = try {
             ownsRuntime() && nanoTime() - started in 0 until QUERY_NANOS
         } catch (_: Throwable) {
@@ -97,17 +101,18 @@ object TaskRecoveryHistory {
                         return unknown("node_detail_unavailable")
                     }
                     val name = lib.MaaStringBufferGet(nameBuffer)
-                    if (name.isNullOrBlank() || completed.value.toInt() !in 0..1) {
-                        // StopTask 终止时正在执行的节点在 MaaFw 5.14.2 会留下无名占位（与
-                        // ScopedRecovery 注释记载的 Next-timeout 占位同源）。仅当原生终态已
-                        // SUCCEEDED 且占位位于历史末位时容忍；其余无效详情仍 fail-closed。
-                        val stopTaskTailPlaceholder = name.isNullOrBlank() &&
-                            nodeId == ids.last() &&
-                            MaaStatus.isDone(firstStatus) && firstStatus == MaaStatus.SUCCEEDED
-                        if (!stopTaskTailPlaceholder) return unknown("node_detail_invalid")
+                    if (completed.value.toInt() !in 0..1) return unknown("node_detail_invalid")
+                    if (name.isNullOrBlank()) {
+                        // MaaFramework 5.14.2 reserves a node before recognizing next. A timeout
+                        // leaves its empty detail in the history even when on_error later succeeds.
+                        // The placeholder has no recognition or action, and may precede cleanup.
+                        val unexecutedPlaceholder = name == "" && completed.value.toInt() == 0 &&
+                            recoId.value == 0L && actionId.value == 0L && firstStatus == MaaStatus.SUCCEEDED
+                        if (!unexecutedPlaceholder) return unknown("node_detail_invalid")
                         continue
                     }
                     if (name == RECOVERY_NODE) recoverySeen = true
+                    if (name in GRACEFUL_FAILURE_NODES) gracefulFailureSeen = true
                     // Native completed=false also describes an executed action failure. A named
                     // node in a stable terminal history is not a missing/unfinished query result.
                     if (completed.value.toInt() == 0) completedFalseCount++
@@ -138,11 +143,14 @@ object TaskRecoveryHistory {
                     ) singleEntryCompleted = false
                     if (!active()) return unknown("runtime_owner_or_deadline")
                 }
-                if (recoverySeen) return Result(true, true, "shared_recovery_visited", firstStatus, capacity, completedFalseCount)
+                if (recoverySeen) return Result(true, true, "shared_recovery_visited", firstStatus, capacity,
+                    completedFalseCount, gracefulFailureSeen = gracefulFailureSeen)
                 if (waitStatus != firstStatus || !MaaStatus.isDone(waitStatus)) {
                     return unknown("task_completion_unconfirmed")
                 }
-                return Result(true, false, "no_shared_recovery", firstStatus, capacity, completedFalseCount, singleEntryCompleted)
+                val reason = if (gracefulFailureSeen) "graceful_failure_visited" else "no_shared_recovery"
+                return Result(true, false, reason, firstStatus, capacity, completedFalseCount,
+                    singleEntryCompleted, gracefulFailureSeen)
             }
         } catch (_: Throwable) {
             return unknown("native_history_query_failed")
@@ -171,7 +179,7 @@ class RecoveryDispatchGate {
 
     fun success(waitStatus: Int, history: TaskRecoveryHistory.Result): Boolean {
         if (history.mustAbort) aborted = true
-        return !aborted && waitStatus == MaaStatus.SUCCEEDED
+        return !aborted && waitStatus == MaaStatus.SUCCEEDED && !history.gracefulFailureSeen
     }
 }
 

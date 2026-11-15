@@ -13,7 +13,7 @@ import pytest
 
 from action.basics.InterfaceZone import roi_zone_controller as zones
 from action.basics.InterfaceZone.hud_roi_calibration import HUD_CALIBRATION_KEY, make_hud_calibration
-from action.combat.config.inverse_crown_profile import InverseCrownProfile, InverseCrownUnavailable
+from action.combat.config.inverse_crown_profile import InverseCrownProfile
 from action.combat.core.provider import CombatCheck
 from action.combat.core.session import CombatTask
 from action.combat.input_control import CombatInputError, CombatInputScope
@@ -233,14 +233,11 @@ def test_stop_during_context_read_rejects_even_positive_appearance(calibrated, m
     assert not case.controller.touches and not case.context.actions
 
 
-def test_full_bar_and_blue_ring_cannot_issue_down_or_unlock_gates(calibrated):
+def test_appearance_only_signal_consumer_does_not_issue_down(calibrated):
     case = calibrated
-    case.role.do_perform()
+    case.role._perform_stationary()
     assert case.role.phase == "prepare"
-    with pytest.raises(InverseCrownUnavailable, match="strategy_not_ready"):
-        case.role.perform()
-    with pytest.raises(InverseCrownUnavailable, match="strategy_not_ready"):
-        case.combat.combat_once()
+    case.combat.ensure_strategy_ready(case.role)
     case.controller.post_screencap.assert_not_called()
     assert case.controller.touches == case.controller.clicks == case.context.actions == []
 
@@ -297,10 +294,7 @@ def test_positive_phase_is_consumed_only_in_own_single_action_context(phase_cali
     case = phase_calibrated
     case.role._enter_stationary(phase)
     assert case.role._observe_stationary(case.image).abyss_phase is YES
-    with pytest.raises(InverseCrownUnavailable, match="strategy_not_ready"):
-        case.role.perform()
-    with pytest.raises(InverseCrownUnavailable, match="strategy_not_ready"):
-        case.combat.combat_once()
+    case.combat.ensure_strategy_ready(case.role)
     assert not case.controller.touches and not case.context.actions
 
 
@@ -502,12 +496,9 @@ def test_actual_ready_producer_cannot_bypass_necessary_settlement(ready_calibrat
 
     monkeypatch.setattr(case.role, "_read_stationary_signals", add_independent_settlement)
     case.role._settlement_pending = pending
-    case.role.do_perform()
+    case.role._perform_stationary()
     assert observed == [YES]
     assert case.role._settlement_pending is (pending or settlement is YES)
     assert case.controller.touches == case.controller.clicks == case.context.actions == []
-    with pytest.raises(InverseCrownUnavailable, match="strategy_not_ready"):
-        case.role.perform()
-    with pytest.raises(InverseCrownUnavailable, match="strategy_not_ready"):
-        case.combat.combat_once()
+    case.combat.ensure_strategy_ready(case.role)
     case.controller.post_screencap.assert_not_called()

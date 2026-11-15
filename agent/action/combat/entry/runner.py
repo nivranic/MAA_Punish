@@ -31,6 +31,7 @@ from maa.custom_action import CustomAction
 
 from action.combat.core.provider import (
     CombatCheck,
+    CombatExitPolicyError,
     Roguelike3IdentityError,
     roguelike3_identity_required,
 )
@@ -69,7 +70,8 @@ class CombatRunner(CustomAction):
                 raise InverseCrownProfileError("preparation entry requires enabled profile")
             if profile.enabled:
                 require_inverse_crown_layout(context)
-            combat_check = CombatCheck()
+            attach = (node_data or {}).get("attach") or {}
+            combat_check = CombatCheck(exit_nodes=attach.get("combat_exit_nodes", ()))
             combat_options = {"inverse_crown_profile": profile}
             if r3_identity:
                 combat_options["roguelike3_identity_required"] = True
@@ -78,6 +80,9 @@ class CombatRunner(CustomAction):
                 combat.combat_once(from_preparation=True)
             else:
                 combat.combat_once()
+        except CombatExitPolicyError as exc:
+            self._record_preflight_outcome("combat_exit_policy_invalid", "REJECTED", type(exc).__name__)
+            return CustomAction.RunResult(success=False)
         except Roguelike3IdentityError as exc:
             if combat is None:
                 self._record_preflight_outcome("r3_identity_policy_invalid", "REJECTED", type(exc).__name__)

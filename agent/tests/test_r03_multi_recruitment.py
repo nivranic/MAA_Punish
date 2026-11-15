@@ -11,7 +11,7 @@ from action.combat.core.team import TEAM_ROSTER_NODE, load_team_roster_from_cont
 from test_support.fakes import FakeContext
 
 ATTACKER = "露西亚·深红囚影"
-SUPPORTS = ["丽芙·流光", "薇拉·瑰丽[试用]"]
+SUPPORTS = ["丽芙·流光", "薇拉·瑰丽"]
 
 
 def formation(budget=5):
@@ -55,6 +55,8 @@ def scene(monkeypatch, *, main_cost=4, support_result=True, wrong_slot=False):
     monkeypatch.setattr(reader, "return_to_formation", Mock(side_effect=return_to_formation))
     monkeypatch.setattr(reader, "open_slot", Mock(side_effect=open_slot))
     monkeypatch.setattr(reader, "recruit", Mock(side_effect=recruit))
+    monkeypatch.setattr(reader, "recruit_support", Mock(side_effect=lambda ctx, roles, name, tries, _budget:
+                        name if reader.recruit(ctx, roles, name, tries) else None))
     monkeypatch.setattr(reader, "read_formation", Mock(side_effect=capture))
     monkeypatch.setattr(reader, "ensure_red_leader", Mock(side_effect=ensure_red))
     monkeypatch.setattr(reader, "red_ready", Mock(side_effect=lambda *_: state["formation"]["red_first"]))
@@ -77,6 +79,17 @@ def test_successful_deduction_into_wrong_color_rejects_the_entire_roster(monkeyp
     reader, context, _state = scene(monkeypatch, wrong_slot=True)
     assert reader.recruit_team(context, {}, ATTACKER, SUPPORTS, 3) is None
     reader.ensure_red_leader.assert_not_called()
+
+
+def test_team_keeps_confirmed_trial_name_instead_of_cached_owned_name(monkeypatch):
+    reader, context, _ = scene(monkeypatch)
+    actual = SUPPORTS[0] + "[试用]"
+    reader.recruit_support.side_effect = lambda ctx, roles, _name, tries, _budget: (
+        actual if reader.recruit(ctx, roles, actual, tries) else None
+    )
+    assert reader.recruit_team(context, {}, ATTACKER, SUPPORTS, 3) == {
+        "R": ATTACKER, "B": actual, "Y": "",
+    }
 
 
 @pytest.mark.parametrize("outcome", [False, "unknown_deduction"])
@@ -142,3 +155,28 @@ def test_role_selection_publishes_exact_new_team_only_after_confirmation(monkeyp
     )
     if confirmed:
         assert context.node_data[TEAM_ROSTER_NODE]["attach"]["role_names"] == team
+        assert context.node_data["确认装备_矩阵循生"] == R03Recruitment.red_equipment_patch()["确认装备_矩阵循生"]
+    else:
+        assert "确认装备_矩阵循生" not in context.node_data
+
+
+@pytest.mark.parametrize("failure", ["rejected", "stopped"])
+def test_equipment_route_failure_or_stop_prevents_team_publication(monkeypatch, tmp_path, failure):
+    selector = RoleSelection()
+    selector._cache_path = Mock(return_value=tmp_path / "absent.json")
+    selector._load_cache = Mock(return_value={ATTACKER: {"power": 7586}})
+    selector.send_msg = Mock()
+    context = FakeContext(node_data={"pick": {"attach": {"selection_mode": "roguelike_3", "need_multi": True}}})
+    monkeypatch.setattr(R03Recruitment, "recruit_team", lambda *_: {"R": ATTACKER, "B": "", "Y": ""})
+    original_override = context.override_pipeline
+
+    def apply(patch):
+        if "确认装备_矩阵循生" in patch:
+            if failure == "rejected":
+                return False
+            context.tasker.stopping = True
+        return original_override(patch)
+
+    context.override_pipeline = apply
+    result = selector.run(context, SimpleNamespace(node_name="pick", custom_action_param="{}"))
+    assert not result.success and load_team_roster_from_context(context) is None

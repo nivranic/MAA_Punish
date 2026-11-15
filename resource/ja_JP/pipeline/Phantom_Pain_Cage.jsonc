@@ -1,4 +1,25 @@
 {
+    "囚笼_骑士层入口": {
+        "recognition": {"param": {"expected": "騎士"}}
+    },
+    "囚笼_混沌层入口": {
+        "recognition": {"param": {"expected": "混沌"}}
+    },
+    "囚笼_地狱层入口": {
+        "recognition": {"param": {"expected": "地獄"}}
+    },
+    "囚笼_自动作战文字": {
+        "recognition": {"param": {"expected": "自動戦闘|自動作戦|オート"}}
+    },
+    "囚笼_自动战斗标题": {
+        "recognition": {"param": {"expected": "自動戦闘|自動作戦|オート"}}
+    },
+    "囚笼_执行扫荡文字": {
+        "recognition": {"param": {"expected": "掃討|自動戦闘|自動作戦"}}
+    },
+    "囚笼_手动作战文字": {
+        "recognition": {"param": {"expected": "手動戦闘|手動作戦|手動"}}
+    },
     "全部已完成": {
         "recognition": {
             "param": {

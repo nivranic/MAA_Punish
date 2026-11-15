@@ -1,4 +1,169 @@
 {
+    "矩阵循生_套装调整": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_套装调整标题"]}},
+        "action": {"type": "DoNothing"},
+        "timeout": 10000,
+        "next": [
+            "[JumpBack]矩阵循生_确认退出套装调整",
+            "[JumpBack]矩阵循生_退出套装调整",
+            "[JumpBack]转场_矩阵循生",
+            "不祥烙印_矩阵循生",
+            "矩阵循生_模拟演算完成",
+            "肉鸽内部"
+        ]
+    },
+    "矩阵循生_套装调整标题": {
+        "recognition": {"type": "OCR", "param": {
+            "roi": [50, 70, 500, 70], "expected": "[请請][选選][择擇]要更[换換]位置的套[装裝]"
+        }}
+    },
+    "矩阵循生_套装调整提示标题": {
+        "recognition": {"type": "OCR", "param": {"roi": [600, 210, 90, 50], "expected": "^提示$"}}
+    },
+    "矩阵循生_套装调整离开提示": {
+        "recognition": {"type": "OCR", "param": {
+            "roi": [400, 310, 480, 65],
+            "expected": "^[还還]有剩[余餘]次[数數][,，]?\\s*是否[确確]定[离離][开開]界面[?？]$"
+        }}
+    },
+    "矩阵循生_套装调整提示已关闭": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_套装调整提示标题"]}},
+        "inverse": true,
+        "action": {"type": "DoNothing"},
+        "next": [],
+        "on_error": []
+    },
+    "矩阵循生_退出套装调整": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_套装调整标题"]}},
+        "action": {"type": "DoNothing"},
+        "timeout": 3000,
+        "next": ["矩阵循生_套装调整返回前检查"],
+        "on_error": []
+    },
+    "矩阵循生_套装调整返回前检查": {
+        "recognition": {"type": "And", "param": {"all_of": ["矩阵循生_套装调整提示标题"]}},
+        "inverse": true,
+        "action": {"type": "DoNothing"},
+        "timeout": 3000,
+        "next": ["矩阵循生_套装调整点击返回"],
+        "on_error": []
+    },
+    "矩阵循生_套装调整点击返回": {
+        "recognition": {"type": "And", "param": {
+            "all_of": ["矩阵循生_套装调整标题", "返回_文字"], "box_index": 1
+        }},
+        "action": {"type": "Click"},
+        "post_delay": 1000,
+        "next": [],
+        "on_error": []
+    },
+    "矩阵循生_确认退出套装调整": {
+        "recognition": {"type": "And", "param": {
+            "all_of": ["矩阵循生_套装调整标题", "矩阵循生_套装调整提示标题", "矩阵循生_套装调整离开提示", "矩阵循生_离开演算确认文字"], "box_index": 3
+        }},
+        "action": {"type": "Click"},
+        "post_delay": 1000,
+        "timeout": 3000,
+        "next": ["矩阵循生_套装调整提示已关闭"],
+        "on_error": []
+    },
+    "不祥烙印_矩阵循生": {
+        "recognition": {"type": "And", "param": {"all_of": ["不祥烙印_标题"]}},
+        "action": {"type": "DoNothing"},
+        "timeout": 120000,
+        "next": [
+            "[JumpBack]关闭奖励_矩阵循生",
+            "[JumpBack]矩阵循生_关闭套装激活提示",
+            "矩阵循生_套装调整",
+            "矩阵循生_模拟演算完成",
+            "肉鸽内部",
+            "[JumpBack]确认装备_矩阵循生",
+            "[JumpBack]选择装备_矩阵循生",
+            "[JumpBack]不祥烙印_选择剧情",
+            "[JumpBack]不祥烙印_前进",
+            "[JumpBack]不祥烙印_取走",
+            "[JumpBack]转场_矩阵循生"
+        ]
+    },
+    "不祥烙印_取走文字": {
+        "recognition": {"type": "OCR", "param": {"roi": [970, 610, 220, 70], "expected": "^取走$"}}
+    },
+    "不祥烙印_取走": {
+        "recognition": {"type": "And", "param": {"all_of": ["不祥烙印_标题", "不祥烙印_取走文字"], "box_index": 1}},
+        "action": {"type": "Click"},
+        "post_delay": 1000,
+        "next": []
+    },
+    "不祥烙印_标题": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [650, 96, 180, 62], "expected": "^不祥烙印$"}
+        }
+    },
+    "不祥烙印_前进文字": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [970, 610, 220, 70], "expected": ["^前[进進]$", "^[环環][顾顧]四周$", "^休整$"]}
+        }
+    },
+    "不祥烙印_前进": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["不祥烙印_标题", "不祥烙印_前进文字"], "box_index": 1}
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000,
+        "next": []
+    },
+    "不祥烙印_选项标记": {
+        "recognition": {
+            "type": "ColorMatch",
+            "param": {
+                "roi": [698, 270, 22, 320], "method": 40,
+                "lower": [90, 60, 100], "upper": [120, 255, 255],
+                "connected": true, "count": 50, "order_by": "Vertical", "index": 0
+            }
+        }
+    },
+    "不祥烙印_首项定位": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["不祥烙印_选项标记"]}
+        }
+    },
+    "不祥烙印_选项文字": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": "不祥烙印_首项定位", "roi_offset": [25, -10, 510, 30],
+                "expected": ".+"
+            }
+        }
+    },
+    "不祥烙印_剧情选项": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["不祥烙印_首项定位", "不祥烙印_选项文字"], "box_index": 1}
+        }
+    },
+    "不祥烙印_选择剧情": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["不祥烙印_标题", "不祥烙印_剧情选项", "决定_矩阵循生"], "box_index": 1}
+        },
+        "action": {"type": "Click"},
+        "post_delay": 500,
+        "next": ["不祥烙印_确认选项"]
+    },
+    "不祥烙印_确认选项": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["不祥烙印_标题", "决定_矩阵循生"], "box_index": 1}
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000,
+        "next": []
+    },
     "厄运连锁_矩阵循生": {
         "recognition": {
             "type": "And",
@@ -102,6 +267,16 @@
     },
     "意外点击藏品_矩阵循生": {
         "recognition": {
+            "type": "Or",
+            "param": {
+                "any_of": ["矩阵循生_藏品详情标题", "矩阵循生_物品详情标题"]
+            }
+        },
+        "post_delay": 2000,
+        "next": ["矩阵循生_关闭物品详情", "返回"]
+    },
+    "矩阵循生_藏品详情标题": {
+        "recognition": {
             "type": "OCR",
             "param": {
                 "roi": [
@@ -112,11 +287,35 @@
                 ],
                 "expected": "^.品$"
             }
+        }
+    },
+    "矩阵循生_物品详情标题": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [170, 60, 400, 105],
+                "expected": ["^物品详情$", "^物品詳情$"]
+            }
+        }
+    },
+    "矩阵循生_关闭物品详情": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["矩阵循生_物品详情标题"]}
         },
-        "post_delay": 2000,
-        "next": [
-            "返回"
-        ]
+        "action": {"type": "Click", "param": {"target": [1200, 72]}},
+        "timeout": 8000,
+        "next": ["矩阵循生_物品详情已关闭"]
+    },
+    "矩阵循生_物品详情已关闭": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["矩阵循生_物品详情标题"]}
+        },
+        "inverse": true,
+        "action": {"type": "DoNothing"},
+        "rate_limit": 200,
+        "next": []
     },
     "进入商店_矩阵循生": {
         "timeout": 120000,
@@ -454,7 +653,9 @@
                 ],
                 "expected": [
                     "收下",
-                    "离开"
+                    "离开",
+                    "环顾四周",
+                    "安抚"
                 ]
             }
         },
@@ -473,7 +674,11 @@
                     554,
                     339
                 ],
-                "expected": "给巨鼠些吃的"
+                "expected": [
+                    "给巨鼠些吃的",
+                    "让她试试",
+                    "用尽全力拉回绳子"
+                ]
             }
         },
         "action": {
@@ -4147,6 +4352,368 @@
             "决定_矩阵循生"
         ]
     },
+    "机械维修师_标题": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [650, 96, 304, 62],
+                "expected": ["^机械维修师$", "^機械維修師$"]
+            }
+        }
+    },
+    "机械维修师_矩阵循生": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["机械维修师_标题"]}
+        },
+        "timeout": 120000,
+        "next": [
+            "事件完成_矩阵循生",
+            "[JumpBack]机械维修师_拒绝交换",
+            "[JumpBack]机械维修师_离开",
+            "肉鸽内部"
+        ]
+    },
+    "机械维修师_拒绝选项": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [720, 345, 480, 180],
+                "expected": ["^拒绝交换.*就此离开$", "^拒絕交換.*就此離開$"]
+            }
+        }
+    },
+    "机械维修师_拒绝交换": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["机械维修师_标题", "机械维修师_拒绝选项"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000,
+        "next": ["决定_矩阵循生"]
+    },
+    "机械维修师_离开文字": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [975, 610, 220, 70],
+                "expected": ["^离开$", "^離開$"]
+            }
+        }
+    },
+    "机械维修师_离开": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["机械维修师_标题", "机械维修师_离开文字"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000
+    },
+    "树下女巫_标题": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [650, 96, 304, 62],
+                "expected": ["^树下女巫", "^樹下女巫"]
+            }
+        }
+    },
+    "树下女巫_矩阵循生": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["树下女巫_标题"]}
+        },
+        "timeout": 120000,
+        "next": [
+            "事件完成_矩阵循生",
+            "[JumpBack]关闭奖励_矩阵循生",
+            "[JumpBack]树下女巫_接受好意",
+            "[JumpBack]树下女巫_推进",
+            "肉鸽内部"
+        ]
+    },
+    "树下女巫_好意选项": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [720, 345, 480, 180],
+                "expected": "^接受少女的好意$"
+            }
+        }
+    },
+    "树下女巫_接受好意": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["树下女巫_标题", "树下女巫_好意选项"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000,
+        "next": ["决定_矩阵循生"]
+    },
+    "树下女巫_推进文字": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [975, 610, 220, 70],
+                "expected": ["^上前$", "^离开$", "^離開$", "^继续前行$", "^繼續前行$"]
+            }
+        }
+    },
+    "树下女巫_推进": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["树下女巫_标题", "树下女巫_推进文字"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000
+    },
+    "休憩之地_标题": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [650, 96, 304, 62], "expected": "^休憩之地$"}
+        }
+    },
+    "休憩之地_矩阵循生": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["休憩之地_标题"]}
+        },
+        "timeout": 120000,
+        "next": [
+            "事件完成_矩阵循生",
+            "[JumpBack]关闭奖励_矩阵循生",
+            "[JumpBack]休憩之地_前往",
+            "[JumpBack]休憩之地_直接出发",
+            "[JumpBack]转场_矩阵循生",
+            "肉鸽内部"
+        ]
+    },
+    "休憩之地_前往文字": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [975, 610, 220, 70], "expected": ["^前往$", "^出发$", "^出發$"]}
+        }
+    },
+    "休憩之地_前往": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["休憩之地_标题", "休憩之地_前往文字"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000
+    },
+    "休憩之地_直接出发文字": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [720, 345, 480, 180], "expected": ["^直接出发$", "^直接出發$"]}
+        }
+    },
+    "休憩之地_直接出发": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["休憩之地_标题", "休憩之地_直接出发文字"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000,
+        "next": ["决定_矩阵循生"]
+    },
+    "英雄假象_标题": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [650, 96, 304, 62], "expected": "^英雄假象"}
+        }
+    },
+    "英雄假象_矩阵循生": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["英雄假象_标题"]}
+        },
+        "timeout": 120000,
+        "next": [
+            "事件完成_矩阵循生",
+            "[JumpBack]关闭奖励_矩阵循生",
+            "[JumpBack]英雄假象_答应请求",
+            "[JumpBack]英雄假象_推进",
+            "肉鸽内部"
+        ]
+    },
+    "英雄假象_请求选项": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [720, 345, 480, 180],
+                "expected": ["^答应他的请求$", "^答應他的請求$"]
+            }
+        }
+    },
+    "英雄假象_答应请求": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["英雄假象_标题", "英雄假象_请求选项"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000,
+        "next": ["决定_矩阵循生"]
+    },
+    "英雄假象_推进文字": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [975, 610, 220, 70],
+                "expected": ["^跟随他$", "^跟隨他$", "^离开$", "^離開$"]
+            }
+        }
+    },
+    "英雄假象_推进": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["英雄假象_标题", "英雄假象_推进文字"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000
+    },
+    "知识假象_标题": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [650, 96, 304, 62], "expected": ["^知识假象", "^知識假象"]}
+        }
+    },
+    "知识假象_矩阵循生": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["知识假象_标题"]}
+        },
+        "timeout": 120000,
+        "next": [
+            "事件完成_矩阵循生",
+            "[JumpBack]关闭奖励_矩阵循生",
+            "[JumpBack]知识假象_调查芯片",
+            "[JumpBack]知识假象_推进",
+            "肉鸽内部"
+        ]
+    },
+    "知识假象_芯片选项": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [720, 345, 480, 180],
+                "expected": ["^调查机器人的芯片$", "^調查機器人的[晶芯]片$"]
+            }
+        }
+    },
+    "知识假象_调查芯片": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["知识假象_标题", "知识假象_芯片选项"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000,
+        "next": ["决定_矩阵循生"]
+    },
+    "知识假象_推进文字": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [975, 610, 220, 70],
+                "expected": ["^继续$", "^繼續$", "^离开$", "^離開$"]
+            }
+        }
+    },
+    "知识假象_推进": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["知识假象_标题", "知识假象_推进文字"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000
+    },
+    "自动化工坊_标题": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [650, 96, 304, 62], "expected": "^自[动動]化工坊$"}
+        }
+    },
+    "自动化工坊_矩阵循生": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["自动化工坊_标题"]}
+        },
+        "timeout": 120000,
+        "next": [
+            "矩阵循生_套装调整",
+            "[JumpBack]自动化工坊_原地休整",
+            "[JumpBack]自动化工坊_推进",
+            "肉鸽内部"
+        ]
+    },
+    "自动化工坊_休整选项": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [720, 345, 480, 180], "expected": "^原地休整"}
+        }
+    },
+    "自动化工坊_原地休整": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["自动化工坊_标题", "自动化工坊_休整选项"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000,
+        "next": ["决定_矩阵循生"]
+    },
+    "自动化工坊_推进文字": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [975, 610, 220, 70],
+                "expected": ["^继续$", "^繼續$", "^休整$"]
+            }
+        }
+    },
+    "自动化工坊_推进": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["自动化工坊_标题", "自动化工坊_推进文字"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000
+    },
     "未知事件_矩阵循生": {
         "recognition": {
             "type": "OCR",
@@ -4160,18 +4727,14 @@
                 "expected": ""
             }
         },
-        "action": {
-            "type": "Custom",
-            "param": {
-                "custom_action": "PrintInfo"
-            }
-        },
+        // The focus event and native OCR detail already report the unknown title.
+        "action": {"type": "DoNothing"},
         "post_delay": 1000,
         "next": [
             "链路崩溃_reco",
             "[JumpBack]返回_矩阵循生",
             "[JumpBack]确认结束购物_矩阵循生",
-            "[JumpBack]终止_矩阵循生"
+            "矩阵循生_保留未完演算退出"
         ],
         "focus": {
             "Node.Recognition.Succeeded": "$focus.未知事件_矩阵循生"

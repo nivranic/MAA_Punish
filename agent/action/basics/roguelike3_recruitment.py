@@ -16,6 +16,16 @@ class R03Recruitment:
         self.selector = selector
 
     @staticmethod
+    def red_equipment_patch():
+        return {"确认装备_矩阵循生": {
+            "action": {"type": "DoNothing"},
+            "next": ["矩阵循生_关闭套装激活提示",
+                     "矩阵循生_红位装备确认", "矩阵循生_装备选择红位",
+                     "矩阵循生_余位装备确认", "矩阵循生_装备选择余位",
+                     "矩阵循生_非装备确认"],
+        }}
+
+    @staticmethod
     def read_budget(context, image, *, team=False):
         if image is None:
             return None
@@ -200,7 +210,10 @@ class R03Recruitment:
             if formation["budget"][0] == 0:
                 break
             used = {name.replace("[试用]", "") for name in confirmed.values() if name}
-            candidates = [name for name in supports if name.replace("[试用]", "") not in used]
+            candidates = list(dict.fromkeys(
+                name.replace("[试用]", "") for name in supports
+                if name.replace("[试用]", "") not in used
+            ))
             if not candidates:
                 break
             if not self.open_slot(context, color):
@@ -209,12 +222,13 @@ class R03Recruitment:
             for name in candidates:
                 if context.tasker.stopping:
                     return None
-                if self.recruit(context, role_dict, name, max_try):
+                recruited = self.recruit_support(context, role_dict, name, max_try, formation["budget"])
+                if recruited:
                     image = context.tasker.controller.post_screencap().wait().get()
                     after = self.read_formation(context, image)
                     if after is None or after["empty"] != {**formation["empty"], color: False}:
                         return None
-                    confirmed[color] = name
+                    confirmed[color] = recruited
                     fielded = True
                     break
                 # 仅能证明仍在原预算的列表时，才允许尝试下一位；未知扣款不可重试。
@@ -238,6 +252,83 @@ class R03Recruitment:
         if any(final["empty"][color] == bool(name) for color, name in confirmed.items()):
             return None
         return confirmed
+
+    @staticmethod
+    def read_power(context, image, box):
+        """读取同帧头像旁的完整战力，不将标签、标点或残缺数字当作数值。"""
+        if image is None or context.tasker.stopping:
+            return None
+        result = context.run_recognition("矩阵循生_角色战力", image, {
+            "矩阵循生_角色战力": {"recognition": {"param": {
+                "roi": [307, box[1] + 57, 76, 30],
+            }}},
+        })
+        best = result.best_result if result and result.hit else None
+        if context.tasker.stopping or not isinstance(best, OCRResult):
+            return None
+        text = best.text.strip()
+        return int(text) if re.fullmatch(r"[1-9]\d{0,5}", text) else None
+
+    def _support_list_frame(self, context, budget):
+        if context.tasker.stopping:
+            return None
+        image = context.tasker.controller.post_screencap().wait().get()
+        if image is None:
+            return None
+        page = context.run_recognition("矩阵循生_招募列表就绪", image)
+        if not page or not page.hit or self.read_budget(context, image) != budget or context.tasker.stopping:
+            return None
+        return image
+
+    def recruit_support(self, context, role_dict, role_name, max_try, budget):
+        """有限翻页比较可负担的正式/试玩版本，只返回实际扣费确认的版本。"""
+        base_name = role_name.replace("[试用]", "")
+        action = role_dict.get(base_name)
+        if action is None or max_try < 1 or self._support_list_frame(context, budget) is None:
+            return None
+        if not self._open_element(context, role_dict, base_name):
+            return None
+        # 元素列表可能记住上次的滚动位置；沿用同一有界翻页预算回顶。
+        for _ in range(max_try - 1):
+            if self._support_list_frame(context, budget) is None:
+                return None
+            if not context.run_action("反向滑动_选人"):
+                return None
+        versions = (base_name, base_name + "[试用]")
+        powers = {}
+        advances = 0
+        for index in range(max_try):
+            image = self._support_list_frame(context, budget)
+            if image is None:
+                return None
+            for name in versions:
+                for box, row_budget, _cost in self.candidates(context, image, name, action):
+                    if row_budget != budget:
+                        return None
+                    power = self.read_power(context, image, box)
+                    if power is not None:
+                        if name in powers and powers[name] != power:
+                            return None
+                        powers[name] = power
+            if context.tasker.stopping:
+                return None
+            if len(powers) == 2 or index + 1 == max_try:
+                break
+            if not context.run_action("滑动_选人"):
+                return None
+            advances += 1
+        if not powers:
+            return None
+        selected = max((name for name in versions if name in powers), key=powers.get)
+        for _ in range(advances):
+            if self._support_list_frame(context, budget) is None:
+                return None
+            if not context.run_action("反向滑动_选人"):
+                return None
+        if self._support_list_frame(context, budget) is None:
+            return None
+        self.selector.logger.info("肉鸽3辅助版本战力: %s，选择 %s", powers, selected)
+        return selected if self._recruit_from_list(context, role_dict, selected, max_try) else None
 
     @staticmethod
     def completed(context, detail, name):
@@ -300,14 +391,29 @@ class R03Recruitment:
     def recruit(self, context, role_dict, role_name, max_try):
         """仅在选中身份与预算扣除均确认后返回 True；不修改角色缓存。"""
         base_name = role_name.replace("[试用]", "")
-        action = role_dict.get(base_name)
-        if not action:
+        if not role_dict.get(base_name) or not self._open_element(context, role_dict, base_name):
             return False
+        return self._recruit_from_list(context, role_dict, role_name, max_try)
+
+    def _open_element(self, context, role_dict, base_name):
         element = self.selector._get_role_element_task(role_dict, base_name)
         if context.tasker.stopping:
             return False
-        if element:
-            context.run_task(element)
+        if not element:
+            return True
+        confirmation = element.replace("打开", "确认进入", 1)
+        # Nested StopTask would stop the parent before it can report failure.
+        # Return this bounded step's failure to the owning RoleSelection action.
+        detail = context.run_task(element, {
+            element: {"on_error": []}, confirmation: {"on_error": []},
+        })
+        return self.completed(context, detail, confirmation) and not context.tasker.stopping
+
+    def _recruit_from_list(self, context, role_dict, role_name, max_try):
+        """列表已就绪后共用同一选中/扣费链，不重复点击已选中的元素筛选。"""
+        action = role_dict.get(role_name.replace("[试用]", ""))
+        if not action:
+            return False
         for _ in range(max_try):
             if context.tasker.stopping:
                 return False

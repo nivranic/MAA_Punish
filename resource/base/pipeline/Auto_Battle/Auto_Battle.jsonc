@@ -389,6 +389,12 @@
             }
         }
     },
+    "检查血量_白字": {
+        "recognition": {
+            "type": "ColorMatch",
+            "param": {"lower": [200, 200, 200], "upper": [255, 255, 255]}
+        }
+    },
     "战斗重启1": {
         "recognition": {
             "type": "OCR",

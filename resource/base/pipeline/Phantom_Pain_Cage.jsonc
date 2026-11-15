@@ -88,6 +88,10 @@
         },
         "post_delay": 2000,
         "next": [
+            "[JumpBack]囚笼_A区从骑士检查",
+            "[JumpBack]囚笼_骑士完成切混沌",
+            "[JumpBack]囚笼_混沌完成切地狱",
+            "[JumpBack]囚笼_自动作战",
             "A区退出",
             "检查主界面2",
             "[JumpBack]关闭难度说明",
@@ -141,6 +145,10 @@
         },
         "post_delay": 2000,
         "next": [
+            "[JumpBack]囚笼_B区从骑士检查",
+            "[JumpBack]囚笼_骑士完成切混沌",
+            "[JumpBack]囚笼_混沌完成切地狱",
+            "[JumpBack]囚笼_自动作战",
             "B区退出",
             "检查主界面2",
             "[JumpBack]关闭难度说明",
@@ -171,6 +179,7 @@
                 ],
                 "method": 40,
                 "connected": true,
+                "order_by": "Area",
                 "count": 100
             }
         },
@@ -194,6 +203,10 @@
         },
         "post_delay": 2000,
         "next": [
+            "[JumpBack]囚笼_C区从骑士检查",
+            "[JumpBack]囚笼_骑士完成切混沌",
+            "[JumpBack]囚笼_混沌完成切地狱",
+            "[JumpBack]囚笼_自动作战",
             "C区退出",
             "检查主界面2",
             "[JumpBack]关闭难度说明",
@@ -224,6 +237,7 @@
                 ],
                 "method": 40,
                 "connected": true,
+                "order_by": "Area",
                 "count": 100
             }
         },
@@ -298,6 +312,202 @@
             "[JumpBack]领取囚笼奖励",
             "[JumpBack]返回"
         ]
+    },
+    "囚笼_A区从骑士检查": {
+        "max_hit": 1,
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["作战准备", "囚笼_骑士层入口"], "box_index": 1}
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000
+    },
+    "囚笼_B区从骑士检查": {
+        "max_hit": 1,
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["作战准备", "囚笼_骑士层入口"], "box_index": 1}
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000
+    },
+    "囚笼_C区从骑士检查": {
+        "max_hit": 1,
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["作战准备", "囚笼_骑士层入口"], "box_index": 1}
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000
+    },
+    "囚笼_骑士层入口": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [420, 150, 780, 220], "expected": "骑士"}
+        }
+    },
+    "囚笼_混沌层入口": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [420, 150, 780, 220], "expected": "混沌"}
+        }
+    },
+    "囚笼_地狱层入口": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [1020, 240, 190, 130], "expected": "地狱"}
+        }
+    },
+    "囚笼_骑士完成切混沌": {
+        "max_hit": 3,
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["作战准备", "囚笼_混沌层入口", "囚笼_骑士已有分数"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000
+    },
+    "囚笼_混沌完成切地狱": {
+        "max_hit": 3,
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["作战准备", "囚笼_地狱层入口", "囚笼_混沌已有分数"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 1000
+    },
+    "囚笼_骑士已有分数": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [430, 160, 780, 65],
+                "expected": "(^|[^0-9])[1-9][0-9]*\\s*/\\s*93000(?![0-9])"
+            }
+        }
+    },
+    "囚笼_混沌已有分数": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [430, 160, 780, 65],
+                "expected": "(^|[^0-9])[1-9][0-9]*\\s*/\\s*186000(?![0-9])"
+            }
+        }
+    },
+    "囚笼_低层无分数": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [430, 160, 780, 65],
+                "expected": "(^|[^0-9])0\\s*/\\s*(?:93000|186000)(?![0-9])"
+            }
+        }
+    },
+    "囚笼_自动作战": {
+        "max_hit": 6,
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["不是最终难度", "囚笼_自动作战文字", "囚笼_低层无分数", "囚笼_扫荡可用次数"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 500,
+        "next": [
+            "挑战次数不足_弹窗",
+            "囚笼_确认扫荡",
+            "囚笼_扫荡转手动作战",
+            "没打满"
+        ]
+    },
+    "囚笼_自动作战文字": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [798, 625, 180, 70], "expected": "自动作战"}
+        }
+    },
+    "囚笼_扫荡可用次数": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [919, 632, 56, 45], "expected": "^[1-6]\\s*[/1]\\s*6$", "only_rec": true}
+        }
+    },
+    "囚笼_自动战斗标题": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [280, 85, 230, 80], "expected": "自动战斗"}
+        }
+    },
+    "囚笼_执行扫荡文字": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [680, 550, 175, 60], "expected": "执行扫荡"}
+        }
+    },
+    "囚笼_扫荡历史分数": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [470, 440, 340, 48],
+                "expected": "(^|[^0-9])[1-9][0-9]*\\s*/\\s*(?:93000|186000)(?![0-9])"
+            }
+        }
+    },
+    "囚笼_扫荡确认次数": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [791, 610, 50, 40], "expected": "^[1-6]\\s*[/1]\\s*6$", "only_rec": true}
+        }
+    },
+    "囚笼_确认扫荡": {
+        "max_hit": 6,
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": ["囚笼_自动战斗标题", "囚笼_执行扫荡文字", "囚笼_扫荡历史分数", "囚笼_扫荡确认次数"],
+                "box_index": 1
+            }
+        },
+        "action": {"type": "Click"},
+        "post_delay": 500,
+        "next": [
+            "挑战次数不足_弹窗",
+            "囚笼_扫荡转手动作战",
+            "囚笼_扫荡返回关卡"
+        ]
+    },
+    "囚笼_扫荡返回关卡": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["作战准备", "囚笼_关卡页"]}
+        }
+    },
+    "囚笼_关卡页": {
+        "recognition": {
+            "type": "Or",
+            "param": {"any_of": ["不是最终难度", "检查是否是最终难度"]}
+        }
+    },
+    "囚笼_手动作战文字": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [430, 550, 175, 60], "expected": "手动作战"}
+        }
+    },
+    "囚笼_扫荡转手动作战": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["囚笼_自动战斗标题", "囚笼_手动作战文字"], "box_index": 1}
+        },
+        "action": {"type": "Click"},
+        "next": ["囚笼作战程序"]
     },
     "没打满": {
         "recognition": {
@@ -1245,9 +1455,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    1130,
+                    1090,
                     656,
-                    74,
+                    114,
                     53
                 ],
                 "expected": "挑战"

@@ -139,6 +139,8 @@ def test_partial_hud_application_is_rejected(calibrated, monkeypatch, fault):
 @pytest.mark.parametrize("fault", ["ignored_center", "file_changed_after_load"])
 def test_skill_center_override_cannot_be_ignored_or_hide_cache_change(calibrated, monkeypatch, fault):
     context, path, _ = calibrated
+    # Exercise correction even when the current production default is centered.
+    assert context.override_pipeline({"技能": {"action": {"param": {"target": [915, 690]}}}})
     override = context.override_pipeline
 
     def change(pipeline):
@@ -317,6 +319,8 @@ def test_native_runner_load_is_local_to_its_real_context(calibrated):
             return True
     resource = Resource()
     assert resource.post_bundle(ROOT / "resource/base").wait().succeeded
+    # A legacy off-center resource makes Context-local correction observable.
+    assert resource.override_pipeline({"技能": {"action": {"param": {"target": [915, 690]}}}})
     assert resource.register_custom_action("LayoutInspect", Inspect())
     assert resource.override_pipeline({name: {
         "action": {"type": "Custom", "param": {"custom_action": "LayoutInspect"}},

@@ -45,18 +45,22 @@ def _box_center(box: Any) -> tuple[int, int]:
     return int(box[0] + box[2] / 2), int(box[1] + box[3] / 2)
 
 
-def _click_box(context: Context, box: Any) -> None:
+def _click_box(context: Context, box: Any) -> bool:
+    if context.tasker.stopping:
+        return False
     x, y = _box_center(box)
-    context.tasker.controller.post_click(x, y).wait()
+    return bool(context.tasker.controller.post_click(x, y).wait().succeeded)
 
 
 def recognize_release_qte(context: Context, color: str, image: Any) -> Any | None:
     """在同一帧上识别指定色位 QTE 技能 ready。"""
+    if context.tasker.stopping:
+        return None
     node = COLOR_TO_RELEASE_NODE.get(_normalize_color(color))
     if not node:
         return None
     result = context.run_recognition(node, image)
-    if result and result.hit and result.best_result:
+    if not context.tasker.stopping and result and result.hit and result.best_result:
         return result
     return None
 
@@ -66,8 +70,7 @@ def click_release_qte_if_ready(context: Context, color: str, image: Any) -> bool
     result = recognize_release_qte(context, color, image)
     if not result:
         return False
-    _click_box(context, result.best_result.box)  # type: ignore[attr-defined]
-    return True
+    return _click_box(context, result.best_result.box)  # type: ignore[attr-defined]
 
 
 def click_any_release_qte(
@@ -77,6 +80,9 @@ def click_any_release_qte(
 ) -> str | None:
     """单次截屏下按顺序检测 QTE ready，命中即点击。返回命中的色位或 None。"""
     for color in colors:
-        if click_release_qte_if_ready(context, color, image):
-            return _normalize_color(color)
+        if context.tasker.stopping:
+            break
+        result = recognize_release_qte(context, color, image)
+        if result:
+            return _normalize_color(color) if _click_box(context, result.best_result.box) else None
     return None

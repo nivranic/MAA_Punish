@@ -482,6 +482,45 @@ def test_normal_loading_ignores_optional_bad_hud_block(calibration):
     assert "检查血量" not in context.pipeline_overrides[-1]
 
 
+def test_normal_loading_reuses_valid_hp_and_energy_geometry(calibration):
+    controller, path, data, context = calibration
+    path.write_text(json.dumps(_cache_with_hud(controller, data)), encoding="utf-8")
+    context.tasker.controller.cached_image = np.zeros((720, 1280, 3), dtype=np.uint8)
+    before = path.read_bytes()
+    loader = load_module.LoadRoiZone()
+    loader.apply_offsets(context, controller)
+    first = context.pipeline_overrides[-1]
+    assert first["技能_能量条"]["recognition"]["param"] == {
+        "roi": [75, 59, 227, 10], "roi_offset": [0, 0, 0, 0],
+    }
+    assert first["检查血量"]["recognition"]["param"] == {
+        "roi": _hud_payload()["nodes"]["检查血量"], "roi_offset": [0, 0, 0, 0],
+    }
+    assert "检查逆冕能量空" not in first
+    loader.apply_offsets(context, controller)
+    assert context.pipeline_overrides[-1] == first
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("change", ["size", "fingerprint", "missing_frame"])
+def test_normal_loading_rejects_stale_optional_hp_geometry(calibration, change):
+    controller, path, data, context = calibration
+    data = _cache_with_hud(controller, data)
+    if change == "fingerprint":
+        data[HUD_CALIBRATION_KEY]["layout_fingerprint"] = "b" * 64
+    if change != "missing_frame":
+        context.tasker.controller.cached_image = np.zeros(
+            (721 if change == "size" else 720, 1280, 3), dtype=np.uint8,
+        )
+    path.write_text(json.dumps(data), encoding="utf-8")
+    before = path.read_bytes()
+    load_module.LoadRoiZone().apply_offsets(context, controller)
+    assert "检查血量" not in context.pipeline_overrides[-1]
+    energy = context.pipeline_overrides[-1].get("技能_能量条", {})
+    assert energy.get("recognition", {}).get("param", {}).get("roi") is None
+    assert path.read_bytes() == before
+
+
 def test_explicit_hud_load_does_not_read_controller_getter(calibration):
     controller, path, data, context = calibration
     path.write_text(json.dumps(_cache_with_hud(controller, data)), encoding="utf-8")

@@ -50,6 +50,9 @@
                 },
                 "战斗中": {
                     "attach": {
+                        "combat_exit_nodes": [
+                            "跳过战斗对话"
+                        ],
                         "roguelike3_identity": {
                             "version": 1,
                             "require_known_field": true

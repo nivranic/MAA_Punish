@@ -132,17 +132,18 @@ def test_default_takeover_never_requests_start():
 
 
 @pytest.mark.parametrize("start", [False, True])
-def test_existing_real_gate_prevents_all_capture_and_start(setup, monkeypatch, start):
+def test_unsupported_multi_prevents_all_capture_and_start(setup, monkeypatch, start):
+    setup.combat.inverse_crown_profile = replace(setup.combat.inverse_crown_profile, scene="multi")
     monkeypatch.setattr(setup.combat, "_capture_frame", lambda: pytest.fail("guard must run first"))
     with pytest.raises(InverseCrownUnavailable, match="strategy_not_ready"):
         setup.combat.combat_once(from_preparation=start)
     assert setup.context.actions == [] and setup.combat.fresh_entry is None
 
 
-def test_actual_runner_preparation_route_keeps_existing_gate(setup, monkeypatch):
+def test_actual_runner_preparation_route_rejects_unsupported_multi(setup, monkeypatch):
     context = setup.context
     context.node_data[PREPARE_NODE]["attach"] = {"inverse_crown_profile": {
-        "enabled": True, "scene": "single", "source": "self", "signature_weapon_confirmed": True}}
+        "enabled": True, "scene": "multi", "source": "self", "signature_weapon_confirmed": True}}
     monkeypatch.setattr(runner, "require_inverse_crown_layout", lambda _context: None)
     action = runner.CombatRunner()
     assert action.run(context, SimpleNamespace(node_name=PREPARE_NODE,

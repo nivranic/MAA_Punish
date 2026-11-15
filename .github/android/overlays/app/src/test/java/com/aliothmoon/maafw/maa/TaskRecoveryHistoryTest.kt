@@ -9,7 +9,13 @@ import org.junit.Test
 import java.lang.reflect.Proxy
 
 class TaskRecoveryHistoryTest {
-    private data class Node(val id: Long, val name: String, val completed: Byte = 1)
+    private data class Node(
+        val id: Long,
+        val name: String,
+        val completed: Byte = 1,
+        val recoId: Long = 200,
+        val actionId: Long = 300,
+    )
 
     /** Scripted native endpoints; JNA reference widths and Memory reads remain real JVM operations. */
     private class NativeFixture {
@@ -82,8 +88,8 @@ class TaskRecoveryHistoryTest {
                     if (nodeReads == failNodeAt) 0.toByte() else {
                         val node = nodes.first { it.id == id }
                         strings[Pointer.nativeValue(args[2] as Pointer)] = node.name
-                        (args[3] as LongByReference).value = 200
-                        (args[4] as LongByReference).value = 300
+                        (args[3] as LongByReference).value = node.recoId
+                        (args[4] as LongByReference).value = node.actionId
                         (args[5] as ByteByReference).value = node.completed
                         afterNode(nodeReads)
                         1.toByte()
@@ -199,31 +205,109 @@ class TaskRecoveryHistoryTest {
     }
 
     @Test fun `placeholder blank node cannot be classified as normal`() {
-        // 失败终态下的空名节点仍是数据不完整：容忍只授予 SUCCEEDED 终态的末位占位。
+        // 失败终态下的空名节点仍是数据不完整。
         val f = NativeFixture().apply {
-            nodes = listOf(Node(1, "", 0))
+            nodes = listOf(Node(1, "", 0, 0, 0))
             status = MaaStatus.FAILED
         }
         assertEquals("node_detail_invalid", f.inspect(waitStatus = MaaStatus.FAILED).reason)
     }
 
     @Test fun `stop task tail placeholder at terminal success permits next task`() {
-        // StopTask 终止正在执行节点留下的末位无名占位（MaaFw 5.14.2）：SUCCEEDED 终态容忍，
-        // 让「任务失败优雅退出」链收尾的任务不杀后续任务组。
         val f = NativeFixture().apply {
-            nodes = listOf(Node(1, "任务失败优雅退出"), Node(2, "停止任务"), Node(3, "", 0))
+            nodes = listOf(Node(1, "任务失败优雅退出"), Node(2, "停止任务"), Node(3, "", 0, 0, 0))
         }
         val result = f.inspect()
         assertTrue(result.complete)
         assertFalse(result.recoverySeen)
         val gate = RecoveryDispatchGate()
-        assertTrue(gate.success(MaaStatus.SUCCEEDED, result))
+        assertTrue(result.gracefulFailureSeen)
+        assertFalse(gate.success(MaaStatus.SUCCEEDED, result))
         assertFalse(gate.aborted)
     }
 
     @Test fun `blank node mid history stays invalid at terminal success`() {
         val f = NativeFixture().apply { nodes = listOf(Node(1, ""), Node(2, "停止任务")) }
         assertEquals("node_detail_invalid", f.inspect().reason)
+    }
+
+    @Test fun `next timeout placeholder before successful cleanup permits next task`() {
+        // Actual native history for next timeout -> on_error -> StopTask.
+        val f = NativeFixture().apply {
+            nodes = listOf(
+                Node(1, "诺曼复兴战"), Node(2, "", 0, 0, 0),
+                Node(3, "任务失败优雅退出"), Node(4, "停止任务"),
+            )
+        }
+        val result = f.inspect()
+        val gate = RecoveryDispatchGate()
+        assertTrue(result.complete)
+        assertEquals("graceful_failure_visited", result.reason)
+        assertFalse(gate.success(MaaStatus.SUCCEEDED, result))
+        assertFalse(gate.aborted)
+        assertTrue(gate.success(MaaStatus.SUCCEEDED, NativeFixture().inspect()))
+        assertEquals(f.nodes.map { it.id }, f.queriedNodes)
+        assertEquals(3, f.taskReads)
+    }
+
+    @Test fun `timeout placeholder does not hide later shared recovery`() {
+        val f = NativeFixture().apply {
+            nodes = listOf(Node(1, "指挥局"), Node(2, "", 0, 0, 0), Node(3, "返回主菜单_err"))
+        }
+        val result = f.inspect()
+        assertTrue(result.complete)
+        assertTrue(result.recoverySeen)
+        assertTrue(result.mustAbort)
+    }
+
+    @Test fun `mapping failure cleanup reports failure and permits the following task`() {
+        val f = NativeFixture().apply {
+            nodes = listOf(Node(1, "历战映射_异常收尾"), Node(2, "返回主菜单"))
+        }
+        val result = f.inspect()
+        val gate = RecoveryDispatchGate()
+        assertTrue(result.complete)
+        assertFalse(result.mustAbort)
+        assertTrue(result.gracefulFailureSeen)
+        assertFalse(gate.success(MaaStatus.SUCCEEDED, result))
+        assertFalse(gate.aborted)
+        assertTrue(gate.success(MaaStatus.SUCCEEDED, NativeFixture().inspect()))
+    }
+
+    @Test fun `r03 identity stop reports failure despite native succeeded`() {
+        val f = NativeFixture().apply {
+            nodes = listOf(
+                Node(1, "矩阵循生"), Node(2, "战斗中", 0),
+                Node(3, "矩阵循生_身份拒绝停止"), Node(4, "", 0, 0, 0),
+            )
+        }
+        val result = f.inspect()
+        val gate = RecoveryDispatchGate()
+        assertTrue(result.complete)
+        assertEquals("graceful_failure_visited", result.reason)
+        assertTrue(result.gracefulFailureSeen)
+        assertFalse(gate.success(MaaStatus.SUCCEEDED, result))
+        assertFalse(gate.aborted)
+        assertTrue(gate.success(MaaStatus.SUCCEEDED, NativeFixture().inspect()))
+    }
+
+    @Test fun `blank detail with executed or malformed fields remains invalid including tail`() {
+        for (node in listOf(
+            Node(2, "", 1, 0, 0), Node(2, "", 2, 0, 0),
+            Node(2, "", 0, 200, 0), Node(2, "", 0, 0, 300),
+            Node(2, " ", 0, 0, 0),
+        )) {
+            val f = NativeFixture().apply { nodes = listOf(Node(1, "entry"), node) }
+            assertEquals("node_detail_invalid", f.inspect().reason)
+        }
+    }
+
+    @Test fun `history mutation after timeout placeholder still aborts`() {
+        val f = NativeFixture().apply {
+            nodes = listOf(Node(1, "指挥局"), Node(2, "", 0, 0, 0), Node(3, "停止任务"))
+        }
+        f.beforeTask = { if (it == 3) f.nodes = f.nodes.reversed() }
+        assertEquals("task_history_changed", f.inspect().reason)
     }
 
     @Test fun `named false bit is preserved in stable terminal history without inventing missing data`() {

@@ -79,6 +79,7 @@
             "timeout": 5000
         },
         "next": [
+            "[JumpBack]关闭点击空白弹窗",
             "检查主界面2",
             "[JumpBack]关闭奖励_指挥局",
             "[JumpBack]返回",

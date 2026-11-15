@@ -115,13 +115,14 @@ class TestDetectCurrentRole:
         assert display == "未知"
         assert cls_name == "GeneralFight"
 
-    def test_on_tick_called_before_each_attempt(self, monkeypatch):
+    def test_on_tick_called_once_before_the_batched_scan(self, monkeypatch):
         monkeypatch.setattr(role_detect, "ROLE_ACTIONS", MINI_ROLE_ACTIONS)
         context = FakeContext(check_role_results=[make_miss(), make_hit()])
         ticks: list[int] = []
 
-        detect_current_role(context, b"img", on_tick=lambda: ticks.append(1))
-        assert len(ticks) == 2
+        assert detect_current_role(context, b"img", on_tick=lambda: ticks.append(1)) == ("通用", "GeneralFight")
+        assert ticks == [1]
+        assert len(context.check_role_calls) == 1
 
     def test_prefer_cls_is_scanned_before_catalog(self, monkeypatch):
         monkeypatch.setattr(role_detect, "ROLE_ACTIONS", MINI_ROLE_ACTIONS)

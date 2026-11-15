@@ -24,7 +24,7 @@
 观察预算耗尽则拒绝本轮。固定长按时长不证明游戏内蓄力已满。
 
 输出循环（2026-11-10 依用户手录 60Hz 视频实证升级；阈值与时长为临时
-先验，待真机验收）：普攻积球 → 红环 ≈12/16 → 长按红球全消 →
+先验，待真机验收）：普攻积球 → 红环 ≈12/16 → 长按第1槽特殊球 →
 长按普攻蓄力横扫 → 大招分派（cage=长按大招 / 其余=红环即点循环）。
 """
 
@@ -49,7 +49,6 @@ from action.basics.InterfaceZone.hud_roi_calibration import hud_overrides_from_c
 _ENERGY_FULL_NODE = "检查逆冕能量即将满"
 _ENERGY_EMPTY_NODE = "检查逆冕能量空"
 _SPECIAL_BALL_NODE = "检查逆冕特殊球"
-_SPECIAL_ATK_TIMEOUT = 5.0
 _SKILL_CHARGE_TIMEOUT = 10.0
 _SKILL_CAST_MAX = 20
 _FARM_MAX_TICKS = 20
@@ -60,9 +59,12 @@ _RED_RING_READY = 12
 _BURST_HOLD_MS = 3000
 _CHARGED_SLASH_MS = 4000
 _TAP_CAST_MAX = 6
+_SINGLE_PREPARE_TIMEOUT = 30.0
+_SINGLE_FINISH_TIMEOUT = 15.0
+_SINGLE_SKILL_HOLD_SECONDS = 2.0
 
-# Provisional local safety budgets, not measured skill durations. Live gates
-# remain closed until the real detectors and device transitions are accepted.
+# Budgets for the experimental signal-driven consumer. The live single-target
+# input cycle uses its own preparation/consumption limits and bounded holds.
 _STATIONARY_BUDGETS = {
     "prepare": 5.0,
     "special_hold": 5.0,
@@ -189,9 +191,12 @@ def _stationary_resource_appearance(image, geometry) -> str:
         return (red >= 120) & (red - blue >= 50) & (red - green >= 20)
 
     blue, green, red = (pixels[..., channel] for channel in range(3))
-    if np.any((blue >= 240) & (green >= 240) & (red >= 240)):
-        return "unknown"
-    if np.all(warm(pixels)):
+    filled = warm(pixels)
+    # A full bar's endpoint blooms toward warm white. The observed bloom is
+    # confined to the last five columns. Dark gaps and white elsewhere still
+    # cannot establish a full bar.
+    endpoint_glow = (blue >= 200) & (green >= 210) & (red >= 245) & (red > green) & (green > blue)
+    if np.all(filled[:, :-5]) and np.all(filled[:, -5:] | endpoint_glow[:, -5:]):
         return "full"
     dark = (
         (blue >= 35) & (blue <= 110) & (green >= 35) & (green <= 115)
@@ -306,11 +311,10 @@ class _StationarySignals:
 
 
 class InverseCrown(BaseRole):
-    """逆冕：特殊球 → 大招 → 切人。"""
+    """逆冕普通轮切与显式单体站场循环。"""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._special_atk_deadline = 0.0
         self._skill_charge_deadline = 0.0
         self._skill_cast_ticks = 0
         self._skill_sub = ""
@@ -332,7 +336,6 @@ class InverseCrown(BaseRole):
             # A cycle reset cannot erase an unfinished hold/settlement or failure.
             return
         super().reset_state()
-        self._special_atk_deadline = 0.0
         self._skill_charge_deadline = 0.0
         self._skill_cast_ticks = 0
         self._skill_sub = ""
@@ -355,7 +358,10 @@ class InverseCrown(BaseRole):
 
     def do_perform(self) -> None:
         if self.inverse_crown_profile.enabled:
-            self._perform_stationary()
+            if self.inverse_crown_profile.scene == "single":
+                self._perform_single()
+            else:
+                self._perform_stationary()
             return
         if self.combat.context.tasker.stopping:
             return
@@ -379,6 +385,110 @@ class InverseCrown(BaseRole):
         else:
             self.phase = "idle"
             self._phase_idle()
+
+    def _single_hold(self, node_name: str, seconds: float) -> None:
+        """Execute one bounded input, releasing through the existing scope.
+
+        The elapsed interval completes the requested hold, not a claim about
+        the game's charge state. Shared frame observation still checks stop,
+        death and battle exit. Ultimate consumption is checked separately.
+        """
+        scope = self.combat.input_scope
+        scope.assert_active()
+        if getattr(self.combat, "fresh_entry", None) is not None:
+            self.combat.fresh_entry.retire()
+        started = scope.monotonic()
+
+        def observe(image):
+            if self.combat._hp_zero_since is not None:
+                scope.request_stop("hp_zero")
+                raise CombatInputError("inverse_crown:hp_zero")
+            return scope.monotonic() - started >= seconds
+
+        completed = self.action.hold_primary_input(
+            node_name,
+            duration=seconds + scope.capture_timeout + scope.input_timeout + 2.0,
+            observe=observe,
+        )
+        if completed is not True or scope.owned_contact is not None or scope.release_pending:
+            raise CombatInputError("inverse_crown:single_hold_unconfirmed")
+        scope.assert_active()
+        self.action.logger.info(
+            "inverse_crown_single input=%s requested_ms=%d elapsed_ms=%d released=true",
+            node_name, round(seconds * 1000), round((scope.monotonic() - started) * 1000),
+        )
+
+    def _single_prepare(self) -> None:
+        self.phase = "prepare"
+        self._stationary_deadline = self.combat.input_scope.monotonic() + _SINGLE_PREPARE_TIMEOUT
+
+    def _perform_single(self) -> None:
+        """Single-target standing cycle using the confirmed input sequence.
+
+        An activated special-ring match starts the special/attack pair. The
+        required attack is always released before considering an ultimate.
+        Full resource plus the illuminated skill button authorizes the skill,
+        and a later empty resource observation confirms its consumption.
+        """
+        scope = self.combat.input_scope
+        if scope is None:
+            raise CombatInputError("inverse_crown:input_scope_missing")
+        try:
+            scope.assert_active()
+            if self.phase == "idle":
+                self._single_prepare()
+            if self.phase not in {"prepare", "ultimate_finish"}:
+                raise CombatInputError("inverse_crown:unfinished_single_stage")
+            if self._settlement_pending:
+                raise CombatInputError("inverse_crown:unfinished_single_settlement")
+            self._check_stationary_budget()
+            # Identity recognition can use most of a frame's age budget.
+            # Capture once at the decision point, before observing HP and HUD.
+            scope.capture_frame()
+            snapshot = self._observe_stationary(
+                self.combat.frame, allow_missing_hp=True,
+            )
+            if snapshot is None:
+                # Effects/cinematics can briefly hide HP, and result pages
+                # remove it. Observe without input under the unchanged stage
+                # deadline. Normal input paths already share this exit check;
+                # duplicating it on every frame would spend the freshness budget.
+                if self.combat.observe_hold_state(self.combat.frame):
+                    self.combat._in_combat = False
+                return
+            self._check_stationary_budget()
+            if self.phase == "ultimate_finish":
+                if snapshot.resource_appearance == "empty":
+                    self.action.logger.info("inverse_crown_single ultimate_resource_consumed=true")
+                    self._single_prepare()
+                return
+            if snapshot.ultimate_ready is _Signal.YES:
+                self.phase = "ultimate_charge"
+                self._single_hold("技能", _SINGLE_SKILL_HOLD_SECONDS)
+                self.phase = "ultimate_finish"
+                self._stationary_deadline = scope.monotonic() + _SINGLE_FINISH_TIMEOUT
+                return
+            special = self.action.check_status(_SPECIAL_BALL_NODE, image=self.combat.frame)
+            self._validate_stationary_snapshot(snapshot, retained=True)
+            if special:
+                self.phase = "special_hold"
+                self._single_hold("长按1号球", _BURST_HOLD_MS / 1000)
+                self.phase = "attack_settlement"
+                self._settlement_pending = True
+                # Keep the pair in this call. A main-loop role scan or QTE
+                # here can spend the short special-to-attack transition.
+                self._single_hold("攻击", _CHARGED_SLASH_MS / 1000)
+                self._settlement_pending = False
+                self._single_prepare()
+                return
+            # No usable special or ultimate yet. Ordinary attacks replenish
+            # blade resource without consuming a teammate's switch/QTE button.
+            self._rebuild_stationary_resource(snapshot)
+        except BaseException as exc:
+            failed_phase = self.phase
+            self.phase = "recover"
+            scope.fail(f"inverse_crown:{failed_phase}_failed:{type(exc).__name__}")
+            raise
 
     def _read_stationary_signals(self, image) -> _StationarySignals:
         """Consume only the supplied scope frame; no controller or input access.
@@ -517,7 +627,7 @@ class InverseCrown(BaseRole):
         elif snapshot.sequence <= self._stationary_last_sequence:
             raise CombatInputError("inverse_crown:repeated_snapshot")
 
-    def _observe_stationary(self, image) -> _StationarySignals:
+    def _observe_stationary(self, image, *, allow_missing_hp=False) -> _StationarySignals | None:
         scope = self.combat.input_scope
         scope.assert_active()
         if image is None or image is not self.combat.frame or scope.frame_metadata is None:
@@ -531,6 +641,11 @@ class InverseCrown(BaseRole):
             raise CombatInputError("inverse_crown:hp_frame_replaced")
         self._check_stationary_budget()
         if not hp.alive:
+            # Effects and ultimate cinematics can hide the HP text. Only a
+            # recognition miss permits this released-input wait; malformed HP
+            # and recognition errors still fail. No input/consumption is inferred.
+            if allow_missing_hp and hp.reason == "hp_not_recognized":
+                return None
             raise CombatInputError(f"inverse_crown:hp_refused:{hp.reason}")
         # OCR is synchronous: positive text is insufficient if that read spent
         # the stage budget, became stale, or replaced this scope/frame binding.
@@ -851,24 +966,37 @@ class InverseCrown(BaseRole):
             pipeline_override={"长按1号球": {"duration": 5500}},
         )
         self.action.logger.info("特殊球按下完成")
-        self._special_atk_deadline = time.monotonic() + _SPECIAL_ATK_TIMEOUT
         self.phase = "special_attack"
 
     def _phase_special_attack(self) -> None:
-        if self._energy_almost_full() or time.monotonic() >= self._special_atk_deadline:
-            self._enter_skill(switch_after=True)
+        self.action.logger.info("特殊球后长按普攻蓄力横扫")
+        result = self.action.long_press_attack(_CHARGED_SLASH_MS)
+        if self.combat.context.tasker.stopping:
             return
-        self.action.attack()
+        if result is not True and getattr(result, "success", None) is not True:
+            raise InverseCrownUnavailable(
+                "special_attack_hold_failed", actual=self.implementation_name,
+            )
+        self._enter_skill(
+            switch_after=True,
+            ring_ready=self.action.count_signal_balls() >= _RED_RING_READY,
+        )
 
     def _phase_burst_hold(self) -> None:
-        """长按红球全消；识别不到红球时回退既有指定消球。"""
-        slot = self.action.find_signal_ball_slot("red")
-        if slot:
-            self.action.logger.info("长按红球全消: 槽位%s", slot)
-            self.action.long_press_ball(slot, _BURST_HOLD_MS)
-        else:
-            self.action.logger.info("未识别到红球，回退指定消球")
-            self.action.ball_elimination_target()
+        """沿用第1槽特殊球的已校准长按入口。"""
+        self.action.logger.info("长按第1槽特殊球")
+        result = self.combat.context.run_action(
+            "长按1号球",
+            pipeline_override={
+                "长按1号球": {"action": {"param": {"duration": _BURST_HOLD_MS}}}
+            },
+        )
+        if self.combat.context.tasker.stopping:
+            return
+        if result is not True and getattr(result, "success", None) is not True:
+            raise InverseCrownUnavailable(
+                "special_hold_failed", actual=self.implementation_name,
+            )
         self.phase = "burst_slash"
 
     def _phase_burst_slash(self) -> None:

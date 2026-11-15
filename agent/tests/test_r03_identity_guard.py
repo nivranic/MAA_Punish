@@ -466,7 +466,10 @@ def test_r03_marker_cannot_bypass_either_closed_inverse_strategy_gate(scene):
 def test_canonical_task_adds_only_local_policy_and_stop_sink():
     task = json.loads((ROOT / "tasks/矩阵循生.json").read_bytes())
     patch = task["task"][0]["pipeline_override"]
-    assert patch["战斗中"] == {**NODE, "on_error": ["矩阵循生_身份拒绝停止"]}
+    assert patch["战斗中"] == {
+        "attach": {**NODE["attach"], "combat_exit_nodes": ["跳过战斗对话"]},
+        "on_error": ["矩阵循生_身份拒绝停止"],
+    }
     assert patch["矩阵循生_身份拒绝停止"] == dict(recognition=dict(type="DirectHit"), action=dict(type="StopTask"), next=[], on_error=[], enabled=True)
     assert all("战斗中" not in row["pipeline_override"] for row in task["option"]["选择模式"]["cases"])
 

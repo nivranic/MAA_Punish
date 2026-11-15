@@ -10,6 +10,7 @@ from action.basics.InterfaceZone.hud_roi_calibration import (
     HudRoiCalibrationError,
     hud_overrides_from_cache,
     make_hud_calibration,
+    skill_energy_override_from_cache,
 )
 
 
@@ -62,6 +63,20 @@ def test_layout_fingerprint_is_canonical_and_ignores_source_payload_aliasing():
     data["skill_zone"]["recognized"][0] = 1
     assert block["screen_size"] == [1280, 720]
     assert block["nodes"]["检查血量"] == [70, 15, 140, 29]
+
+
+def test_skill_energy_search_tracks_the_bound_bar_and_includes_its_glow():
+    data = cache()
+    before = deepcopy(data)
+    assert skill_energy_override_from_cache(data, "adb", (1280, 720)) == {
+        "技能_能量条": {"recognition": {"param": {
+            "roi": [75, 59, 227, 10], "roi_offset": [0, 0, 0, 0],
+        }}}
+    }
+    assert data == before
+    data["skill_zone"]["recognized"][0] += 1
+    with pytest.raises(HudRoiCalibrationError):
+        skill_energy_override_from_cache(data, "adb", (1280, 720))
 
 
 @pytest.mark.parametrize("field,value", [

@@ -20,6 +20,9 @@ from action.basics.InterfaceZone.roi_zone_classify import (
     load_combat_pipeline_nodes,
 )
 from action.combat.actions.CombatActions import CombatActions
+from action.combat.core.provider import CombatCheck
+from action.combat.core.session import CombatTask
+from action.combat.roles.inverse_crown import InverseCrown, _BURST_HOLD_MS
 from action.combat.actions.signal_ball_layout import (
     SIGNAL_BALL_SLOT_CENTERS,
     signal_ball_slot_centers,
@@ -32,7 +35,7 @@ from test_support.fakes import FakeContext, make_miss
 def layout_context(monkeypatch):
     """Use Maa's real dumper/merge contract without OCR, a controller or game input."""
     nodes = load_combat_pipeline_nodes()
-    selected = ["识别信号球", *(f"消球{slot}" for slot in range(1, 9))]
+    selected = ["识别信号球", "长按1号球", *(f"消球{slot}" for slot in range(1, 9))]
     resource = Resource()
     assert resource.override_pipeline({name: deepcopy(nodes[name]) for name in selected})
     context = FakeContext()
@@ -109,6 +112,42 @@ def test_current_context_override_replaces_previous_calibration(layout_context):
         assert signal_ball_slot_centers(context) == tuple(
             (x + offset[0], y + offset[1]) for x, y in SIGNAL_BALL_SLOT_CENTERS
         )
+
+
+@pytest.mark.parametrize("controller", ["adb", "win32"])
+def test_inverse_crown_burst_preserves_first_slot_calibration_and_keyboard_binding(
+    layout_context, monkeypatch, tmp_path, controller
+):
+    context = layout_context
+    if controller == "win32":
+        root = Path(__file__).resolve().parents[2]
+        nodes = json.loads((root / "resource/pgr_win32/pipeline/Auto_Battle_action.jsonc").read_text(encoding="utf-8"))
+        context.override_pipeline({"长按1号球": nodes["长按1号球"]})
+    offset = [95, -80, 0, 0]
+    apply_calibration(context, monkeypatch, tmp_path, offset, controller)
+
+    def run_action(entry, pipeline_override=None):
+        context.actions.append(entry)
+        context.override_pipeline(pipeline_override)
+        return True
+
+    monkeypatch.setattr(context, "run_action", run_action)
+    role = InverseCrown(CombatTask(context, CombatCheck()), "R", "InverseCrown")
+    role.phase = "burst_hold"
+    role.do_perform()
+
+    assert context.actions == ["长按1号球"]
+    assert role.phase == "burst_slash"
+    action = context.get_node_data("长按1号球")["action"]
+    assert action["param"]["duration"] == _BURST_HOLD_MS
+    if controller == "win32":
+        assert action["type"] == "LongPressKey"
+        assert action["param"]["key"] == [49]
+        assert "target_offset" not in action["param"]
+    else:
+        assert action["type"] == "LongPress"
+        assert action["param"]["target"] == [*SIGNAL_BALL_SLOT_CENTERS[0], 1, 1]
+        assert action["param"]["target_offset"] == offset
 
 
 def test_valid_node_without_offset_uses_default_layout_without_global_state():

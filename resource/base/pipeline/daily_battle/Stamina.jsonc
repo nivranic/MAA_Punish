@@ -1,19 +1,10 @@
 {
     "吃体力药": {
         "recognition": {
-            "type": "TemplateMatch",
+            "type": "And",
             "param": {
-                "roi": [
-                    874,
-                    49,
-                    89,
-                    60
-                ],
-                "template": [
-                    "战斗/吃体力药.png",
-                    "战斗/吃体力药2.png"
-                ],
-                "green_mask": true
+                "all_of": ["主界面_战斗节点", "拟战_主页血清数量"],
+                "box_index": 1
             }
         },
         "pre_delay": 4000,
@@ -26,6 +17,15 @@
             "无体力药",
             "吃体力药"
         ]
+    },
+    "拟战_主页血清数量": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [900, 35, 98, 72],
+                "expected": "^[0-9]{1,4}\\s*/\\s*[1-9][0-9]{1,3}$"
+            }
+        }
     },
     "无体力药": {
         "recognition": {

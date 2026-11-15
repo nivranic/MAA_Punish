@@ -1,7 +1,7 @@
 """One invocation's preparation-page transition, never a saved fresh flag.
 
-The normal HUD entry does not call this module. Android/game acceptance is
-still pending; both existing strategy-not-ready guards remain in place.
+The normal HUD takeover does not call this module. This preparation-page
+transition keeps its separate battle-fact and continuous-entry requirements.
 """
 
 from __future__ import annotations

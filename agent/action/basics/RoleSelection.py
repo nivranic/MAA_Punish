@@ -369,7 +369,7 @@ class RoleSelection(CustomAction):
             role[role_key] = {}
         role[role_key]["cage"] = 0
         self.logger.info(f"{role_key} 编入成功, 清除囚笼次数")
-        self.save_cache(role, update_frequency)
+        self.save_cache(role, update_frequency, update_main_timestamp=False)
 
     def _task_node_names(self, context: Context, detail: object) -> set[str]:
         """读取子任务节点历史中的节点名，供结果判定。"""
@@ -627,6 +627,13 @@ class RoleSelection(CustomAction):
         scanned_full: dict | None = None
         if roguelike_equivalent is None and not scan_then_return:
             role = self._load_cache(update_frequency)
+            required_roles = 3 if need_multi else 1
+            if (
+                role and cage
+                and sum(bool(info.get("cage", 0)) for info in role.values()) < required_roles
+            ):
+                self.logger.info("囚笼缓存候选不足, 从当前选人列表刷新耐力")
+                role = None
             if role:
                 self.logger.info(f"读取文件缓存成功 (update_frequency={update_frequency})")
         # 成员缓存只提供正式角色候选，实际版本和消耗仍在招募页核验。
@@ -693,6 +700,14 @@ class RoleSelection(CustomAction):
                 self.send_msg(context, message)
                 return CustomAction.RunResult(success=False)
             scanned_full = dict(role)
+            if cage and not scan_then_return:
+                # 只更新实际扫描到的耐力，不把选人页扫描记成成员页完整更新。
+                cached = cache_policy.read_cache_data(self._cache_path())
+                focus = cache_policy.get_focus(cached)
+                if focus is not None:
+                    for name, info in role.items():
+                        focus.setdefault(name, dict(info))["cage"] = info["cage"]
+                    cache_policy.write_cache_data(cached, self._cache_path())
             if roguelike_equivalent == 3:
                 self._r3_memo_store(scanned_full, self._refresh_hour)
 
@@ -764,18 +779,23 @@ class RoleSelection(CustomAction):
         if roguelike_equivalent == 3:
             if need_multi:
                 # R03 色位与预算独立于普通囚笼配队，不借用其空槽或名单合并。
-                # 缓存为空时以本次扫描全量结果解析 support（含试玩标记，键名即页面事实）。
+                # 缓存只排列辅助角色，正式/试玩版本由当前招募页的战力决定。
                 cached_roles = cached_roles or scanned_full or {}
-                supports = [
-                    name if name in cached_roles else name + "[试用]"
-                    for name in ("丽芙·流光", "薇拉·瑰丽")
-                ]
+                supports = ["丽芙·流光", "薇拉·瑰丽"]
                 supports.sort(key=lambda name: cached_roles.get(name, {}).get("power", 0), reverse=True)
                 team = R03Recruitment(self).recruit_team(
                     context, role_dict, attacker_name, supports, max_try
                 ) if attacker_name else None
                 if team is None or context.tasker.stopping:
                     self.logger.warning("肉鸽3色位编队未确认，不发布战斗名单")
+                    return CustomAction.RunResult(success=False)
+                # Equipment belongs to a color slot, not the replaced member.
+                # Only this confirmed recruitment establishes the red attacker.
+                if (
+                    context.override_pipeline(R03Recruitment.red_equipment_patch()) is False
+                    or context.tasker.stopping
+                ):
+                    self.logger.warning("肉鸽3装备穿戴位流程未应用，不发布战斗名单")
                     return CustomAction.RunResult(success=False)
                 roster = {color: role_display_name_to_cls(name) for color, name in team.items()}
                 publish_team_roster(context, roster, role_names=team)
@@ -955,6 +975,38 @@ class RoleSelection(CustomAction):
         self.logger.warning("成员详情未确认型号或战力: %s，战力保留为未知", role_name)
         return 0
 
+    def _read_cage_count(self, context: Context, image, box) -> int:
+        x, y, _width, height = box
+        bar_result = context.run_recognition(
+            "识别囚笼耐力条",
+            image,
+            {"识别囚笼耐力条": {"recognition": {"param": {
+                "roi": [int(x - 4), int(y + height - 4), 250, 18],
+            }}}},
+        )
+        if bar_result and bar_result.hit and isinstance(
+            bar_result.best_result, ColorMatchResult
+        ):
+            bar_x, _bar_y, bar_width, bar_height = bar_result.best_result.box
+            count = round(bar_width / (244 / 3))
+            if (
+                1 <= count <= 3
+                and abs(bar_width - count * 244 / 3) <= 8
+                and abs(bar_x - x) <= 8
+                and 3 <= bar_height <= 8
+            ):
+                return count
+
+        for count in (3, 2, 1):
+            node = f"识别囚笼次数{count}"
+            result = context.run_recognition(
+                node, image,
+                {node: {"recognition": {"param": {"roi": box}}}},
+            )
+            if result and result.hit:
+                return count
+        return 0
+
     def recognize_role(
         self,
         context: Context,
@@ -1114,56 +1166,9 @@ class RoleSelection(CustomAction):
                         )
 
                 if cage:
-                    if (
-                        cage_3_result := context.run_recognition(
-                            entry="识别囚笼次数3",
-                            image=image,
-                            pipeline_override={
-                                "识别囚笼次数3": {
-                                    "recognition": {
-                                        "param": {
-                                            "roi": role_reco.box,
-                                        },
-                                    }
-                                }
-                            },
-                        )
-                    ) is not None and cage_3_result.hit:
-                        role[display_name]["cage"] = 3
-                    elif (
-                        cage_2_result := context.run_recognition(
-                            entry="识别囚笼次数2",
-                            image=image,
-                            pipeline_override={
-                                "识别囚笼次数2": {
-                                    "recognition": {
-                                        "param": {
-                                            "roi": role_reco.box,
-                                        },
-                                    }
-                                }
-                            },
-                        )
-                    ) is not None and cage_2_result.hit:
-                        role[display_name]["cage"] = 2
-                    elif (
-                        cage_1_result := context.run_recognition(
-                            entry="识别囚笼次数1",
-                            image=image,
-                            pipeline_override={
-                                "识别囚笼次数1": {
-                                    "recognition": {
-                                        "param": {
-                                            "roi": role_reco.box,
-                                        },
-                                    }
-                                }
-                            },
-                        )
-                    ) is not None and cage_1_result.hit:
-                        role[display_name]["cage"] = 1
-                    else:
-                        role[display_name]["cage"] = 0
+                    role[display_name]["cage"] = self._read_cage_count(
+                        context, image, role_reco.box,
+                    )
 
                 if roguelike_mode == 1:
                     mastery_result = context.run_recognition(
@@ -1435,7 +1440,9 @@ class RoleSelection(CustomAction):
             pipeline_override=msg_node,
         )
 
-    def save_cache(self, role: dict, update_frequency: str = "weekly"):
+    def save_cache(
+        self, role: dict, update_frequency: str = "weekly", *, update_main_timestamp: bool = True
+    ):
         if not role:
             self.logger.warning("角色列表为空，跳过缓存写入并保留原刷新时间")
             return
@@ -1450,7 +1457,8 @@ class RoleSelection(CustomAction):
         cache_data = dict(existing)
         cache_data["last_time"] = self._current_week()
         cache_data["focus"] = role
-        cache_data["main_update_at"] = now.timestamp()
+        if update_main_timestamp:
+            cache_data["main_update_at"] = now.timestamp()
         cache_data["update_frequency"] = cache_policy.normalize_frequency(
             update_frequency
         )

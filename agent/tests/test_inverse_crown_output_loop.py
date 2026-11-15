@@ -1,4 +1,4 @@
-"""逆冕输出循环：红环就绪 → 长按红球全消 → 长按普攻 → 大招分派。
+"""逆冕输出循环：红环就绪 → 长按第1槽特殊球 → 长按普攻 → 大招分派。
 
 2026-11-10 依用户手录 60Hz 视频实证的输出循环（台账 2.301/2.302/2.303）：
 红环 ≈12/16 即爆发；囚笼长按大招、其余红环即点循环。本文件锁定普通
@@ -12,6 +12,7 @@ import pytest
 from action.combat.core.provider import CombatCheck
 from action.combat.core.session import CombatTask
 from action.combat.core.team import TeamSnapshot
+from action.combat.config.inverse_crown_profile import InverseCrownUnavailable
 from action.combat.roles import inverse_crown as module
 from action.combat.roles.inverse_crown import InverseCrown
 from test_support.fakes import FakeClock, FakeContext, make_hit, make_miss
@@ -49,33 +50,93 @@ def test_idle_red_ring_ready_enters_burst_hold(loop):
     assert "长按信号球" not in context.actions
 
 
-def test_burst_hold_long_presses_detected_red_slot(loop):
+def test_burst_hold_uses_first_slot_without_ordinary_ball_templates(loop):
     context, _, role, _, _ = loop
     role.phase = "burst_hold"
-    find_slot = Mock(return_value=3)
-    hold_ball = Mock()
-    role.action.find_signal_ball_slot = find_slot
-    role.action.long_press_ball = hold_ball
+    assert role.action.template == {}
+    context.run_action = Mock(wraps=context.run_action)
 
     role.do_perform()
 
-    find_slot.assert_called_once_with("red")
-    hold_ball.assert_called_once_with(3, module._BURST_HOLD_MS)
+    context.run_action.assert_called_once_with(
+        "长按1号球",
+        pipeline_override={
+            "长按1号球": {"action": {"param": {"duration": module._BURST_HOLD_MS}}}
+        },
+    )
+    assert context.actions == ["长按1号球"]
     assert role.phase == "burst_slash"
 
 
-def test_burst_hold_falls_back_to_targeted_elimination(loop):
+@pytest.mark.parametrize("result", [False, None])
+def test_burst_hold_failure_does_not_advance_to_charged_attack(loop, result):
     context, _, role, _, _ = loop
     role.phase = "burst_hold"
-    role.action.find_signal_ball_slot = Mock(return_value=0)
-    fallback = Mock()
-    role.action.ball_elimination_target = fallback
+    context.run_action = Mock(return_value=result)
+
+    with pytest.raises(InverseCrownUnavailable, match="special_hold_failed"):
+        role.do_perform()
+
+    assert role.phase == "burst_hold"
+    assert context.actions == []
+
+
+def test_stop_during_burst_hold_does_not_advance(loop):
+    context, _, role, _, _ = loop
+    role.phase = "burst_hold"
+
+    def stop_after_hold(*args, **kwargs):
+        context.tasker.stopping = True
+        return True
+
+    context.run_action = Mock(side_effect=stop_after_hold)
+    role.do_perform()
+
+    assert role.phase == "burst_hold"
+    context.run_action.assert_called_once()
+
+
+@pytest.mark.parametrize("count,subphase", [(8, "charge"), (12, "tap_cast"), (16, "tap_cast")])
+def test_special_ball_branch_holds_attack_before_observing_cast_readiness(loop, count, subphase):
+    _, _, role, _, counters = loop
+    role.phase = "special_attack"
+    role.action.long_press_attack = Mock(return_value=True)
+    counters.return_value = count
 
     role.do_perform()
 
-    fallback.assert_called_once_with()
-    assert role.phase == "burst_slash"
-    assert "长按信号球" not in context.actions
+    role.action.long_press_attack.assert_called_once_with(module._CHARGED_SLASH_MS)
+    counters.assert_called_once_with()
+    role.action.attack.assert_not_called()
+    assert role.phase == "skill" and role._skill_sub == subphase
+
+
+@pytest.mark.parametrize("result", [False, None])
+def test_special_attack_hold_failure_preserves_phase(loop, result):
+    _, _, role, _, counters = loop
+    role.phase = "special_attack"
+    role.action.long_press_attack = Mock(return_value=result)
+
+    with pytest.raises(InverseCrownUnavailable, match="special_attack_hold_failed"):
+        role.do_perform()
+
+    assert role.phase == "special_attack"
+    counters.assert_not_called()
+
+
+def test_stop_during_special_attack_hold_prevents_cast_observation(loop):
+    context, _, role, _, counters = loop
+    role.phase = "special_attack"
+
+    def stop_after_hold(*args):
+        context.tasker.stopping = True
+        return True
+
+    role.action.long_press_attack = Mock(side_effect=stop_after_hold)
+    role.do_perform()
+
+    assert role.phase == "special_attack"
+    counters.assert_not_called()
 
 
 def test_burst_slash_charged_attack_then_cage_long_press(loop):

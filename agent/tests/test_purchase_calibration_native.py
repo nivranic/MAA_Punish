@@ -112,7 +112,8 @@ def replay(tmp_path, monkeypatch, case, image, change=None):
             attach.pop("audit_intent")
     resource = Resource()
     assert resource.post_bundle(bundle).wait().succeeded
-    assert resource.post_bundle(ROOT / "resource/base").wait().succeeded
+    if bundle.resolve() != (ROOT / "resource/base").resolve():
+        assert resource.post_bundle(ROOT / "resource/base").wait().succeeded
     if case == "D14":
         original_task = json.loads((ROOT / "tasks/购买物品.json").read_text(encoding="utf-8"))
         original_override = original_task["option"]["选择物品"]["cases"][2]["pipeline_override"]
@@ -251,7 +252,8 @@ def test_actual_d14_nearstart_month_selector_box_is_inside_weapon_card(tmp_path,
         image[y:y+h, x:x+w] = cv2.imdecode(np.fromfile(evidence_path("purchase_observation", record["filename"]), dtype=np.uint8), cv2.IMREAD_COLOR)
     resource = Resource()
     assert resource.post_bundle(bundle).wait().succeeded
-    assert resource.post_bundle(ROOT / "resource/base").wait().succeeded
+    if bundle.resolve() != (ROOT / "resource/base").resolve():
+        assert resource.post_bundle(ROOT / "resource/base").wait().succeeded
     task = json.loads((ROOT / "tasks/购买物品.json").read_text(encoding="utf-8"))
     override = task["option"]["选择物品"]["cases"][2]["pipeline_override"]
     assert resource.override_pipeline(override)

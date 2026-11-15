@@ -174,24 +174,12 @@ def detect_current_role(
 
     默认专属 cls 优先于 GeneralFight，避免通用占位误匹配谬影。
     prefer_cls 会插到扫描队列最前（上次识别 / 队友），skip_cls 跳过已查过的 cls。
-    on_tick 会在每次模板匹配前调用（如盲发普攻，避免识别空转）。
-    无 on_tick 的同帧只读扫描合并为原生 Or，仍按角色顺序首命中即止。
+    on_tick 在本次扫描前调用一次（如盲发普攻，避免识别空转）。
+    同帧模板扫描合并为原生 Or，仍按角色顺序首命中即止。
 
     :return: (展示名, cls_name)
     """
-    if on_tick is None:
-        return _detect_role_same_frame(context, image, prefer_cls, skip_cls)
-
-    for role_name, role_info in ordered_role_entries(
-        prefer_cls=prefer_cls, skip_cls=skip_cls
-    ):
-        if on_tick is not None:
-            on_tick()
-        templates = _normalize_attack_templates(role_info.get("attack_template"))
-        if match_attack_template(context, image, templates):
-            display = str(role_info.get("name") or role_name)
-            return display, str(role_info.get("cls_name", _GENERIC_CLS))
-    return "未知", _GENERIC_CLS
+    return _detect_role_same_frame(context, image, prefer_cls, skip_cls, on_tick)
 
 
 def _detect_role_same_frame(
@@ -199,12 +187,17 @@ def _detect_role_same_frame(
     image: Any,
     prefer_cls: Sequence[str] | None,
     skip_cls: Sequence[str] | None,
+    on_tick: Callable[[], Any] | None = None,
 ) -> tuple[str, str]:
     """单次请求保留角色分组及首命中顺序；不缓存有效布局参数。"""
     if context.tasker.stopping:
         return "未知", _GENERIC_CLS
     entries = ordered_role_entries(prefer_cls=prefer_cls, skip_cls=skip_cls)
     if not entries:
+        return "未知", _GENERIC_CLS
+    if on_tick is not None:
+        on_tick()
+    if context.tasker.stopping:
         return "未知", _GENERIC_CLS
 
     node = context.get_node_data("检查角色")

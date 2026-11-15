@@ -4,6 +4,75 @@ KOTLIN = "app/src/main/java/com/aliothmoon/maafw/"
 
 RECOVERY_PATCHES = (
     (
+        KOTLIN + "runner/RunLogComposer.kt",
+        "            is RunnerEvent.Marker -> return null\n",
+        """            is RunnerEvent.TaskFinished -> {
+                if (event.cancelled) {
+                    taskStartedAt = null
+                    return null
+                }
+                Composed(
+                    if (event.success) RunLogKind.Success else RunLogKind.Error,
+                    withElapsed(uiTextOf(
+                        if (event.success) R.string.run_log_task_succeeded else R.string.run_log_task_failed,
+                        context.taskLabel(null),
+                    ), atMillis),
+                )
+            }
+
+            is RunnerEvent.Marker -> return null
+""",
+    ),
+    (
+        KOTLIN + "runner/RunLogComposer.kt",
+        """            TASK_SUCCEEDED -> Composed(
+                RunLogKind.Success,
+                withElapsed(uiTextOf(R.string.run_log_task_succeeded, context.taskLabel(details)), atMillis),
+            )
+
+            TASK_FAILED -> Composed(
+                RunLogKind.Error,
+                withElapsed(uiTextOf(R.string.run_log_task_failed, context.taskLabel(details)), atMillis),
+                event.details,
+            )
+""",
+        """            // Native success may include graceful failure cleanup. The ordered
+            // TaskFinished event carries the owner's effective result.
+            TASK_SUCCEEDED, TASK_FAILED -> null
+""",
+    ),
+    (
+        "app/src/test/java/com/aliothmoon/maafw/runner/RunLogComposerTest.kt",
+        """        assertEquals(RunLogKind.Success, callback("Tasker.Task.Succeeded")?.kind)
+        assertEquals(RunLogKind.Error, callback("Tasker.Task.Failed")?.kind)
+""",
+        """        assertNull(callback("Tasker.Task.Succeeded"))
+        assertNull(callback("Tasker.Task.Failed"))
+        assertEquals(RunLogKind.Success, compose(RunnerEvent.TaskFinished(0, true))?.kind)
+        assertEquals(RunLogKind.Error, compose(RunnerEvent.TaskFinished(0, false))?.kind)
+""",
+    ),
+    (
+        "app/src/test/java/com/aliothmoon/maafw/runner/RunLogComposerTest.kt",
+        'val done = compose(RunnerEvent.Callback("Tasker.Task.Succeeded", """{"entry":"Start"}"""), atMillis = 66_000)',
+        'val done = compose(RunnerEvent.TaskFinished(0, true), atMillis = 66_000)',
+    ),
+    (
+        "app/src/test/java/com/aliothmoon/maafw/runner/RunLogComposerTest.kt",
+        '            callback("Tasker.Task.Failed")?.text,\n',
+        '            compose(RunnerEvent.TaskFinished(0, false))?.text,\n',
+    ),
+    (
+        "app/src/test/java/com/aliothmoon/maafw/runner/RunLogComposerTest.kt",
+        '        assertEquals(RunLogKind.Success, callback("Tasker.Task.Succeeded", """{"entry":"AutoCollectSchedule"}""")?.kind)\n',
+        '        assertNull(callback("Tasker.Task.Succeeded", """{"entry":"AutoCollectSchedule"}"""))\n',
+    ),
+    (
+        "app/src/test/java/com/aliothmoon/maafw/session/SessionViewModelTest.kt",
+        '        runner.emit(RunnerEvent.Callback("Tasker.Task.Succeeded", """{"entry":"启动游戏"}"""))\n',
+        '        runner.emit(RunnerEvent.TaskFinished(0, true))\n',
+    ),
+    (
         "app/proguard-rules.pro",
         "# libjnidispatch 按字面名 FindClass 的那些都在顶层包（Pointer / Memory / Function /\n# CallbackReference …），子包（ptr / internal / win32）没有 native 反查，交给 R8 裁\n-keep class com.sun.jna.* { *; }\n",
         """# libjnidispatch 按字面名 FindClass 的那些都在顶层包（Pointer / Memory / Function /

@@ -1,4 +1,4 @@
-"""Weekly reward eligibility is a numerator, not the /10 denominator.
+"""Fixed daily/weekly reward counters and non-event routing.
 
 Real screenshots/OCR and modal negatives are replayed separately. These
 contract checks do not prove an eligible reward was collected in the game.
@@ -64,3 +64,55 @@ def test_reward_jumpbacks_still_return_before_duty_and_daily():
     assert branches.index("[JumpBack]领取补签卡2") < branches.index("勤务任务")
     assert NODES["每周任务选中背景"]["recognition"]["type"] == "ColorMatch"
     assert NODES["每周任务选中背景"].get("action", {}).get("type", "DoNothing") == "DoNothing"
+
+
+@pytest.mark.parametrize("value,branch", [(13, "0-19"), (20, "20-39"), (39, "20-39"),
+    (40, "40-59"), (60, "60-79"), (80, "80-99"), (99, "80-99"), (100, "100"), (130, "100"), (200, "100")])
+def test_daily_activity_reads_complete_numerator_without_the_denominator(value, branch):
+    candidates = {name: node for name, node in NODES.items() if name.startswith("领取活跃")}
+    for node in candidates.values():
+        param = node["recognition"]["param"]
+        x, y, width, height = param["roi"]
+        # The three-digit numerator occupies this whole region. Its rightmost
+        # digit must not be cropped, and the adjacent /100 is not the score.
+        assert x <= 340 and x + width >= 424 and x + width <= 429
+        assert y <= 665 and y + height >= 698
+        assert param["only_rec"] is True
+        assert re.search(param["expected"], "130/100") is None
+    matches = [name for name, node in candidates.items()
+               if re.search(node["recognition"]["param"]["expected"], str(value))]
+    assert matches == ["领取活跃" + branch]
+
+
+@pytest.mark.parametrize("branch,box", [
+    ("20-39", (594, 610, 54, 54)), ("40-59", (727, 610, 54, 54)),
+    ("60-79", (860, 610, 54, 54)), ("80-99", (993, 610, 54, 54)),
+    ("100", (1127, 610, 54, 54)),
+])
+def test_daily_activity_target_is_inside_its_reward_chest(branch, box):
+    x, y = NODES["领取活跃" + branch]["action"]["param"]["target"]
+    bx, by, width, height = box
+    assert bx <= x < bx + width and by <= y < by + height
+
+
+@pytest.mark.parametrize("bundle", ["base", "zh_TW", "ja_JP", "en_US", "pgr_win32", "playcover"])
+def test_fixed_quest_route_keeps_daily_rewards_and_cannot_enter_limited_activity(bundle):
+    nodes = dict(NODES)
+    overlay = ROOT / "resource" / bundle / "pipeline/Collect_Quest.jsonc"
+    if bundle != "base" and overlay.exists():
+        for name, override in jsonc.loads(overlay.read_text(encoding="utf-8")).items():
+            nodes[name] = {**nodes.get(name, {}), **override}
+    visited, pending = set(), ["任务"]
+    while pending:
+        name = pending.pop()
+        if name in visited:
+            continue
+        visited.add(name)
+        node = nodes.get(name, {})
+        for edge in node.get("next", []) + node.get("on_error", []):
+            target = edge["name"] if isinstance(edge, dict) else re.sub(r"^(?:\[[^]]+\])+", "", edge)
+            if target in nodes:
+                pending.append(target)
+    assert {"逐浪拾光", "前往任务", "领取_逐浪拾光"}.isdisjoint(visited)
+    assert {"每周任务", "勤务任务", "每日任务", "一键领取_任务",
+            "一键领取_定期", "领取补签卡1", "领取补签卡2", "领取活跃100"} <= visited

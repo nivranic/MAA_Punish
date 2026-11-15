@@ -1,4 +1,4 @@
-"""Stationary consumer behavior; synthetic signals are not game acceptance."""
+"""Experimental signal-consumer contracts, independent of the live single cycle."""
 
 from dataclasses import replace
 
@@ -38,7 +38,7 @@ class RecordingController(FakeController):
         return FakeJob(succeeded=self.up_success)
 
 
-def setup_role(monkeypatch, *, enabled=True, scene="single"):
+def setup_role(monkeypatch, *, enabled=True, scene="single", signal_consumer=True):
     clock = FakeClock()
     context = FakeContext(recognition_map={
         "战斗中": make_hit(),
@@ -56,6 +56,10 @@ def setup_role(monkeypatch, *, enabled=True, scene="single"):
             input_timeout=0.1, release_timeout=0.1, poll_interval=0.01)
         combat.input_scope.capture_frame()
     role = InverseCrown(combat, "R", "InverseCrown")
+    if enabled and signal_consumer:
+        # Exercise the existing signal-driven consumer directly. The public
+        # single-target route is covered in test_inverse_crown_single.py.
+        monkeypatch.setattr(role, "do_perform", role._perform_stationary)
     monkeypatch.setattr(module, "_STATIONARY_BUDGETS", {name: 0.08 for name in module._STATIONARY_BUDGETS})
     return role, combat, context, controller, clock
 
@@ -87,7 +91,7 @@ def special_start(**updates):
     return dict(settlement_required=NO, special_activated=YES, special_color="blue", **updates)
 
 
-@pytest.mark.parametrize("scene", ["single", "multi"])
+@pytest.mark.parametrize("scene", ["multi"])
 def test_live_session_and_role_gates_remain_closed(monkeypatch, scene):
     role, combat, context, controller, _ = setup_role(monkeypatch, scene=scene)
     with pytest.raises(InverseCrownUnavailable, match="strategy_not_ready"):

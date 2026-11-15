@@ -70,6 +70,7 @@ def replay(tmp_path, image, *, original_roi=False):
     Tasker.set_save_draw(False)
     Tasker.set_save_on_error(False)
     resource, controller, tasker = Resource(), ReadOnlyController(), Tasker()
+    assert resource.set_cpu()
     # A model-bearing external bundle is loaded once; current pipeline bytes
     # are overlaid separately only when it is a different resource path.
     assert resource.post_bundle(bundle).wait().succeeded
@@ -134,3 +135,37 @@ def test_missing_required_pixels_does_not_match_ready_to_fight(tmp_path, omit):
     assert results["作战准备"]["hit"] is (omit != "prepare_button")
     for node in ("A区退出", "B区退出", "C区退出"):
         assert results[node]["hit"] is False, node
+
+
+@pytest.mark.parametrize("name", ["检查B区", "检查C区"])
+def test_boss_card_color_wins_over_smaller_total_score_digits(tmp_path, name):
+    x, y, _, _ = NODES[name]["recognition"]["param"]["roi"]
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+    color = cv2.cvtColor(np.uint8([[[102, 230, 175]]]), cv2.COLOR_HSV2BGR)[0, 0]
+    frame[y + 200:y + 221, x + 10:x + 20] = color
+    frame[y + 44:y + 74, x + 80:x + 165] = color
+
+    class CardController(ReadOnlyController):
+        def screencap(self):
+            return frame
+
+    Tasker.set_log_dir(tmp_path / "native-log")
+    Tasker.set_debug_mode(False)
+    Tasker.set_save_draw(False)
+    Tasker.set_save_on_error(False)
+    resource, controller, tasker = Resource(), CardController(), Tasker()
+    assert resource.set_cpu()
+    assert resource.post_bundle(ROOT / "resource/base").wait().succeeded
+    assert controller.post_connection().wait().succeeded
+    assert tasker.bind(resource, controller)
+    job = tasker.post_task(name, {name: {
+        "action": "DoNothing", "next": [], "on_error": [],
+        "timeout": 0, "pre_delay": 0, "post_delay": 0,
+    }})
+    try:
+        job.wait()
+        assert job.succeeded
+        node = tasker.get_node_detail(job.get().node_id_list[-1])
+        assert list(node.recognition.box) == [x + 80, y + 44, 85, 30]
+    finally:
+        stop_and_wait_idle(tasker)

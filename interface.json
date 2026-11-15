@@ -253,6 +253,10 @@
             "description": "$preset.preset_roguelike.description",
             "task": [
                 {
+                    "name": "进入游戏",
+                    "enabled": true
+                },
+                {
                     "name": "宣叙妄响",
                     "enabled": false
                 },

@@ -11,6 +11,115 @@ import pytest
 PIPELINE = Path(__file__).resolve().parents[2] / "resource/base/pipeline"
 
 
+def test_activity_overview_return_accepts_both_layouts_with_page_guards():
+    menu = jsonc.loads((PIPELINE / "Common/Battle_Menu.jsonc").read_text(encoding="utf-8"))
+    node = menu["意外点击_限定活动"]
+    variants = node["recognition"]["param"]["any_of"]
+    assert node["recognition"]["type"] == "Or"
+    assert variants[0] == "意外点击_限定活动_文字"
+    assert menu[variants[0]]["recognition"] == {
+        "type": "OCR",
+        "param": {"roi": [0, 66, 210, 142], "expected": "限定开放"},
+    }
+    assert variants[1] == "意外点击_活动总览"
+    overview = menu[variants[1]]["recognition"]
+    assert overview["type"] == "And"
+    guards = overview["param"]["all_of"]
+    assert guards[:2] == ["返回", "返回主菜单_reco"]
+    assert guards[2] == "活动总览_跳过动画文字"
+    assert menu[guards[2]]["recognition"] == {
+        "type": "OCR",
+        "param": {"roi": [1040, 0, 200, 65], "expected": "跳过动画"},
+    }
+    assert node["action"]["param"]["target"] == [78, 36]
+
+
+@pytest.mark.parametrize("language", ["zh_TW", "ja_JP", "en_US"])
+def test_activity_label_localization_targets_the_ocr_node(language):
+    localized = jsonc.loads(
+        (PIPELINE.parents[1] / language / "pipeline/Common/Battle_Menu.jsonc").read_text(encoding="utf-8")
+    )
+    assert "意外点击_限定活动_文字" in localized
+    assert "意外点击_限定活动" not in localized
+
+
+def test_startup_returns_from_confirmed_guild_page_before_waiting_or_relaunching():
+    startup = jsonc.loads((PIPELINE / "Start_up.jsonc").read_text(encoding="utf-8"))
+    branches = startup["启动"]["next"]
+    recovery = "[JumpBack]启动_从指挥局返回"
+    assert branches.index("[JumpBack]返回主菜单") < branches.index(recovery)
+    assert branches.index(recovery) < branches.index("[JumpBack]打开应用")
+    assert branches.index(recovery) < branches.index("[JumpBack]计数器")
+    node = startup["启动_从指挥局返回"]
+    assert node["recognition"] == {
+        "type": "And",
+        "param": {"all_of": ["检查是否在指挥局内部", "返回_文字"], "box_index": 1},
+    }
+    assert node["action"]["type"] == "Click"
+    assert node["post_delay"] == 1500
+
+
+@pytest.mark.parametrize(
+    ("matched_nodes", "expected"),
+    [
+        ({"意外点击_限定活动_文字"}, True),
+        ({"返回_文字", "返回主菜单_文字", "活动总览_跳过动画文字"}, True),
+        ({"返回主菜单_文字", "活动总览_跳过动画文字"}, False),
+        ({"返回_文字", "活动总览_跳过动画文字"}, False),
+        ({"返回_文字", "返回主菜单_文字"}, False),
+        (set(), False),
+    ],
+)
+def test_native_activity_guard_requires_a_real_page_match(tmp_path, matched_nodes, expected):
+    import numpy as np
+    from maa.controller import CustomController
+    from maa.custom_recognition import CustomRecognition
+    from maa.resource import Resource
+    from maa.tasker import Tasker
+
+    class MemoryController(CustomController):
+        def connect(self):
+            return True
+
+        def request_uuid(self):
+            return "navigation-guard-memory"
+
+        def get_features(self):
+            return 0
+
+        def screencap(self):
+            return np.zeros((720, 1280, 3), np.uint8)
+
+    class PagePredicate(CustomRecognition):
+        def analyze(self, context, argv):
+            if argv.node_name in matched_nodes:
+                return (10, 10, 20, 20)
+            return None
+
+    Tasker.set_log_dir(tmp_path / "native")
+    Tasker.set_debug_mode(False)
+    Tasker.set_save_draw(False)
+    Tasker.set_save_on_error(False)
+    resource = Resource()
+    assert resource.post_bundle(PIPELINE.parent).wait().succeeded
+    assert resource.register_custom_recognition("NavigationPagePredicate", PagePredicate())
+    controller = MemoryController()
+    assert controller.post_connection().wait().succeeded
+    tasker = Tasker()
+    assert tasker.bind(resource, controller)
+    leaves = ["意外点击_限定活动_文字", "返回_文字", "返回主菜单_文字", "活动总览_跳过动画文字"]
+    override = {
+        name: {"recognition": {"type": "Custom", "param": {"custom_recognition": "NavigationPagePredicate"}}}
+        for name in leaves
+    }
+    override["意外点击_限定活动"] = {
+        "action": "DoNothing", "next": [], "on_error": [], "timeout": 0,
+        "pre_delay": 0, "post_delay": 0,
+    }
+    job = tasker.post_task("意外点击_限定活动", override).wait()
+    assert job.succeeded is expected
+
+
 @pytest.mark.parametrize(
     ("node_name", "observed_box"),
     [
@@ -243,6 +352,91 @@ def test_mapping_battle_start_override_keeps_proven_budget():
     ]
 
 
+@pytest.mark.parametrize("page", ["settlement", "battle", "unknown"])
+def test_native_mapping_combat_failure_recovers_only_known_pages(tmp_path, page):
+    import numpy as np
+    from maa.controller import CustomController
+    from maa.custom_action import CustomAction
+    from maa.custom_recognition import CustomRecognition
+    from maa.resource import Resource
+    from maa.tasker import Tasker
+    from test_support.native_lifecycle import stop_and_wait_idle
+
+    task = json.loads((PIPELINE.parents[2] / "tasks/历战映射.json").read_text(encoding="utf-8"))
+    override = task["task"][0]["pipeline_override"]
+    assert override["战斗中"]["on_error"] == ["历战映射_异常收尾"]
+    phase = [0 if page != "unknown" else -1]
+    actions = []
+    steps = (
+        ["战斗中", "历战映射_撤退文字", "确定", "结算", "返回主菜单"]
+        if page == "battle" else ["战斗失败_历战", "结算", "返回主菜单"]
+    )
+
+    class MemoryController(CustomController):
+        def connect(self): return True
+        def request_uuid(self): return "mapping-failure-recovery"
+        def get_features(self): return 0
+        def screencap(self): return np.zeros((720, 1280, 3), np.uint8)
+
+    class Page(CustomRecognition):
+        def analyze(self, context, argv):
+            expected = {name: index for index, name in enumerate(steps)}
+            if page == "battle":
+                expected["历战映射_重新开始文字"] = 1
+            return (10, 10, 20, 20) if phase[0] == expected.get(argv.node_name, -2) else None
+
+    class Act(CustomAction):
+        def run(self, context, argv):
+            if argv.node_name == "MappingFailureProbe":
+                return CustomAction.RunResult(success=False)
+            actions.append(argv.node_name)
+            phase[0] += 1
+            return CustomAction.RunResult(success=True)
+
+    Tasker.set_log_dir(tmp_path / "native")
+    Tasker.set_debug_mode(False)
+    Tasker.set_save_draw(False)
+    Tasker.set_save_on_error(False)
+    resource, controller, tasker = Resource(), MemoryController(), Tasker()
+    assert resource.post_bundle(PIPELINE.parent).wait().succeeded
+    assert resource.register_custom_recognition("MappingRecoveryPage", Page())
+    assert resource.register_custom_action("MappingRecoveryAction", Act())
+    assert controller.post_connection().wait().succeeded
+    assert tasker.bind(resource, controller)
+    for name in ("战斗中", "战斗失败_历战", "结算", "返回主菜单", "确定",
+                 "历战映射_撤退文字", "历战映射_重新开始文字"):
+        override.setdefault(name, {})["recognition"] = {
+            "type": "Custom", "param": {"custom_recognition": "MappingRecoveryPage"},
+        }
+    for name in ("MappingFailureProbe", "战斗失败_历战", "历战映射_异常结算", "返回主菜单",
+                 "历战映射_异常暂停", "历战映射_异常撤退", "历战映射_异常确定"):
+        override.setdefault(name, {}).update({
+            "action": {"type": "Custom", "param": {"custom_action": "MappingRecoveryAction"}},
+            "next": [], "pre_delay": 0, "post_delay": 0,
+            "post_wait_freezes": {"time": 0},
+        })
+    override["MappingFailureProbe"].update({
+        "recognition": "DirectHit", "on_error": override["战斗中"]["on_error"],
+    })
+    override["历战映射_异常收尾"] = {"timeout": 300, "rate_limit": 0}
+    override["任务失败优雅退出"] = {"timeout": 300, "rate_limit": 0}
+    try:
+        job = tasker.post_task("MappingFailureProbe", override).wait()
+        assert job.succeeded
+        expected_actions = {
+            "settlement": ["战斗失败_历战", "历战映射_异常结算", "返回主菜单"],
+            "battle": ["历战映射_异常暂停", "历战映射_异常撤退", "历战映射_异常确定",
+                       "历战映射_异常结算", "返回主菜单"],
+            "unknown": [],
+        }
+        assert actions == expected_actions[page]
+        names = [tasker.get_node_detail(node_id).name for node_id in job.get().node_id_list]
+        assert "历战映射_异常收尾" in names
+        assert ("任务失败优雅退出" in names) is (page == "unknown")
+    finally:
+        stop_and_wait_idle(tasker)
+
+
 def test_shared_battle_start_consumers_are_frozen():
     # Any new next-list consumer of the shared 作战开始 node must be checked
     # against the shared click budget before shipping. Extend the frozen set
@@ -278,3 +472,14 @@ def test_cage_reuses_shared_start_recognition_without_click():
     for node in ("没打过", "意外处理_进入作战界面"):
         assert cage[node]["recognition"]["param"]["all_of"] == ["作战开始"]
         assert "点击作战开始" not in (cage[node].get("next") or [])
+
+
+def test_cage_challenge_tab_keeps_the_full_shared_footer_label():
+    cage = jsonc.loads((PIPELINE / "Phantom_Pain_Cage.jsonc").read_text(encoding="utf-8"))
+    war = jsonc.loads((PIPELINE / "War_Zone.jsonc").read_text(encoding="utf-8"))
+    roi = cage["打开挑战_幻痛囚笼"]["recognition"]["param"]["roi"]
+    assert roi == war["打开挑战_纷争战区"]["recognition"]["param"]["roi"]
+    x, y, width, height = roi
+    # The old x=1130 crop retained only 战 on the actual battle panel footer.
+    assert x <= 1100 and x + width >= 1157
+    assert y <= 669 and y + height >= 694

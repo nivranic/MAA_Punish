@@ -33,16 +33,18 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from action.combat.capture import capture_frame
+from action.combat.input_control import CombatInputError
 from action.combat.config.inverse_crown_profile import (
     InverseCrownProfile,
     InverseCrownUnavailable,
 )
 from action.combat.core.provider import (
     BaseCombatCheck,
+    HpObservation,
     Roguelike3IdentityError,
     require_roguelike3_field_identity,
 )
-from action.combat.core.role import BaseRole, SwitchPriority, resolve_role_name
+from action.combat.core.role import BaseRole, SwitchPriority, resolve_cls_label
 from action.combat.core.role_detect import (
     attack_templates_for_cls,
     detect_current_role,
@@ -141,6 +143,7 @@ class CombatTask:
     # R03 身份守卫：瞬时不可观察（开场演出/大招过场/技能特效遮 HUD）的宽限预算。
     # 预算内跳过输入等待观察恢复；确认后清零；超时仍按 unknown 拒绝（fail-closed）。
     R3_IDENTITY_GRACE_SECONDS = 15.0
+    R3_DEATH_IDENTITY_MAX_AGE = 2.0
 
     def __init__(
         self,
@@ -172,6 +175,7 @@ class CombatTask:
 
             self.input_scope = CombatInputScope(context, self, generation=uuid4().int)
         self.field_identity = "unknown"
+        self._ordinary_identity_unknown_since: float | None = None
         self.r3_identity_grace_until: float | None = None
         self.fresh_entry = None
         self._entry_start_attempted = False
@@ -216,6 +220,7 @@ class CombatTask:
         self._callback_status = "COMPLETED"
         self._exception_type: str | None = None
         self._last_in_combat_time = 0.0
+        self._combat_ui_missing_since: float | None = None
         self._hp_zero_since: float | None = None
         self.frame: Any | None = None
 
@@ -226,6 +231,8 @@ class CombatTask:
         self.last_switch_attempt_time: float = 0.0
         self._switch_attempt_cooldown: float = 0.0
         self._role_swap_cd_until: dict[str, float] = {}
+        self._r3_defeated_colors: set[str] = set()
+        self._r3_living_identity: tuple[str, int, float] | None = None
         self.current_field_since: float = 0.0
 
         self._logger_component = LoggerComponent(__name__)
@@ -233,10 +240,10 @@ class CombatTask:
 
     @property
     def combat_ui_lost_elapsed(self) -> float:
-        """自上次识别到战斗 UI 以来经过的秒数。"""
-        if not self._in_combat or self.combat_ui_visible:
+        """自本轮首次实际未命中战斗 UI 以来经过的秒数。"""
+        if not self._in_combat or self.combat_ui_visible or self._combat_ui_missing_since is None:
             return 0.0
-        return max(0.0, time.monotonic() - self._last_in_combat_time)
+        return max(0.0, time.monotonic() - self._combat_ui_missing_since)
 
     def combat_once(self, *, from_preparation: bool = False) -> None:
         """执行一次完整战斗流程。"""
@@ -252,6 +259,7 @@ class CombatTask:
                 return
 
             self._last_in_combat_time = time.monotonic()
+            self._combat_ui_missing_since = None
             self.combat_ui_visible = True
             self.logger.info("进入战斗")
 
@@ -295,6 +303,22 @@ class CombatTask:
             self._callback_status = "REJECTED"
             self._exception_type = type(exc).__name__
             raise
+        except CombatInputError as exc:
+            scope = self.input_scope
+            if (
+                scope is not None and scope.failure_reason == "stopped"
+                and self.context.tasker.stopping and scope.owned_contact is None
+                and not scope.release_pending and not scope.capture_in_flight
+            ):
+                # The UI owns the asynchronous task cancellation. The hold's
+                # finally block has released its contact before arriving here.
+                # combat_end still records any unconfirmed native Stop job.
+                self.out_of_combat_reason = "stopped"
+            else:
+                self.out_of_combat_reason = self.out_of_combat_reason or "exception"
+                self._callback_status = "ERROR"
+                self._exception_type = type(exc).__name__
+                raise
         except BaseException as exc:
             self.out_of_combat_reason = self.out_of_combat_reason or "exception"
             self._callback_status = "ERROR"
@@ -305,12 +329,10 @@ class CombatTask:
             self.combat_end()
 
     def ensure_strategy_ready(self, role: BaseRole | None = None) -> None:
-        """Temporary fail-closed guard until the real signal-driven strategy lands.
-
-        Enabling a profile must never enter the legacy InverseCrown rotation.
-        Remove this guard only together with its actual specialized consumer.
-        """
-        if self.inverse_crown_profile.enabled:
+        """Support the normal single-target entry, keeping R03's policy separate."""
+        if self.inverse_crown_profile.enabled and (
+            self.inverse_crown_profile.scene != "single" or self.roguelike3_identity_required
+        ):
             raise InverseCrownUnavailable(
                 "strategy_not_ready",
                 actual=role.implementation_name if role is not None else "unknown",
@@ -318,10 +340,18 @@ class CombatTask:
 
     def is_observation_protected(self) -> bool:
         """Specialized identity/exit/wait checks may not add attack or dodge."""
-        if self.inverse_crown_profile.enabled:
+        if self.is_inverse_crown_active():
             return True
         role = self.get_current_role()
         return role is not None and role.is_input_protected()
+
+    def is_inverse_crown_active(self) -> bool:
+        """Apply the standing policy to InverseCrown in the selected team."""
+        if not self.inverse_crown_profile.enabled:
+            return False
+        role = self.get_current_role()
+        # Entry recognition stays observation-only until a role is available.
+        return role is None or role.requested_cls_name == "InverseCrown"
 
     def _require_field_identity(
         self, role: BaseRole | None, display_name: str, detected_cls: str
@@ -341,6 +371,18 @@ class CombatTask:
                 "field_identity_mismatch", actual=detected_cls
             )
         self.field_identity = "confirmed"
+        self._ordinary_identity_unknown_since = None
+
+    def _defer_ordinary_identity_unknown(self, role: BaseRole) -> bool:
+        """Pause ordinary protected input while a fresh frame can restore identity."""
+        self.field_identity = "unknown"
+        now = time.monotonic()
+        if self._ordinary_identity_unknown_since is None:
+            self._ordinary_identity_unknown_since = now
+            self.logger.info("场上身份暂未确认，暂停输入等待新帧复核")
+        if now - self._ordinary_identity_unknown_since >= self.combat_ui_lost_timeout:
+            self._require_field_identity(role, "未知", GENERIC_CLS_NAME)
+        return True
 
     def perform(self) -> None:
         """dispatch 当前角色 do_perform。"""
@@ -349,6 +391,8 @@ class CombatTask:
         if role is None:
             return
         if not self.combat_ui_visible:
+            return
+        if self._hp_zero_since is not None:
             return
         if self._should_stop():
             return
@@ -477,6 +521,7 @@ class CombatTask:
             self._require_roguelike3_role_identity(
                 self.roles.get(key), display_name, detected_cls,
             )
+            self._remember_r3_living_identity(display_name, detected_cls, image)
             return display_name, detected_cls
         if protected:
             self._require_field_identity(self.roles.get(key), display_name, detected_cls)
@@ -545,6 +590,7 @@ class CombatTask:
         """Select an existing, uniquely identified field role without rewriting its roster."""
         if (
             self.team is None
+            or self.context.tasker.stopping
             or role is not self.roles.get(self.team.current.upper())
         ):
             return False
@@ -568,10 +614,28 @@ class CombatTask:
             marker = self.context.run_recognition("矩阵循生_场外蓝位暗色标记", image)
             if marker and marker.hit:
                 visible.add("B")
+        last_living_arrival = False
+        if (
+            self.roguelike3_identity_required and not visible
+            and role.color.upper() in self._r3_defeated_colors
+            and set(self.team.filled_colors()) - self._r3_defeated_colors == {target}
+        ):
+            # Dead bench portraits can lose their QTE color badge. A confirmed
+            # death plus the sole named survivor and positive current HP is
+            # independent evidence for the game's automatic handoff.
+            confirmed_names = names or load_confirmed_role_names(
+                self.context, {color: self.team.cls_at(color) for color in TEAM_COLORS},
+            )
+            last_living_arrival = (
+                confirmed_names is not None
+                and self.combat_check.read_hp_from_frame(self.context, image).alive
+            )
+        if self.context.tasker.stopping:
+            return False
         if (
             target in visible or role.color.upper() not in visible
             or not visible.issubset(self.team.filled_colors())
-        ):
+        ) and not last_living_arrival:
             # The real 1978-HP frame has a blue corner badge but the same
             # Oblivion bench portrait as the confirmed red-badge frame. Only
             # this fully named pair may use the independent portrait evidence;
@@ -592,6 +656,7 @@ class CombatTask:
         self.current_field_since = time.monotonic()
         self._last_field_cls = detected_cls
         self.r3_identity_grace_until = None
+        self._r3_defeated_colors.discard(target)
         target_role.reset_state()
         self.logger.info("R03 同帧场上色位校正: %s -> %s (%s)", previous, target, detected_cls)
         return True
@@ -639,6 +704,7 @@ class CombatTask:
                 self.logger.info("r3 tick 单人 HP 证据确认身份: text=%r", hp.text)
                 self.field_identity = "confirmed"
                 self.r3_identity_grace_until = None
+                self._r3_defeated_colors.discard(role.color.upper())
                 return False
             display_name, detected_cls = detect_current_role(
                 self.context, image, prefer_cls=[role.cls_name], on_tick=None,
@@ -656,6 +722,8 @@ class CombatTask:
                 # next tick independently validates the existing target role.
                 return True
             self._require_roguelike3_role_identity(role, display_name, detected_cls)
+            self._remember_r3_living_identity(display_name, detected_cls, image, hp=hp)
+            self._r3_defeated_colors.discard(role.color.upper())
             self.r3_identity_grace_until = None
             self._last_field_cls = detected_cls
             self.current_role_name = display_name
@@ -683,6 +751,8 @@ class CombatTask:
 
         if not is_dodge_button_visible(self.context, image):
             if protected:
+                if self.inverse_crown_profile.enabled and self.inverse_crown_profile.scene == "single":
+                    return self._defer_ordinary_identity_unknown(role)
                 self._require_field_identity(role, "未知", GENERIC_CLS_NAME)
             return False
 
@@ -690,6 +760,7 @@ class CombatTask:
             self._blind_attack_tick()
         if is_cls_on_field(self.context, image, role.cls_name):
             self._last_field_cls = role.cls_name
+            self._ordinary_identity_unknown_since = None
             if protected:
                 self._require_field_identity(role, role.cls_name, role.cls_name)
             return False
@@ -702,6 +773,10 @@ class CombatTask:
             on_tick=None if protected else self._blind_attack_tick,
         )
         if protected:
+            if display_name == "未知" and (
+                not self.inverse_crown_profile.enabled or self.inverse_crown_profile.scene == "single"
+            ):
+                return self._defer_ordinary_identity_unknown(role)
             self._require_field_identity(role, display_name, detected_cls)
             return False
         if detected_cls == role.cls_name or display_name == "未知":
@@ -859,8 +934,19 @@ class CombatTask:
         if display_name == "未知":
             self.logger.info("r3 identity: 入场帧未识别出上场角色，交由战斗循环宽限确认")
             return display_name
+        role = self.roles.get(color.upper())
+        # A callback may resume after dialogue and an automatic death handoff.
+        # Reuse the tick's named-roster/bench proof before treating red as the
+        # observed field slot. Never infer a living arrival from zero/unknown HP.
+        if (
+            role is not None and detected_cls != roster_cls
+            and not self.context.tasker.stopping
+            and self.combat_check.read_hp_from_frame(self.context, image).alive
+            and self._reconcile_r3_field_color(role, display_name, detected_cls, image)
+        ):
+            return display_name
         self._require_roguelike3_role_identity(
-            self.roles.get(color.upper()), display_name, detected_cls,
+            role, display_name, detected_cls,
         )
         return display_name
 
@@ -884,12 +970,14 @@ class CombatTask:
         now = time.monotonic()
         candidates: list[str] = []
         for color in self.team.other_filled_colors():
+            if color in self._r3_defeated_colors:
+                continue
             if color not in qte_colors:
                 continue
             cd_until = self._role_swap_cd_until.get(color, 0.0)
             if cd_until > now:
                 role = self.roles.get(color)
-                name = resolve_role_name(role.cls_name) if role else color
+                name = resolve_cls_label(role.cls_name) if role else color
                 self.logger.debug(
                     "切人目标 %s (%s) 再上场 CD 中剩余 %.1fs",
                     name,
@@ -928,7 +1016,7 @@ class CombatTask:
 
     def request_role_switch(self, requester: BaseRole) -> bool:
         """切人统一入口：由 BaseRole.perform(switch) 或 switch_next() 调用。"""
-        from_name = resolve_role_name(requester.cls_name)
+        from_name = resolve_cls_label(requester.cls_name)
         if self.is_switch_disabled():
             self.logger.info("切人跳过 [%s]: 切人已屏蔽", from_name)
             requester.on_switch_failed()
@@ -970,7 +1058,7 @@ class CombatTask:
             "切人执行 [%s @%s] -> [%s @%s]",
             from_name,
             requester.color,
-            resolve_role_name(target_cls),
+            resolve_cls_label(target_cls),
             target_color,
         )
         if self.switch_to_color(target_color, attacker=requester):
@@ -982,7 +1070,7 @@ class CombatTask:
         return False
 
     def is_switch_disabled(self) -> bool:
-        return bool(self.SWITCH_DISABLED or self.inverse_crown_profile.enabled)
+        return bool(self.SWITCH_DISABLED or self.is_inverse_crown_active())
 
     def get_current_cls(self) -> str | None:
         if self.team is None:
@@ -1051,6 +1139,10 @@ class CombatTask:
             self.logger.warning("无效切人色位: %s", color)
             return False
 
+        if target in self._r3_defeated_colors:
+            self.logger.info("R03 切人跳过: %s 本场已确认阵亡", target)
+            return False
+
         if target == self.team.current.upper():
             return False
 
@@ -1099,6 +1191,7 @@ class CombatTask:
         if attacker is not None and attacker.switch_verify_timeout is not None:
             verify_timeout = attacker.switch_verify_timeout
         switch_started = time.monotonic()
+        self._r3_living_identity = None
         if not attempt_switch_to_color(
             self.context,
             target,
@@ -1128,7 +1221,7 @@ class CombatTask:
             self._role_swap_cd_until[outgoing] = now + self.switch_cooldown
             self.logger.info(
                 "再上场 CD: %s @%s %.0fs",
-                resolve_role_name(attacker.cls_name),
+                resolve_cls_label(attacker.cls_name),
                 outgoing,
                 self.switch_cooldown,
             )
@@ -1213,15 +1306,19 @@ class CombatTask:
     def _clear_combat_state(self, *, log_end: bool = True) -> None:
         self._in_combat = False
         self.combat_ui_visible = False
+        self._combat_ui_missing_since = None
         self.frame = None
         self.team = None
         self.roles = {}
         self.current_role_name = ""
         self._last_field_cls = ""
         self.field_identity = "unknown"
+        self._ordinary_identity_unknown_since = None
         self.last_switch_attempt_time = 0.0
         self._switch_attempt_cooldown = 0.0
         self._role_swap_cd_until = {}
+        self._r3_defeated_colors.clear()
+        self._r3_living_identity = None
         self.current_field_since = 0.0
         self._hp_zero_since = None
         if log_end:
@@ -1248,6 +1345,7 @@ class CombatTask:
         if self.combat_check.in_combat(self.context, self):
             self.combat_ui_visible = True
             self._last_in_combat_time = time.monotonic()
+            self._combat_ui_missing_since = None
             return ""
 
         self.combat_ui_visible = False
@@ -1257,7 +1355,12 @@ class CombatTask:
         if self.combat_check.in_outer_interface(self.context, self):
             return "outer_interface"
 
-        lost_elapsed = time.monotonic() - self._last_in_combat_time
+        now = time.monotonic()
+        if self._combat_ui_missing_since is None:
+            # A long role action can leave a gap between observations. Only a
+            # real missing frame starts the existing continuous-loss budget.
+            self._combat_ui_missing_since = now
+        lost_elapsed = now - self._combat_ui_missing_since
         if lost_elapsed >= self.combat_ui_lost_timeout:
             self.logger.info(
                 "战斗 UI 未命中超时 (%.1f/%.1fs)",
@@ -1305,10 +1408,21 @@ class CombatTask:
         if hp is None and self._hp_zero_since is None:
             return ""
 
+        if hp == 0:
+            self._observe_r3_defeated_role()
+
         now = time.monotonic()
         if self._hp_zero_since is None:
             self._hp_zero_since = now
             self.logger.info("识别到血量为 0，开始计时")
+            role = self.get_current_role()
+            if (
+                role is not None and role.is_input_protected()
+                and not self.inverse_crown_profile.enabled
+            ):
+                # A defeated ordinary role cannot finish its previous rotation.
+                # Retire that phase before the game's automatic teammate handoff.
+                role.reset_state()
             return ""
 
         elapsed = now - self._hp_zero_since
@@ -1320,6 +1434,90 @@ class CombatTask:
             )
             return "hp_zero"
         return ""
+
+    def _observe_r3_defeated_role(self) -> None:
+        """Remember a named teammate's death only from strict same-frame evidence.
+
+        A defeated bench icon can still match QTE.onnx. Do not spend a switch
+        window clicking it after the game has handed control to a living role.
+        This state belongs to one battle and is cleared on observed revival.
+        """
+        if (
+            not self.roguelike3_identity_required or self.team is None
+            or self.frame is None or self._should_stop()
+        ):
+            return
+        hp = self.combat_check.read_hp_from_frame(self.context, self.frame)
+        if hp.current != 0 or hp.maximum is None or hp.maximum <= 0:
+            return
+        observed_at = time.monotonic()
+        recent = self._r3_living_identity
+        if (
+            recent is not None and recent[0] == self.team.current.upper()
+            and recent[1] == hp.maximum
+            and 0 <= observed_at - recent[2] <= self.R3_DEATH_IDENTITY_MAX_AGE
+        ):
+            # Death darkens the attack icon before the next tick. This bounded
+            # continuity only removes a switch target; it never admits input.
+            self._record_r3_defeat(recent[0], hp.text)
+            return
+        display_name, detected_cls = detect_current_role(
+            self.context, self.frame, on_tick=None,
+        )
+        if self._should_stop():
+            return
+        color = self._r3_named_field_color(display_name, detected_cls)
+        if color is not None:
+            self._record_r3_defeat(color, hp.text)
+
+    def _r3_named_field_color(self, display_name: str, detected_cls: str) -> str | None:
+        if self.team is None or display_name == "未知":
+            return None
+        names = load_confirmed_role_names(
+            self.context, {color: self.team.cls_at(color) for color in TEAM_COLORS},
+        )
+        if names is None:
+            return None
+        matches = [
+            color for color in self.team.filled_colors()
+            if self.team.cls_at(color) == detected_cls
+            and ROLE_ACTIONS[names[color]].get("name") == display_name
+        ]
+        if len(matches) != 1:
+            return None
+        color = matches[0]
+        role = self.roles.get(color)
+        if (
+            role is None or role.requested_cls_name != detected_cls
+            or role.fallback_reason is not None
+            or role.implementation_name.rsplit(".", 1)[-1] != detected_cls
+        ):
+            return None
+        return color
+
+    def _remember_r3_living_identity(
+        self, display_name: str, detected_cls: str, image: Any,
+        *, hp: HpObservation | None = None,
+    ) -> None:
+        """Bind the existing positive identity check to HP on that exact frame."""
+        if not self.roguelike3_identity_required or self._should_stop():
+            return
+        color = self._r3_named_field_color(display_name, detected_cls)
+        if color is None:
+            self._r3_living_identity = None
+            return
+        if hp is None:
+            hp = self.combat_check.read_hp_from_frame(self.context, image)
+        if hp.alive:
+            self._r3_living_identity = (color, hp.maximum, time.monotonic())
+        elif hp.current == 0 and hp.maximum is not None and hp.maximum > 0:
+            self._record_r3_defeat(color, hp.text)
+
+    def _record_r3_defeat(self, color: str, hp_text: str) -> None:
+        if color not in self._r3_defeated_colors:
+            self._r3_defeated_colors.add(color)
+            self.logger.info("R03 本场阵亡: @%s hp=%s", color, hp_text)
+        self._r3_living_identity = None
 
     def _wait_in_combat(self) -> None:
         deadline = time.monotonic() + self.wait_combat_time
@@ -1340,7 +1538,7 @@ class CombatTask:
         return bool(self.context.tasker.stopping)
 
     def _sleep_check(self) -> None:
-        if self._should_stop() or self.sleep_check_interval <= 0:
+        if self._should_stop() or self._hp_zero_since is not None or self.sleep_check_interval <= 0:
             return
         role = self.get_current_role()
         on_tick = (

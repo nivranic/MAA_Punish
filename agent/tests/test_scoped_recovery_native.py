@@ -1,4 +1,4 @@
-"""Actual Maa 5.14.2 control flow with memory images/input endpoints only."""
+"""Explicit legacy recovery and the current daily failure-handler contract."""
 
 import json
 from pathlib import Path
@@ -6,6 +6,7 @@ import time
 from types import SimpleNamespace
 
 import cv2
+import jsonc
 import numpy as np
 import pytest
 from maa.controller import CustomController
@@ -17,6 +18,13 @@ from action.basics import ScopedRecovery as recovery
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_daily_guild_entry_uses_the_current_graceful_failure_handler():
+    defaults = json.loads((ROOT / "resource/base/default_pipeline.json").read_text(encoding="utf-8"))
+    guild = jsonc.loads((ROOT / "resource/base/pipeline/Guild.jsonc").read_text(encoding="utf-8"))
+    for name in ("指挥局", "检查是否在指挥局内部"):
+        assert guild[name].get("on_error", defaults["Default"]["on_error"]) == ["任务失败优雅退出"]
 
 
 class MemoryController(CustomController):
@@ -95,7 +103,7 @@ class PageRecognition(CustomRecognition):
     ("business-failed", "guild", 1, "stopped_unknown"),
     ("normal", "guild", 1, None),
 ])
-def test_real_default_entry_is_scoped_and_normal_d03_is_preserved(
+def test_explicit_legacy_recovery_is_scoped_and_normal_d03_is_preserved(
         tmp_path, monkeypatch, case, page, expected_inputs, expected_outcome):
     Tasker.set_log_dir(tmp_path / "native-logs")
     Tasker.set_debug_mode(False)
@@ -118,7 +126,10 @@ def test_real_default_entry_is_scoped_and_normal_d03_is_preserved(
         "recognition": {"type": "Custom", "param": {"custom_recognition": "RecoveryPageFixture"}},
         "timeout": 15, "rate_limit": 0, "pre_delay": 0, "post_delay": 0,
         "pre_wait_freezes": {"time": 0}, "post_wait_freezes": {"time": 0},
+        "on_error": [recovery.RECOVERY_NODE],
     } for name in resource.node_list if name not in {recovery.RECOVERY_NODE, recovery.BACK_NODE}}
+    # Daily tasks now inherit the graceful handler. Exercise the retained
+    # legacy callback only through an explicit test-local route.
     # Keep the actual return-icon TemplateMatch, target ROI and image. Only its
     # surrounding page recognition is a scripted endpoint, never live OCR.
     patch[recovery.BACK_NODE] = {"pre_delay": 0, "post_delay": 0}
