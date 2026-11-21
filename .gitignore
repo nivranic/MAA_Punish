@@ -507,3 +507,4 @@ local.properties
 
 # mimosa 安全扫描插件本地会话状态
 .mimosa/
+.glm-router/
