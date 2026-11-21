@@ -12,6 +12,11 @@ _LIST_BUDGET_OCR_NODES = (
 
 
 class R03Recruitment:
+    # 最近一次实测预算（编队页或列表页 OCR 命中时刷新）。列表页能量文本被
+    # 右侧角色预览机甲遮挡（seg120/121：随选中角色漂移）时，列表侧读数回落
+    # 到它；编队页读数（team=True）永不回退——那是编入扣款算术的基准。
+    _budget_cache = None
+
     def __init__(self, selector):
         self.selector = selector
 
@@ -31,7 +36,16 @@ class R03Recruitment:
             return None
         entry = "矩阵循生_招募能量_编队" if team else "矩阵循生_招募能量_列表"
         result = context.run_recognition(entry, image)
-        return R03Recruitment._budget_value(result)
+        value = R03Recruitment._budget_value(result)
+        if value is not None:
+            R03Recruitment._budget_cache = value
+            return value
+        if team:
+            # 编队页预算是编入扣款算术的基准，读不到必须硬失败，不回退缓存。
+            return None
+        # seg121：列表页能量文本被预览角色遮挡时（页面身份已由 招募列表就绪
+        # 两锚钉死），回落最近实测值；真实扣款仍由编入后的编队页预算算术闸门兜底。
+        return R03Recruitment._budget_cache
 
     @staticmethod
     def _budget_value(result):
@@ -109,10 +123,13 @@ class R03Recruitment:
                                   self._list_budget_overrides(current, maximum))
         if not self.completed(context, detail, "矩阵循生_招募列表就绪") or context.tasker.stopping:
             return False
-        return self._completed_list_budget(context, detail) == formation["budget"]
+        list_budget = self._completed_list_budget(context, detail)
+        # seg121：两锚变体的识别详情不含预算文本（None=不可读），页面身份已由
+        # 招募列表就绪 两锚钉死，此时跳过前后预算一致性复核。
+        return list_budget is None or list_budget == formation["budget"]
 
     def return_to_formation(self, context):
-        """只从已确认的招募列表返回，且返回前后预算必须一致。"""
+        """只从已确认的招募列表返回；预算可读时校验前后一致，不可读时以锚为准。"""
         if context.tasker.stopping:
             return None
         image = context.tasker.controller.post_screencap().wait().get()
@@ -130,15 +147,19 @@ class R03Recruitment:
             if not self.completed(context, detail, "矩阵循生_招募列表就绪") or context.tasker.stopping:
                 return None
             budget = self._completed_list_budget(context, detail)
-            if budget is None:
-                return None
-        current, maximum = budget
-        detail = context.run_task("矩阵循生_返回编队",
-                                  self._list_budget_overrides(current, maximum))
+            # 不回退 _budget_cache：缓存可能是上一局遗留值，不能作为本页一致性基准。
+        detail = context.run_task(
+            "矩阵循生_返回编队",
+            self._list_budget_overrides(*budget) if budget is not None else {},
+        )
         if not self.completed(context, detail, "矩阵循生_编队已返回") or context.tasker.stopping:
             return None
         image = context.tasker.controller.post_screencap().wait().get()
         formation = self.read_formation(context, image)
+        if budget is None:
+            # seg121：能量文本被预览角色遮挡时列表预算不可读——页面身份已由
+            # 招募列表就绪 两锚钉死，导航后以编队页实测预算为准（并预热缓存）。
+            return formation
         return formation if formation and formation["budget"] == budget else None
 
     @staticmethod
@@ -236,7 +257,14 @@ class R03Recruitment:
                 if image is None:
                     return None
                 page = context.run_recognition("矩阵循生_招募列表就绪", image)
-                if not page or not page.hit or self.read_budget(context, image) != formation["budget"]:
+                if not page or not page.hit:
+                    return None
+                listed = self.read_budget(context, image)
+                if listed is None:
+                    # seg121：预算被遮挡无法证明同预算——不尝试下一位（未知扣款
+                    # 不可重试），退回编队按已确认槽位收尾（R 单色位编队合法）。
+                    break
+                if listed != formation["budget"]:
                     return None
             if not fielded:
                 returned = self.return_to_formation(context)
@@ -375,8 +403,18 @@ class R03Recruitment:
                 "矩阵循生_角色招募消耗": {"recognition": {"param": {"roi": [240, y + 4, 155, 32]}}},
             })
             hits = cost_result.filtered_results if cost_result and cost_result.hit else []
-            icons = sorted((item.box for item in hits if isinstance(item, ColorMatchResult)), key=lambda box: box[0])
-            if not 1 <= len(icons) <= 5 or len(icons) != len(hits):
+            # 选中态行右侧会出现深色装饰，在消耗区引入 1x1 碎片与 22x32 色块分量
+            # （2026-11-16 run_20261116_055519_2 实测）；先按真实图标尺寸过滤再校验，
+            # 否则碎片会让下方尺寸校验跳过整行，选中校验拿不到 current 而误杀。
+            # 被遮挡而缺失的末位图标让 cost 偏小：可负担性以点击前的读取为准，
+            # 点击后仅要求同行+预算未扣，实际扣款由编入后的预算算术把关。
+            icons = sorted(
+                (item.box for item in hits
+                 if isinstance(item, ColorMatchResult)
+                 and 16 <= item.box[2] <= 26 and 16 <= item.box[3] <= 26),
+                key=lambda box: box[0],
+            )
+            if not 1 <= len(icons) <= 5:
                 continue
             if any(not (16 <= box[2] <= 26 and 16 <= box[3] <= 26) for box in icons):
                 continue
@@ -404,10 +442,24 @@ class R03Recruitment:
         confirmation = element.replace("打开", "确认进入", 1)
         # Nested StopTask would stop the parent before it can report failure.
         # Return this bounded step's failure to the owning RoleSelection action.
-        detail = context.run_task(element, {
-            element: {"on_error": []}, confirmation: {"on_error": []},
-        })
-        return self.completed(context, detail, confirmation) and not context.tasker.stopping
+        # 2026-11-16 run_20261116_062130_2：memo 命中快速路径下，列表页出现后 ~1s
+        # 就点击元素页签，转场动画吃掉点击，确认轮询全程落空；加一次有界重试，
+        # 重试先独立确认（页面可能已打开，避免二次点击把筛选切掉）再重走打开链。
+        for attempt in range(2):
+            if context.tasker.stopping:
+                return False
+            if attempt:
+                detail = context.run_task(confirmation, {
+                    confirmation: {"on_error": [], "timeout": 3000},
+                })
+                if self.completed(context, detail, confirmation):
+                    return not context.tasker.stopping
+            detail = context.run_task(element, {
+                element: {"on_error": []}, confirmation: {"on_error": []},
+            })
+            if self.completed(context, detail, confirmation) and not context.tasker.stopping:
+                return True
+        return False
 
     def _recruit_from_list(self, context, role_dict, role_name, max_try):
         """列表已就绪后共用同一选中/扣费链，不重复点击已选中的元素筛选。"""
@@ -432,13 +484,17 @@ class R03Recruitment:
             if not self.completed(context, detail, "矩阵循生_选中角色") or context.tasker.stopping:
                 return False
             # 点击失败/未切换时，既不能借用上一位的选中态，也不能借用旧预算。
+            # 只校验同行 + 预算未扣；消耗数不参与等式：2026-11-16 run_20261116_050352_2
+            # 实测选中行右侧出现确认按钮深色竖条（22x32、n=426）遮住第 4 个消耗图标，
+            # ColorMatch 只见 3 个干净图标，cost 4→3，严格等式误杀已选中的正常状态。
+            # 真正的扣款闸门在编入后的预算算术（after == budget-cost）。
             image = context.tasker.controller.post_screencap().wait().get()
             if image is None:
                 return False
             current = self.candidates(context, image, role_name, action)
             selected = context.run_recognition("矩阵循生_选中角色", image, patch)
             if not selected or not selected.hit or not any(
-                tuple(row[0]) == tuple(box) and row[1:] == (budget, cost) for row in current
+                tuple(row[0]) == tuple(box) and row[1] == budget for row in current
             ):
                 return False
             if context.tasker.stopping:

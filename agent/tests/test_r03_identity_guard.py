@@ -163,7 +163,11 @@ def bound(item, cls_name="GeneralFight"):
     (("未知", "GeneralFight"), "GeneralFight", False),
     (("回音", "GeneralFight"), "GeneralFight", True),
     (("终焉", "Oblivion"), "Oblivion", True),
-    (("回音", "GeneralFight"), "Oblivion", False),
+    # 20261117 run_050802 实证：贴心搭档等事件战斗会把单人编队的场上角色换成
+    # 事件指定角色（roster=试用专属 cls，入场帧尘铭 GeneralFight 图标 0.979）。
+    # 单人队场上唯一且检测已知时按场上实际重绑色位（走通用策略），不再杀整局；
+    # 「未知」检测仍 fail-closed。
+    (("回音", "GeneralFight"), "Oblivion", True),
 ])
 def test_r03_setup_and_tick_identity_checks_are_input_free(monkeypatch, answer, cls_name, accepted):
     """入场校正路径的模板身份契约（切人/修正仍走 attack_template，零输入）。"""
@@ -177,6 +181,39 @@ def test_r03_setup_and_tick_identity_checks_are_input_free(monkeypatch, answer, 
         with pytest.raises(Roguelike3IdentityError): item._correct_role_from_field("R", cls_name, item.frame, solo=True)
         assert item.field_identity == "unknown"
     assert calls and all(call["on_tick"] is None for call in calls)
+    no_inputs(item.context)
+
+
+def test_r03_solo_entry_foreign_known_character_rebinds_color(monkeypatch):
+    """贴心搭档场景回归：单人编队入场检测为已知角色（通用占位）时按场上实际重绑。
+
+    roster=Oblivion、场上=回音(GeneralFight)：入场帧直接重绑 R 色位到
+    GeneralFight 通用策略并确认身份，不抛 Roguelike3IdentityError；
+    重绑不产生任何输入，且重绑后 roles['R'] 实现与色位 cls 一致。
+    """
+    import action.combat.core.session as session
+    item = combat(); role = bound(item, "Oblivion")
+    calls = detection(monkeypatch, session, ("回音", "GeneralFight"))
+    assert item._correct_role_from_field("R", "Oblivion", item.frame, solo=True) == ("回音", "GeneralFight")
+    assert item.field_identity == "confirmed"
+    rebound = item.roles["R"]
+    assert rebound.requested_cls_name == "GeneralFight"
+    assert rebound.implementation_name.rsplit(".", 1)[-1] == "GeneralFight"
+    assert rebound.fallback_reason is None
+    assert item.team.cls_at("R") == "GeneralFight"
+    assert calls and all(call["on_tick"] is None for call in calls)
+    no_inputs(item.context)
+
+
+def test_r03_solo_entry_unknown_detection_still_fail_closed(monkeypatch):
+    """单人入场检测「未知」仍 fail-closed：重绑只信任已知角色，不放进未知。"""
+    import action.combat.core.session as session
+    item = combat(); role = bound(item, "Oblivion")
+    detection(monkeypatch, session, ("未知", "GeneralFight"))
+    with pytest.raises(Roguelike3IdentityError, match="r3_field_identity_unknown"):
+        item._correct_role_from_field("R", "Oblivion", item.frame, solo=True)
+    assert item.field_identity == "unknown"
+    assert item.roles["R"].requested_cls_name == "Oblivion"
     no_inputs(item.context)
 
 

@@ -280,6 +280,7 @@ class CombatTask:
                     self.out_of_combat_reason = exit_reason
                     break
 
+                self._maybe_skip_in_combat_cutscene()
                 self.perform()
 
                 if self.combat_check.combat_end_condition(self.context, self):
@@ -383,6 +384,46 @@ class CombatTask:
         if now - self._ordinary_identity_unknown_since >= self.combat_ui_lost_timeout:
             self._require_field_identity(role, "未知", GENERIC_CLS_NAME)
         return True
+
+    # 战斗内演出检测冷却（秒）：智识镜像类 BOSS 入场演出会盖住战斗画面且输入
+    # 无效，runner 空转至节点预算耗尽（2026-11-20 seg163-166 实锤 60-75min）。
+    _CUTSCENE_SKIP_COOLDOWN = 8.0
+
+    def _maybe_skip_in_combat_cutscene(self) -> None:
+        """低频检测战斗内演出/对话的右下按钮并点击推进。
+
+        复用管线节点 矩阵循生_叙事右下按钮（右下按钮位 4+ 汉字正则 + 开枪/跳过
+        白名单，ROI [940,600,300,80] 不含战斗技能区文字）。识别失败静默返回——
+        战斗中该 ROI 无按钮文字是常态。
+        """
+        now = time.monotonic()
+        if now - getattr(self, "_cutscene_skip_at", 0.0) < self._CUTSCENE_SKIP_COOLDOWN:
+            return
+        self._cutscene_skip_at = now
+        image = self.frame
+        if image is None:
+            return
+        node = "矩阵循生_叙事右下按钮"
+        top_node = "矩阵循生_顶部演出跳过"
+        try:
+            detail = self.context.run_recognition(node, image)
+            hit_node = None
+            if detail is not None and getattr(detail, "hit", False) is True:
+                hit_node = node
+            else:
+                top_detail = self.context.run_recognition(top_node, image)
+                if top_detail is not None and getattr(top_detail, "hit", False) is True:
+                    detail, hit_node = top_detail, top_node
+            if hit_node is None:
+                return
+            box = getattr(detail, "box", None)
+            if box is not None:
+                self.context.run_action(hit_node, box=box)
+            else:
+                self.context.run_action(hit_node)
+        except Exception:
+            return
+        self.logger.info("战斗内演出/按钮推进: %s", hit_node)
 
     def perform(self) -> None:
         """dispatch 当前角色 do_perform。"""
@@ -518,8 +559,25 @@ class CombatTask:
         )
         key = color.upper()
         if r3_identity:
+            role = self.roles.get(key)
+            if (
+                role is not None
+                and self.team is not None
+                and self.team.is_solo()
+                and display_name.strip()
+                and display_name.strip().casefold() not in ("未知", "unknown")
+                and detected_cls != role.requested_cls_name
+            ):
+                # 贴心搭档等事件战斗会把单人编队的场上角色换成事件指定角色
+                # （20261117 run_050802 实证：roster=露西亚·誓焰[试用]，入场帧
+                # 尘铭攻击图标 0.979 命中，requested Pyroath != detected
+                # GeneralFight 直接 fail-closed 杀掉整局）。单人队场上唯一、
+                # 无队友歧义，且 display_name 已知（未知已在 guard 内拒绝），
+                # 按场上实际重绑色位走通用策略；多色位编队保持 fail-closed。
+                self._rebind_role_at(key, detected_cls)
+                role = self.roles.get(key)
             self._require_roguelike3_role_identity(
-                self.roles.get(key), display_name, detected_cls,
+                role, display_name, detected_cls,
             )
             self._remember_r3_living_identity(display_name, detected_cls, image)
             return display_name, detected_cls
