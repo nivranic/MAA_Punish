@@ -524,7 +524,8 @@
                 ],
                 "template": [
                     "战斗/战斗中.png",
-                    "战斗/战斗中2.png"
+                    "战斗/战斗中2.png",
+                    "战斗/战斗中BOSS.png"
                 ],
                 "green_mask": true,
                 "threshold": 0.6
