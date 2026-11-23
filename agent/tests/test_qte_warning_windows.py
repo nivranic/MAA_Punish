@@ -18,7 +18,8 @@ class QteFight:
 
     def __init__(self, monkeypatch, *, role_cls=InverseCrown, warning_at=(),
                  stop_at=None, protect_at=None, unprotect_at=None, fail_at=None,
-                 qte1_result=True, qte2_result=True, dodge_result=True):
+                 qte1_result=True, qte2_result=True, dodge_result=True,
+                 qte_ready=None):
         self.context = FakeContext()
         self.combat = CombatTask(self.context, CombatCheck())
         self.combat.team = TeamSnapshot.solo(role_cls.__name__)
@@ -27,6 +28,7 @@ class QteFight:
         self.role.phase = "farm" if role_cls is InverseCrown else "combo"
         self.action = self.role.action
         self.warning_at = warning_at
+        self.qte_ready = qte_ready
         self.stop_at = stop_at
         self.protect_at = protect_at
         self.unprotect_at = unprotect_at
@@ -64,6 +66,13 @@ class QteFight:
         return FakeJob(image=np.full((2, 2, 3), number, dtype=np.uint8))
 
     def recognize(self, name, image, pipeline_override=None):
+        if name in ("释放红色QTE", "释放黄色QTE", "释放蓝色QTE"):
+            node_for = {"R": "释放红色QTE", "Y": "释放黄色QTE", "B": "释放蓝色QTE"}
+            if self.qte_ready and name == node_for[self.qte_ready]:
+                hit = make_hit()
+                hit.best_result.box = (1100, 100, 120, 120)
+                return hit
+            return make_miss()
         assert name == "自动闪避"
         self.warning_frames.append(image)
         number = self.boundary("warning")
@@ -251,11 +260,12 @@ def test_aegis_second_helper_cannot_dispatch_after_stop(monkeypatch, boundary):
 
 
 @pytest.mark.parametrize("skill_sub,expected", [
-    ("cage", ["长按技能", "辅助机", "qte1", "qte2"]),
-    ("finish", ["辅助机", "qte1", "qte2"]),
+    ("cage", ["长按技能", "辅助机"]),
+    ("finish", ["辅助机"]),
 ])
-def test_inverse_actual_protected_skill_consumer_keeps_legal_qte(monkeypatch, skill_sub, expected):
-    fight = QteFight(monkeypatch, warning_at=(1, 2))
+@pytest.mark.parametrize("ready", [False, True])
+def test_inverse_actual_protected_skill_consumer_keeps_legal_qte(monkeypatch, skill_sub, expected, ready):
+    fight = QteFight(monkeypatch, warning_at=(1, 2), qte_ready="B" if ready else None)
     fight.role.phase = "skill"
     fight.role._skill_sub = skill_sub
     fight.role._skill_switch_after = True
@@ -264,7 +274,10 @@ def test_inverse_actual_protected_skill_consumer_keeps_legal_qte(monkeypatch, sk
     assert fight.role.do_perform() is None
 
     assert fight.context.actions == expected
-    assert "capture" not in fight.counts and "warning" not in fight.counts
+    # 保护窗内共享预警零观测；就绪未确认不得盲点固定坐标（防误换人），
+    # 就绪确认后允许且仅允许一次单点（ready-QTE 契约，f6dd8dad 起）。
+    assert "warning" not in fight.counts
+    assert len(fight.context.tasker.controller.clicks) == (1 if ready else 0)
     assert fight.role.phase == "switch" and fight.role._post_ult_qte_used
     assert fight.combat.frame is None
 

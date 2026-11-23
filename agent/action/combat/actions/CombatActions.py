@@ -40,6 +40,7 @@ from action.combat.capture import capture_frame
 from action.combat.input_control import CombatInputError
 from action.combat.reactive_dodge import auto_dodge
 from action.combat.qte_release import click_any_release_qte
+from action.combat.actions.assist_state import AssistReleaseTracker
 from action.combat.actions.signal_ball_layout import (
     SIGNAL_BALL_SLOT_CENTERS,
     SIGNAL_BALL_SLOT_COUNT,
@@ -82,6 +83,8 @@ class CombatActions:
                     break
         self._logger_component = LoggerComponent(__name__)
         self.logger = self._logger_component.logger
+        self.assist_tracker = AssistReleaseTracker()
+        self._frame_seq = 0
 
     def _combat_task(self):
         role = getattr(self, "_role", None)
@@ -98,6 +101,7 @@ class CombatActions:
             and (scope is None or scope.frame_metadata is not None)
         ):
             return combat.frame
+        self._frame_seq += 1
         return capture_frame(self.context, combat)
 
     def _invalidate_frame(self) -> None:
@@ -568,7 +572,12 @@ class CombatActions:
             image = self._get_image(fresh=True)
             if self.context.tasker.stopping:
                 return False
-            color = click_any_release_qte(self.context, image)
+            color = click_any_release_qte(
+                self.context,
+                image,
+                tracker=self.assist_tracker,
+                frame_token=self._frame_seq,
+            )
             if color is not None:
                 self.logger.info("QTE 就绪点击: %s", color)
             return color is not None
@@ -612,7 +621,8 @@ class CombatActions:
     def auxiliary_machine(self):
         """
         辅助机
-        执行辅助机操作。
+        执行辅助机操作。按方案 3.4 每辅助状态机：待确认请求未决、同帧或
+        冷却内不重复点；无 ready 识别，放行结果只算「请求中」。
         """
         try:
             if self.context.tasker.stopping:
@@ -620,7 +630,12 @@ class CombatActions:
             self._auto_dodge()
             if self.context.tasker.stopping:
                 return False
-            return self.context.run_action("辅助机")
+            if not self.assist_tracker.can_request("aux", self._frame_seq):
+                return False
+            result = self.context.run_action("辅助机")
+            if result:
+                self.assist_tracker.record_request("aux", self._frame_seq)
+            return result
         finally:
             self._invalidate_frame()
 

@@ -328,6 +328,8 @@ class InverseCrown(BaseRole):
         self._settlement_pending = False
         # 长期资源记账（方案 3.5：阶段资源/补资源动作/耗时；循环复位只清统计）。
         self._resource_stats = {"rebuild_taps": 0, "started_at": None}
+        # 恢复当拍抑制盲开大（方案 3.5 恢复/退出行）。
+        self._recovery_resume = False
 
     def reset_state(self) -> None:
         entry = getattr(self.combat, "fresh_entry", None)
@@ -347,6 +349,8 @@ class InverseCrown(BaseRole):
                 stats["rebuild_taps"], elapsed,
             )
         self._resource_stats = {"rebuild_taps": 0, "started_at": None}
+        # 方案3.4：循环复位只清辅助统计，真实冷却与待确认请求保留。
+        self.action.assist_tracker.cycle_reset()
         super().reset_state()
         self._skill_charge_deadline = 0.0
         self._skill_cast_ticks = 0
@@ -395,6 +399,11 @@ class InverseCrown(BaseRole):
         elif self.phase == "farm":
             self._phase_farm()
         else:
+            self.action.logger.info(
+                "inverse_crown recovery: requested=%s actual=undispatched_phase",
+                self.phase,
+            )
+            self._recovery_resume = True
             self.phase = "idle"
             self._phase_idle()
 
@@ -959,7 +968,10 @@ class InverseCrown(BaseRole):
         self.action.lens_lock()
         self.action.attack()
 
-        if self._energy_almost_full():
+        if self._recovery_resume:
+            # 恢复当拍只做允许的回落（资源进度），不盲目再次开大（方案144行）。
+            self._recovery_resume = False
+        elif self._energy_almost_full():
             self.action.logger.info("大招")
             self._enter_skill(switch_after=True)
             return
@@ -1038,6 +1050,10 @@ class InverseCrown(BaseRole):
                 self._skill_cast_ticks = 0
             elif time.monotonic() >= self._skill_charge_deadline:
                 # A charge timeout does not confirm a cast or its completion.
+                self.action.logger.info(
+                    "inverse_crown recovery: requested=skill/charge actual=charge_timeout"
+                )
+                self._recovery_resume = True
                 self._skill_sub = ""
                 self._skill_charge_deadline = 0.0
                 self._skill_cast_ticks = 0
@@ -1087,6 +1103,11 @@ class InverseCrown(BaseRole):
             #self.action.long_press_attack(4000)
             self._finish_skill()
         else:
+            self.action.logger.info(
+                "inverse_crown recovery: requested=skill/%s actual=unknown_sub",
+                self._skill_sub or "-",
+            )
+            self._recovery_resume = True
             self.phase = "idle"
 
     def _phase_farm(self) -> None:

@@ -8,6 +8,7 @@ import pytest
 from action.combat.core.provider import CombatCheck
 from action.combat.core.session import CombatTask
 from action.combat.core.team import TeamSnapshot
+from action.combat.actions.assist_state import AssistReleaseTracker
 from action.combat.config.inverse_crown_profile import InverseCrownUnavailable
 from action.combat.roles import inverse_crown as module
 from action.combat.roles.inverse_crown import InverseCrown
@@ -410,3 +411,42 @@ def test_post_ult_qte_rearms_each_skill_cycle(inverse_skill):
     role._finish_skill()
     assert context.actions.count("辅助机") == 2
     assert len(context.tasker.controller.clicks) == 2
+def test_charge_timeout_recovery_tick_does_not_blindly_recast_ultimate(inverse_skill):
+    """方案 3.5/144 行：恢复当拍做允许的回落（资源进度），不盲目再次开大。"""
+    context, combat, role, clock = inverse_skill
+    role._enter_skill(switch_after=True)
+    clock.now = role._skill_charge_deadline
+    role.do_perform()
+    assert role.phase == "idle" and role._recovery_resume is True
+
+    # 能量此时已就绪：恢复当拍也不得直接再开大。
+    context.recognition_map["检查逆冕能量即将满"] = make_hit()
+    role.do_perform()
+    assert role.phase == "farm"
+    assert not set(context.actions) & {"技能", "长按技能"}
+
+    # 资源进度回落一轮回到 idle 后，状态机恢复正常判定并允许开大。
+    context.recognition_map["检查逆冕特殊球"] = make_hit()
+    role.do_perform()
+    assert role.phase == "idle"
+    role.do_perform()
+    assert role.phase == "skill" and role._skill_sub == "charge"
+
+
+def test_undispatched_phase_recovery_resumes_without_blind_ultimate(inverse_skill):
+    context, combat, role, _ = inverse_skill
+    context.recognition_map["检查逆冕能量即将满"] = make_hit()
+    role.phase = "recover"
+    role.do_perform()
+    assert role.phase == "farm"
+    assert not set(context.actions) & {"技能", "长按技能"}
+
+
+def test_cycle_reset_clears_assist_stats_but_keeps_pending_request(inverse_skill):
+    """方案 3.4：循环复位只清辅助统计，待确认请求的记账保留。"""
+    context, combat, role, _ = inverse_skill
+    tracker = role.action.assist_tracker
+    tracker.record_request("aux", 1)
+    role.reset_state()
+    assert tracker.stats["requests"] == 0
+    assert tracker.state("aux") == AssistReleaseTracker.REQUESTED

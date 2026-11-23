@@ -77,12 +77,30 @@ def click_any_release_qte(
     context: Context,
     image: Any,
     colors: tuple[str, ...] = _AUTO_RELEASE_SCAN_ORDER,
+    *,
+    tracker: Any | None = None,
+    frame_token: Any = None,
 ) -> str | None:
-    """单次截屏下按顺序检测 QTE ready，命中即点击。返回命中的色位或 None。"""
+    """单次截屏下按顺序检测 QTE ready，命中即点击。返回命中的色位或 None。
+
+    传入 tracker 时按方案 3.4 记账：每个被观测色位先结算待确认请求
+    （ready 消失=已确认、超窗仍在=未确认），命中后只点「非同帧、不在
+    冷却内」的辅助；点击失败即返回 None，不改试其他色位的既有契约。
+    """
     for color in colors:
         if context.tasker.stopping:
             break
+        key = "qte-" + _normalize_color(color)
         result = recognize_release_qte(context, color, image)
-        if result:
-            return _normalize_color(color) if _click_box(context, result.best_result.box) else None
+        if tracker is not None:
+            tracker.observe_slot(key, bool(result))
+        if not result:
+            continue
+        if tracker is not None and not tracker.can_request(key, frame_token):
+            continue
+        if _click_box(context, result.best_result.box):
+            if tracker is not None:
+                tracker.record_request(key, frame_token)
+            return _normalize_color(color)
+        return None
     return None
