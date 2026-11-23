@@ -909,6 +909,8 @@ class InverseCrown(BaseRole):
 
     def _enter_skill(self, *, switch_after: bool, ring_ready: bool = False) -> None:
         self._skill_switch_after = switch_after
+        # 循环标记按新机会更新：每个大招周期一次后置 QTE，同场后续大招不被首个周期锁死。
+        self._post_ult_qte_used = False
         if self._is_cage_mode():
             self.action.logger.info("cage: True")
             self._skill_sub = "cage"

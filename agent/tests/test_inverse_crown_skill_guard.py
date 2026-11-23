@@ -384,3 +384,18 @@ def test_hold_exception_propagates_without_empty_observation(inverse_skill, monk
 
     run_action.assert_called_once_with("长按技能")
     assert role._skill_sub == "cast" and not role._post_ult_qte_used
+
+def test_post_ult_qte_rearms_each_skill_cycle(inverse_skill):
+    """循环标记按新机会更新：同场第二个大招周期重发后置 QTE（方案 3 章 69 行点名缺口）。"""
+    context, _, role, _ = inverse_skill
+    role._enter_skill(switch_after=False)
+    role._finish_skill()
+    assert role._post_ult_qte_used
+    assert context.actions.count("辅助机") == 1
+    assert context.actions.count("qte1") == 1 and context.actions.count("qte2") == 1
+
+    role._enter_skill(switch_after=False)
+    assert not role._post_ult_qte_used
+    role._finish_skill()
+    assert context.actions.count("辅助机") == 2
+    assert context.actions.count("qte1") == 2 and context.actions.count("qte2") == 2
