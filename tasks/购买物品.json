@@ -29,6 +29,15 @@
                     "pipeline_override": {
                         "购买物品": {
                             "next": [
+                                "日常断点_购买物品_宿舍",
+                                "空任务"
+                            ]
+                        },
+                        "日常断点_购买物品_宿舍": {
+                            "attach": {
+                                "daily_progress_key": "购买物品/涂装设计草稿-宿舍商店"
+                            },
+                            "next": [
                                 "在宿舍币商店中",
                                 "[JumpBack]关闭奖励",
                                 "[JumpBack]选择宿舍币商店",
@@ -36,6 +45,11 @@
                                 "[JumpBack]打开宿舍",
                                 "[JumpBack]切换主界面状态"
                             ]
+                        },
+                        "日常完成_购买物品_宿舍": {
+                            "attach": {
+                                "daily_progress_key": "购买物品/涂装设计草稿-宿舍商店"
+                            }
                         }
                     },
                     "label": "$case.选择物品.涂装设计草稿-宿舍商店"
@@ -46,6 +60,15 @@
                     "pipeline_override": {
                         "购买物品": {
                             "next": [
+                                "日常断点_购买物品_宿舍",
+                                "空任务"
+                            ]
+                        },
+                        "日常断点_购买物品_宿舍": {
+                            "attach": {
+                                "daily_progress_key": "购买物品/武器设计草稿-宿舍商店"
+                            },
+                            "next": [
                                 "遣测商店内部",
                                 "[JumpBack]关闭奖励",
                                 "[JumpBack]打开遣测商店",
@@ -53,6 +76,11 @@
                                 "[JumpBack]打开宿舍",
                                 "[JumpBack]切换主界面状态"
                             ]
+                        },
+                        "日常完成_购买物品_宿舍": {
+                            "attach": {
+                                "daily_progress_key": "购买物品/武器设计草稿-宿舍商店"
+                            }
                         },
                         "推荐物品": {
                             "recognition": {

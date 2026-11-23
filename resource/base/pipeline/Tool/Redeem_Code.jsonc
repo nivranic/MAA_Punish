@@ -1,6 +1,21 @@
 {
     "兑换码": {
         "next": [
+            "日常断点_兑换码",
+            "空任务"
+        ]
+    },
+    "日常断点_兑换码": {
+        "recognition": {
+            "type": "Custom",
+            "param": {
+                "custom_recognition": "DailyProgressCheck"
+            }
+        },
+        "attach": {
+            "daily_progress_key": "兑换码"
+        },
+        "next": [
             // 由识别器 CheckRedeemCode 判断要不要兑换
             // 命中（还有码没换）就进「检查是否需要运行」自己的 next 走兑换流程
             // 没命中（没有要换的码）就落到空任务，直接结束

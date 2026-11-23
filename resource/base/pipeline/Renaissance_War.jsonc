@@ -1,6 +1,21 @@
 {
     "诺曼复兴战": {
         "next": [
+            "日常断点_诺曼复兴战",
+            "空任务"
+        ]
+    },
+    "日常断点_诺曼复兴战": {
+        "recognition": {
+            "type": "Custom",
+            "param": {
+                "custom_recognition": "DailyProgressCheck"
+            }
+        },
+        "attach": {
+            "daily_progress_key": "诺曼复兴战"
+        },
+        "next": [
             "未解锁自动扫荡_无提示",
             "打通诺曼复兴战",
             "打通诺曼复兴战条件2",
@@ -13,6 +28,24 @@
             "[JumpBack]滑动_诺曼复兴战内部",
             "[JumpBack]意外点击_限定活动",
             "[JumpBack]意外点击_矿区作战"
+        ]
+    },
+    "日常完成_诺曼复兴战": {
+        "recognition": {
+            "type": "DirectHit",
+            "param": {}
+        },
+        "action": {
+            "type": "Custom",
+            "param": {
+                "custom_action": "DailyProgressMark"
+            }
+        },
+        "attach": {
+            "daily_progress_key": "诺曼复兴战"
+        },
+        "next": [
+            "返回主菜单"
         ]
     },
     "意外点击_矿区作战": {
@@ -40,7 +73,7 @@
             }
         },
         "next": [
-            "返回主菜单"
+            "日常完成_诺曼复兴战"
         ]
     },
     "打通诺曼复兴战条件2_进度": {

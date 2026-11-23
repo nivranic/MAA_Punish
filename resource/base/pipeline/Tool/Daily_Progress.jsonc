@@ -1,0 +1,19 @@
+{
+    // 清空日常断点账本（daily_progress.json），使日常预设下次全量重跑。
+    // 手动工具任务入口；正常日常流程不经过此处。
+    "重置日常断点": {
+        "recognition": {
+            "type": "DirectHit",
+            "param": {}
+        },
+        "action": {
+            "type": "Custom",
+            "param": {
+                "custom_action": "DailyProgressReset"
+            }
+        },
+        "next": [
+            "空任务"
+        ]
+    }
+}

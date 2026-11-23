@@ -128,6 +128,17 @@ def test_explicit_legacy_recovery_is_scoped_and_normal_d03_is_preserved(
         "pre_wait_freezes": {"time": 0}, "post_wait_freezes": {"time": 0},
         "on_error": [recovery.RECOVERY_NODE],
     } for name in resource.node_list if name not in {recovery.RECOVERY_NODE, recovery.BACK_NODE}}
+    # 断点续接守卫/落账节点对本用例透传（不验账本语义，只保 D03 链路形状）。
+    # on_error 与其余节点一致路由 ScopedRecovery，保持超时型 Failed 的原语义。
+    for name in resource.node_list:
+        if name.startswith("日常断点_") or name.startswith("日常完成_"):
+            patch[name] = {
+                "recognition": {"type": "DirectHit", "param": {}},
+                "action": {"type": "DoNothing"},
+                "timeout": 15, "rate_limit": 0, "pre_delay": 0, "post_delay": 0,
+                "pre_wait_freezes": {"time": 0}, "post_wait_freezes": {"time": 0},
+                "on_error": [recovery.RECOVERY_NODE],
+            }
     # Daily tasks now inherit the graceful handler. Exercise the retained
     # legacy callback only through an explicit test-local route.
     # Keep the actual return-icon TemplateMatch, target ROI and image. Only its

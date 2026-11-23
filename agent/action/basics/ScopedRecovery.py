@@ -41,6 +41,8 @@ PRIOR_RELEASE_VERIFY_SECONDS = 2.0
 _ROOMS = ("蔚蓝之夏", "岁雪新宵", "庭梨栖雪", "漫花清夏", "鲸律星屿", "云海空岛", "经典舱室")
 _D03_NAVIGATION = {"指挥局": "DoNothing", GUILD_NODE: "DoNothing", "打开指挥局": "Click",
                    "切换主界面状态": "Click", "意外点击_主界面": "Click", "识别文字颜色": "DoNothing",
+                   # 断点续接守卫（2026-11-23）：账本检查节点，动作恒 DoNothing，属安全导航。
+                   "日常断点_指挥局": "DoNothing",
                    **{"移动_" + name: "Swipe" for name in _ROOMS},
                    **{"识别_" + name: "DoNothing" for name in _ROOMS}}
 _D03_BUSINESS = frozenset({"检查指定按钮", "关闭奖励_指挥局", "返回", BACK_NODE})

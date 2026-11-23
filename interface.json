@@ -292,6 +292,10 @@
                     "enabled": false
                 },
                 {
+                    "name": "重置日常断点",
+                    "enabled": false
+                },
+                {
                     "name": "链合回路",
                     "enabled": false
                 },
@@ -342,6 +346,7 @@
         "./tasks/寒境曙光.json",
         "./tasks/神寂启示录.json",
         "./tasks/雾夜镇魂曲.json",
-        "./tasks/Screencap.json"
+        "./tasks/Screencap.json",
+        "./tasks/重置日常断点.json"
     ]
 }

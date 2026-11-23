@@ -35,7 +35,11 @@ def test_each_room_checks_lower_layers_before_final_score_or_manual_battle(zone)
     assert NODES[expected[0].replace("[JumpBack]", "")]["max_hit"] == 1
     assert NODES["囚笼_自动作战"]["max_hit"] == 6
     assert NODES["囚笼_确认扫荡"]["max_hit"] == 6
-    assert NODES["幻痛囚笼"]["next"].index("挑战次数不足") < NODES["幻痛囚笼"]["next"].index("检查A区")
+    # 断点续接接线后入口工作链在守卫节点 next 下。
+    entry_next = NODES["幻痛囚笼"]["next"]
+    if str(entry_next[0]).startswith("日常断点_"):
+        entry_next = NODES[str(entry_next[0])]["next"]
+    assert entry_next.index("挑战次数不足") < entry_next.index("检查A区")
 
 
 @pytest.mark.parametrize(

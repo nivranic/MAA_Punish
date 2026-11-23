@@ -2,6 +2,22 @@
     "领取体力": {
         "timeout": 120000,
         "next": [
+            "日常断点_领取体力",
+            "空任务"
+        ]
+    },
+    "日常断点_领取体力": {
+        "recognition": {
+            "type": "Custom",
+            "param": {
+                "custom_recognition": "DailyProgressCheck"
+            }
+        },
+        "attach": {
+            "daily_progress_key": "领取体力"
+        },
+        "timeout": 120000,
+        "next": [
             "补给包售罄",
             "[JumpBack]关闭奖励",
             "[JumpBack]领取",
@@ -12,6 +28,25 @@
             "[JumpBack]意外点击_主界面",
             "[JumpBack]意外点击_皮肤卡池",
             "[JumpBack]意外点击_涂装界面"
+        ]
+    },
+    "日常完成_领取体力": {
+        "recognition": {
+            "type": "DirectHit",
+            "param": {}
+        },
+        "action": {
+            "type": "Custom",
+            "param": {
+                "custom_action": "DailyProgressMark"
+            }
+        },
+        "attach": {
+            "daily_progress_key": "领取体力"
+        },
+        "next": [
+            "返回主菜单",
+            "[JumpBack]关闭奖励"
         ]
     },
     "意外点击_涂装界面": {
@@ -61,8 +96,7 @@
             }
         },
         "next": [
-            "返回主菜单",
-            "[JumpBack]关闭奖励"
+            "日常完成_领取体力"
         ]
     },
     "进入采购": {

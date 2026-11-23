@@ -274,6 +274,14 @@ def test_mapping_settlement_retry_uses_button_result_and_is_bounded():
     assert "[JumpBack]结算_点击失效" in mapping["结算"]["next"]
 
 
+def _entry_next(war, parent):
+    """入口工作链：断点续接接线后入口 next 首位是 守卫节点，原链在其 next 下。"""
+    branches = war[parent]["next"]
+    if branches and str(branches[0]).startswith("日常断点_"):
+        return war[str(branches[0])]["next"]
+    return branches
+
+
 @pytest.mark.parametrize(
     ("parent", "later"),
     [("纷争战区", "纷争战区内部"),
@@ -282,7 +290,7 @@ def test_mapping_settlement_retry_uses_button_result_and_is_bounded():
 )
 def test_war_zone_closes_profile_modal_before_map_actions(parent, later):
     war = jsonc.loads((PIPELINE / "War_Zone.jsonc").read_text(encoding="utf-8"))
-    branches = war[parent]["next"]
+    branches = _entry_next(war, parent)
     assert branches.index("[JumpBack]关闭战区玩家详情") < branches.index(later)
     close = war["关闭战区玩家详情"]
     assert close["recognition"]["param"]["all_of"] == [
@@ -445,12 +453,12 @@ def test_shared_battle_start_consumers_are_frozen():
         ("选择角色程序", "Role_Selection.jsonc"),
         ("使用预设", "Role_Selection.jsonc"),
         ("写入预设队伍色位", "Role_Selection.jsonc"),
-        ("历战映射", "HighRankMapping.jsonc"),
+        # 断点续接接线：历战映射 入口的工作链搬入守卫节点（2026-11-23，链条语义不变）。
+        ("日常断点_历战映射", "HighRankMapping.jsonc"),
         ("开始挑战", "HighRankMapping.jsonc"),
         ("作战界面", "Simulated_Siege.jsonc"),
-        ("意外步骤_战斗界面", "Roguelike_1/Roguelike_1.jsonc"),
-        ("意外识别_已经进入选人界面", "Roguelike_1/Roguelike_1.jsonc"),
-        ("确认进入战斗冲突", "Roguelike_1/Roguelike_1.jsonc"),
+        # 2026-11-23 登记的预存在陈旧项：82-86 批把 R01 三个节点改为固定坐标 Click
+        # 后，其 next 不再引用共享 作战开始（不再是 next-list consumer），冻结表同步收窄。
         ("战斗事件_厄愿潮声", "Roguelike_2/Roguelike_2.jsonc"),
         ("肉鸽战斗_寒境曙光", "Roguelike_4/Roguelike_4.jsonc"),
     }

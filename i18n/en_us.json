@@ -414,6 +414,8 @@
     "task.结束游戏": "Close Game",
     "task.手动更新角色缓存": "Refresh Character Cache",
     "task.手动更新角色缓存.description": "<p>Manually refreshes the cached character list.</p>",
+    "task.重置日常断点": "Reset Daily Checkpoints",
+    "task.重置日常断点.description": "<p>Clears the daily checkpoint ledger so the next daily preset run executes every instance from scratch.</p>",
     "task.手动更新组件区域": "Refresh Button Layout",
     "task.手动更新组件区域.description": "<p>Manually refreshes the battle-screen button regions. Use this after moving buttons with the in-game Button Position setting, so the layout is detected again.</p>",
     "task.洗词缀": "Reroll Resonance",

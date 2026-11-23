@@ -7,6 +7,21 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
+            "日常断点_拟战场域",
+            "空任务"
+        ]
+    },
+    "日常断点_拟战场域": {
+        "recognition": {
+            "type": "Custom",
+            "param": {
+                "custom_recognition": "DailyProgressCheck"
+            }
+        },
+        "attach": {
+            "daily_progress_key": "拟战场域"
+        },
+        "next": [
             "吃体力药",
             "拟战场域_作战任务",
             "[JumpBack]返回主菜单",

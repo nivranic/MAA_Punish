@@ -12,6 +12,11 @@ from action.basics.ResetCount import ResetCount
 from action.basics.AuditPurchase import AuditPurchase
 from action.basics.AuditPurchaseReconcile import AuditPurchaseReconcile
 from action.basics.ScopedRecovery import ScopedRecovery
+from action.basics.daily_progress import (
+    DailyProgressCheck,
+    DailyProgressMark,
+    DailyProgressReset,
+)
 
 from action.combat.entry.runner import CombatRunner
 from action.combat.entry.roguelike3_resume import R03CombatRunner
@@ -47,6 +52,21 @@ class Agent_D14PurchaseObservation(D14PurchaseObservation):
 
 @AgentServer.custom_action("AuditPurchase")
 class Agent_AuditPurchase(AuditPurchase):
+    pass
+
+
+@AgentServer.custom_recognition("DailyProgressCheck")
+class Agent_DailyProgressCheck(DailyProgressCheck):
+    pass
+
+
+@AgentServer.custom_action("DailyProgressMark")
+class Agent_DailyProgressMark(DailyProgressMark):
+    pass
+
+
+@AgentServer.custom_action("DailyProgressReset")
+class Agent_DailyProgressReset(DailyProgressReset):
     pass
 
 

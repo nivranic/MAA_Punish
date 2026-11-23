@@ -96,6 +96,26 @@
         ],
         "timeout": 5000,
         "next": [
+            "日常断点_历战映射",
+            "空任务"
+        ]
+    },
+    "日常断点_历战映射": {
+        "recognition": {
+            "type": "Custom",
+            "param": {
+                "custom_recognition": "DailyProgressCheck"
+            }
+        },
+        "attach": {
+            "daily_progress_key": "历战映射"
+        },
+        "timeout": 5000,
+        "on_error": [
+            "返回主菜单",
+            "任务失败优雅退出"
+        ],
+        "next": [
             "活动未开启",
             "[JumpBack]覆盖布局菜单",
             "[JumpBack]成员整备",
@@ -110,6 +130,26 @@
             "[JumpBack]意外点击_物品详情",
             "[JumpBack]意外点击_历战分数",
             "[JumpBack]作战开始"
+        ]
+    },
+    "日常完成_历战映射": {
+        "recognition": {
+            "type": "DirectHit",
+            "param": {}
+        },
+        "action": {
+            "type": "Custom",
+            "param": {
+                "custom_action": "DailyProgressMark"
+            }
+        },
+        "attach": {
+            "daily_progress_key": "历战映射"
+        },
+        "next": [
+            "[JumpBack]领取历战奖励",
+            "[JumpBack]关闭奖励",
+            "返回主菜单"
         ]
     },
     "活动未开启": {
@@ -479,9 +519,7 @@
             "type": "Click"
         },
         "next": [
-            "[JumpBack]领取历战奖励",
-            "[JumpBack]关闭奖励",
-            "返回主菜单"
+            "日常完成_历战映射"
         ],
         "focus": {
             "Node.Recognition.Succeeded": "$focus.识别历战分数"

@@ -1,0 +1,14 @@
+{
+    "task": [
+        {
+            "name": "重置日常断点",
+            "group": [
+                "tools"
+            ],
+            "entry": "重置日常断点",
+            "description": "$task.重置日常断点.description",
+            "label": "$task.重置日常断点"
+        }
+    ],
+    "option": {}
+}

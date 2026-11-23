@@ -1,6 +1,21 @@
 {
     "宿舍任务": {
         "next": [
+            "日常断点_宿舍任务",
+            "空任务"
+        ]
+    },
+    "日常断点_宿舍任务": {
+        "recognition": {
+            "type": "Custom",
+            "param": {
+                "custom_recognition": "DailyProgressCheck"
+            }
+        },
+        "attach": {
+            "daily_progress_key": "宿舍任务"
+        },
+        "next": [
             "宿舍内部",
             "[JumpBack]打开宿舍",
             "[JumpBack]意外点击_主界面"

@@ -1,6 +1,21 @@
 {
     "购买物品": {
         "next": [
+            "日常断点_购买物品_逆元碎片",
+            "空任务"
+        ]
+    },
+    "日常断点_购买物品_逆元碎片": {
+        "recognition": {
+            "type": "Custom",
+            "param": {
+                "custom_recognition": "DailyProgressCheck"
+            }
+        },
+        "attach": {
+            "daily_progress_key": "购买物品/逆元碎片-普通商店"
+        },
+        "next": [
             "购买",
             "[JumpBack]检查碎片",
             "[JumpBack]滑动",
@@ -8,6 +23,25 @@
             "[JumpBack]切换主界面状态",
             "[JumpBack]错误点击_商品",
             "[JumpBack]意外点击_主界面"
+        ]
+    },
+    "日常完成_购买物品_逆元碎片": {
+        "recognition": {
+            "type": "DirectHit",
+            "param": {}
+        },
+        "action": {
+            "type": "Custom",
+            "param": {
+                "custom_action": "DailyProgressMark"
+            }
+        },
+        "attach": {
+            "daily_progress_key": "购买物品/逆元碎片-普通商店"
+        },
+        "next": [
+            "关闭界面",
+            "返回主菜单"
         ]
     },
     "错误点击_商品": {
@@ -118,8 +152,7 @@
             }
         },
         "next": [
-            "关闭界面",
-            "返回主菜单"
+            "日常完成_购买物品_逆元碎片"
         ]
     },
     "识别D12购买意图": {

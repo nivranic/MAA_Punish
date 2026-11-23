@@ -394,6 +394,43 @@
             }
         },
         "next": [
+            "日常完成_购买物品_宿舍"
+        ]
+    },
+    "日常断点_购买物品_宿舍": {
+        "recognition": {
+            "type": "Custom",
+            "param": {
+                "custom_recognition": "DailyProgressCheck"
+            }
+        },
+        "attach": {
+            "daily_progress_key": "购买物品/涂装设计草稿-宿舍商店"
+        },
+        "next": [
+            "在宿舍币商店中",
+            "[JumpBack]关闭奖励",
+            "[JumpBack]选择宿舍币商店",
+            "[JumpBack]打开宿舍商店",
+            "[JumpBack]打开宿舍",
+            "[JumpBack]切换主界面状态"
+        ]
+    },
+    "日常完成_购买物品_宿舍": {
+        "recognition": {
+            "type": "DirectHit",
+            "param": {}
+        },
+        "action": {
+            "type": "Custom",
+            "param": {
+                "custom_action": "DailyProgressMark"
+            }
+        },
+        "attach": {
+            "daily_progress_key": "购买物品/涂装设计草稿-宿舍商店"
+        },
+        "next": [
             "返回主菜单"
         ]
     },

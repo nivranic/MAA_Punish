@@ -1,6 +1,21 @@
 {
     "邮件": {
         "next": [
+            "日常断点_领取邮件",
+            "空任务"
+        ]
+    },
+    "日常断点_领取邮件": {
+        "recognition": {
+            "type": "Custom",
+            "param": {
+                "custom_recognition": "DailyProgressCheck"
+            }
+        },
+        "attach": {
+            "daily_progress_key": "领取邮件"
+        },
+        "next": [
             "领取全部",
             "[JumpBack]打开邮件",
             "[JumpBack]意外点击_主界面"
