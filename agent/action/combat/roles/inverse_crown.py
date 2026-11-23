@@ -324,6 +324,8 @@ class InverseCrown(BaseRole):
         self._stationary_deadline = None
         self._stationary_last_sequence = 0
         self._settlement_pending = False
+        # 长期资源记账（方案 3.5：阶段资源/补资源动作/耗时；循环复位只清统计）。
+        self._resource_stats = {"rebuild_taps": 0, "started_at": None}
 
     def reset_state(self) -> None:
         entry = getattr(self.combat, "fresh_entry", None)
@@ -335,6 +337,14 @@ class InverseCrown(BaseRole):
         ):
             # A cycle reset cannot erase an unfinished hold/settlement or failure.
             return
+        stats = self._resource_stats
+        if stats["rebuild_taps"]:
+            elapsed = time.monotonic() - stats["started_at"] if stats["started_at"] else 0.0
+            self.action.logger.info(
+                "inverse_crown 资源统计: rebuild_taps=%d elapsed=%.1fs",
+                stats["rebuild_taps"], elapsed,
+            )
+        self._resource_stats = {"rebuild_taps": 0, "started_at": None}
         super().reset_state()
         self._skill_charge_deadline = 0.0
         self._skill_cast_ticks = 0
@@ -760,6 +770,10 @@ class InverseCrown(BaseRole):
             raise CombatInputError("inverse_crown:resource_tap_release_unconfirmed")
         scope.assert_active()
         self._check_stationary_budget()
+        stats = self._resource_stats
+        stats["rebuild_taps"] += 1
+        if stats["started_at"] is None:
+            stats["started_at"] = time.monotonic()
         # Keep prepare's original deadline. Re-entering here could turn an
         # unavailable detector/resource into an unbounded attack loop.
 

@@ -1,6 +1,7 @@
 """Experimental signal-consumer contracts, independent of the live single cycle."""
 
 from dataclasses import replace
+from unittest.mock import Mock
 
 import pytest
 
@@ -865,3 +866,25 @@ def test_resource_tap_last_sdk_query_cannot_outlive_its_start_deadline(monkeypat
     assert clock.now == latency and controller.posts == ["capture"]
     assert not controller.touches and role.phase == "recover"
     assert combat.input_scope.owned_contact is None and not combat.input_scope.release_pending
+
+
+def test_long_same_field_rebuild_records_stats_without_switch(monkeypatch):
+    """长期补资源记账（方案 3.5）：同场多 tick 补资源不切人，循环复位只清统计。"""
+    role, combat, _, controller, _ = setup_role(monkeypatch)
+    switch = Mock()
+    monkeypatch.setattr(combat, "request_role_switch", switch)
+    observations(monkeypatch, role, [
+        dict(settlement_required=NO, abyss_phase=NO, slash_phase=NO,
+             special_activated=NO, ultimate_ready=NO)
+        for _ in range(5)
+    ])
+    for _ in range(5):
+        tick(role)
+    assert role._resource_stats["rebuild_taps"] == 5
+    assert role._resource_stats["started_at"] is not None
+    assert not switch.called
+    assert sum(1 for post in controller.posts if isinstance(post, tuple) and post[0] == "down") == 5
+
+    role._stationary_deadline = None
+    role.reset_state()
+    assert role._resource_stats == {"rebuild_taps": 0, "started_at": None}
