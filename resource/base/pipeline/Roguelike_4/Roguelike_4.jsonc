@@ -103,11 +103,13 @@
         "post_delay": 1000,
         "next": [
             "寒境曙光主界面_重开",
+            "寒境曙光主界面",
             "[JumpBack]关闭升级提示",
             "[JumpBack]完成所有任务"
         ]
     },
     "寒境曙光主界面_重开": {
+        "max_hit": 10,
         "recognition": {
             "type": "TemplateMatch",
             "param": {
