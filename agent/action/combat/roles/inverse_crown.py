@@ -929,7 +929,8 @@ class InverseCrown(BaseRole):
     def _finish_skill(self) -> None:
         if not self._post_ult_qte_used:
             self.action.auxiliary_machine()
-            self.action.use_qte()
+            # ready 确认单点：避免固定队友坐标盲点触发换人（方案 3.4）。
+            self.action.use_ready_qte()
             self._post_ult_qte_used = True
         self._skill_sub = ""
         self.phase = "switch" if self._skill_switch_after else "idle"

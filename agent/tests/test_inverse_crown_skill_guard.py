@@ -86,8 +86,12 @@ def test_confirmed_ready_enters_protected_cast_even_at_deadline(inverse_skill, a
     assert context.actions == ["长按技能"]
     assert role._skill_sub == "finish" and combat.is_observation_protected()
 
+    ready = make_hit()
+    ready.best_result.box = (1100, 100, 120, 120)
+    context.recognition_map["释放蓝色QTE"] = ready
     role.do_perform()
-    assert context.actions == ["长按技能", "辅助机", "qte1", "qte2"]
+    assert context.actions == ["长按技能", "辅助机"]
+    assert len(context.tasker.controller.clicks) == 1
     assert role.phase == "switch" and role._post_ult_qte_used
 
 
@@ -97,9 +101,13 @@ def test_cage_skill_preserves_existing_protected_release(inverse_skill):
     role._enter_skill(switch_after=True)
 
     assert role._skill_sub == "cage" and combat.is_observation_protected()
+    ready = make_hit()
+    ready.best_result.box = (1100, 100, 120, 120)
+    context.recognition_map["释放蓝色QTE"] = ready
     role.do_perform()
 
-    assert context.actions == ["长按技能", "辅助机", "qte1", "qte2"]
+    assert context.actions == ["长按技能", "辅助机"]
+    assert len(context.tasker.controller.clicks) == 1
     assert role.phase == "switch" and role._post_ult_qte_used
 
 
@@ -388,14 +396,17 @@ def test_hold_exception_propagates_without_empty_observation(inverse_skill, monk
 def test_post_ult_qte_rearms_each_skill_cycle(inverse_skill):
     """循环标记按新机会更新：同场第二个大招周期重发后置 QTE（方案 3 章 69 行点名缺口）。"""
     context, _, role, _ = inverse_skill
+    result = make_hit()
+    result.best_result.box = (1100, 100, 120, 120)
+    context.recognition_map["释放蓝色QTE"] = result
     role._enter_skill(switch_after=False)
     role._finish_skill()
     assert role._post_ult_qte_used
     assert context.actions.count("辅助机") == 1
-    assert context.actions.count("qte1") == 1 and context.actions.count("qte2") == 1
+    assert len(context.tasker.controller.clicks) == 1
 
     role._enter_skill(switch_after=False)
     assert not role._post_ult_qte_used
     role._finish_skill()
     assert context.actions.count("辅助机") == 2
-    assert context.actions.count("qte1") == 2 and context.actions.count("qte2") == 2
+    assert len(context.tasker.controller.clicks) == 2
