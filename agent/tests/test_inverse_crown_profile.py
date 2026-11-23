@@ -426,3 +426,25 @@ def test_missing_identity_templates_are_unknown_in_strict_observation(monkeypatc
     with pytest.raises(InverseCrownUnavailable, match="field_identity_unknown"):
         combat.refresh_field_role(combat.roles["R"])
     assert combat.context.actions == []
+
+
+def test_team_templates_register_ice_and_burn_with_verify_items():
+    """方案 3.5 候选模板登记：成员/默认操作/核对前提齐全（效应证据留真机）。"""
+    from action.combat.config.inverse_crown_profile import TEAM_TEMPLATES
+
+    assert set(TEAM_TEMPLATES) == {"ice", "burn"}
+    for key, tpl in TEAM_TEMPLATES.items():
+        assert tpl["members"][0] == "逆冕", key
+        assert len(tpl["members"]) == 3, key
+        assert tpl["defaults"] and tpl["verify"], key
+    assert "焚烧" in TEAM_TEMPLATES["ice"]["verify"][-1]
+
+
+def test_team_template_field_validates_and_from_node_data_roundtrips():
+    for value in ("ice", "burn", "unknown"):
+        profile = InverseCrownProfile(team_template=value)
+        assert profile.team_template == value
+    with pytest.raises(InverseCrownProfileError):
+        InverseCrownProfile(team_template="frost")
+    node = {"attach": {"inverse_crown_profile": {"enabled": True, "scene": "single", "team_template": "ice"}}}
+    assert InverseCrownProfile.from_node_data(node).team_template == "ice"

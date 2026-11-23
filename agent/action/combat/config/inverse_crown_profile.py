@@ -11,6 +11,24 @@ from dataclasses import dataclass, fields
 from typing import Any
 
 
+# 方案 3.5 候选模板（原作者攻略名单；冰队优先是复杂度选择，不是强度排序）。
+# 效应证据（触发/维持/失效/恢复）须真机登记；本表只固化成员与核对前提。
+TEAM_TEMPLATES: dict[str, dict[str, Any]] = {
+    "ice": {
+        "label": "优先冰队",
+        "members": ("逆冕", "万事·明晰梦", "布偶熊·骇影"),
+        "defaults": "逆冕队长、首发、留场，ready QTE",
+        "verify": ("实际持有/次数", "意识", "增益触发", "非焚烧/空置效应是否实际生效"),
+    },
+    "burn": {
+        "label": "焚烧候选",
+        "members": ("逆冕", "七实·芒星之迹", "维罗妮卡·铮骨"),
+        "defaults": "独立配置验证后台收益",
+        "verify": ("跃升", "焚烧效应", "建场和续场条件", "有限收益失效后的表现"),
+    },
+}
+
+
 class InverseCrownProfileError(ValueError):
     """A malformed profile must not silently enable ordinary combat."""
 
@@ -42,6 +60,7 @@ facts remain separate from live resource observations and action outcomes.
     source: str = "unknown"
     rank: str = "unknown"
     signature_weapon_confirmed: bool = False
+    team_template: str = "unknown"
 
     def __post_init__(self) -> None:
         for name in ("enabled", "signature_weapon_confirmed"):
@@ -51,6 +70,7 @@ facts remain separate from live resource observations and action outcomes.
             "scene": {"single", "multi", "unknown"},
             "source": {"self", "trial", "borrowed", "mode", "unknown"},
             "rank": {"S", "S5", "SS", "SS3", "SSS", "SSS3", "SSS6", "SSS+", "unknown"},
+            "team_template": {"ice", "burn", "unknown"},
         }
         for name, allowed in choices.items():
             value = getattr(self, name)
