@@ -487,7 +487,7 @@ class InverseCrown(BaseRole):
         except BaseException as exc:
             failed_phase = self.phase
             self.phase = "recover"
-            scope.fail(f"inverse_crown:{failed_phase}_failed:{type(exc).__name__}")
+            scope.fail(f"inverse_crown:requested={failed_phase}/{self._skill_sub or '-'}_actual_failed:{type(exc).__name__}")
             raise
 
     def _read_stationary_signals(self, image) -> _StationarySignals:
@@ -893,7 +893,7 @@ class InverseCrown(BaseRole):
                 self.combat.fresh_entry.retire()
             failed_phase = self.phase
             self.phase = "recover"
-            scope.fail(f"inverse_crown:{failed_phase}_failed:{type(exc).__name__}")
+            scope.fail(f"inverse_crown:requested={failed_phase}/{self._skill_sub or '-'}_actual_failed:{type(exc).__name__}")
             raise
     def _energy_almost_full(self) -> bool:
         return bool(self.action.check_status(_ENERGY_FULL_NODE))
