@@ -888,3 +888,19 @@ def test_long_same_field_rebuild_records_stats_without_switch(monkeypatch):
     role._stationary_deadline = None
     role.reset_state()
     assert role._resource_stats == {"rebuild_taps": 0, "started_at": None}
+
+
+def test_red_ring_threshold_follows_effective_rank(monkeypatch):
+    """阶级只在改变行为时分支（方案 3.2）：SSS 斩切球 8→12；未知来源不继承账号 rank。"""
+    role, combat, _, _, _ = setup_role(monkeypatch)
+    for rank, source, expected in (
+        ("SSS", "self", 12),
+        ("SSS3", "self", 12),
+        ("S5", "self", 8),
+        ("SS3", "self", 8),
+        ("SSS", "unknown", 8),
+        ("unknown", "self", 8),
+    ):
+        role.inverse_crown_profile = InverseCrownProfile(
+            enabled=True, scene="single", rank=rank, source=source)
+        assert role._red_ring_ready_threshold() == expected, (rank, source)

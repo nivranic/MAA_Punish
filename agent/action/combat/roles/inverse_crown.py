@@ -54,7 +54,9 @@ _SKILL_CAST_MAX = 20
 _FARM_MAX_TICKS = 20
 _SPECIAL_BALL_MIN = 7
 # 红环就绪阈值：手录视频实证特殊球 ≈12/16 时蓝圈亮红环（非 16 满）。
-_RED_RING_READY = 12
+# SSS 起斩切球由 8 增至 12（方案 3.2 阶级表）；未识别阶级不继承账号上限。
+_RED_RING_READY_BASE = 8
+_RED_RING_READY_SSS = 12
 # 以下时长为临时先验，未经真机标定；只作输入预算，不证明游戏内状态。
 _BURST_HOLD_MS = 3000
 _CHARGED_SLASH_MS = 4000
@@ -912,6 +914,10 @@ class InverseCrown(BaseRole):
     def _energy_almost_full(self) -> bool:
         return bool(self.action.check_status(_ENERGY_FULL_NODE))
 
+    def _red_ring_ready_threshold(self) -> int:
+        rank = self.inverse_crown_profile.effective_rank
+        return _RED_RING_READY_SSS if rank.startswith("SSS") else _RED_RING_READY_BASE
+
     def _special_ball_ready(self) -> bool:
         return bool(self.action.check_status(_SPECIAL_BALL_NODE))
 
@@ -959,7 +965,7 @@ class InverseCrown(BaseRole):
             return
 
         ball_count = self.action.count_signal_balls()
-        if ball_count >= _RED_RING_READY:
+        if ball_count >= self._red_ring_ready_threshold():
             self.action.logger.info("红环就绪(%s/16)，进入红球全消爆发", ball_count)
             self.phase = "burst_hold"
             return
@@ -996,7 +1002,7 @@ class InverseCrown(BaseRole):
             )
         self._enter_skill(
             switch_after=True,
-            ring_ready=self.action.count_signal_balls() >= _RED_RING_READY,
+            ring_ready=self.action.count_signal_balls() >= self._red_ring_ready_threshold(),
         )
 
     def _phase_burst_hold(self) -> None:
@@ -1073,7 +1079,7 @@ class InverseCrown(BaseRole):
                 return
             ball_count = self.action.count_signal_balls()
             if (
-                ball_count < _RED_RING_READY
+                ball_count < self._red_ring_ready_threshold()
                 or self._skill_cast_ticks >= _TAP_CAST_MAX
             ):
                 self._skill_sub = "finish"
