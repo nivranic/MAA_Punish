@@ -274,6 +274,45 @@ def _stationary_abyss_shape(image, geometry) -> _Signal:
     return _Signal.UNKNOWN
 
 
+def _stationary_slash_phase(image, geometry) -> _Signal:
+    """Classify the 万劫 slash form or its positive absence; never infer entry.
+
+    slash_phase covers only the 万劫 finisher (满厄债+必杀满蓄力大太刀): its
+    red-storm form floods the core display bottom band (2026-11-24 木桩训练
+    calibration set: execution frame bottom-row pink 1529 with total 4134;
+    the setup-page red-platform decoy keeps the bottom band empty at total
+    ~1000). The sheathed idle blade mass in the core top band or the
+    right-edge red-sheath display positively marks the not-slash state.
+    断念 thrust/sweep transients are contrast moves and stay UNKNOWN — they
+    never authorize the slash branch, nor does a charged ring or any timer.
+    """
+    if (
+        not _supported_visual_geometry(image, geometry)
+        or geometry.resource_roi != (76, 62, 213, 3)
+        or geometry.skill_roi != (942, 594, 124, 126)
+        or geometry.core_roi != (493, 602, 294, 50)
+    ):
+        return _Signal.UNKNOWN
+    core = image[602:652, 493:787].astype(np.int16)
+    blue, green, red = (core[..., channel] for channel in range(3))
+    pink = (red >= 180) & (red - green >= 50) & (red - blue >= 25)
+    if int(pink[34:].sum()) >= 200 and int(pink.sum()) >= 800:
+        return _Signal.YES
+    top = pink[:17]
+    if int(top[:, 49:98].sum()) >= 5 and int(top[:, 98:147].sum()) >= 90:
+        return _Signal.NO
+    sheath = image[465:595, 1060:1280].astype(np.int16)
+    blue, green, red = (sheath[..., channel] for channel in range(3))
+    gold = (
+        (red >= 150) & (green >= 110) & (blue <= 90)
+        & (red - blue >= 80) & (green - blue >= 40)
+    )
+    scarlet = (red >= 110) & (red - green >= 45) & (red - blue >= 45)
+    if int(gold.sum()) >= 2 and int(scarlet.sum()) >= 400:
+        return _Signal.NO
+    return _Signal.UNKNOWN
+
+
 @dataclass(frozen=True, slots=True)
 class _StationarySignals:
     generation: int
@@ -548,6 +587,7 @@ class InverseCrown(BaseRole):
             and geometry.core_roi == (493, 602, 294, 50)
         ):
             ultimate_ready = _Signal.YES
+        slash_phase = _stationary_slash_phase(image, geometry)
         initial = False
         entry = getattr(self.combat, "fresh_entry", None)
         if entry is not None and geometry is None:
@@ -561,6 +601,7 @@ class InverseCrown(BaseRole):
             skill_blue_ring=skill_blue_ring,
             abyss_phase=abyss_phase,
             ultimate_ready=ultimate_ready,
+            slash_phase=slash_phase,
             settlement_required=_Signal.NO if initial else _Signal.UNKNOWN,
             special_activated=_Signal.YES if initial else _Signal.UNKNOWN,
             initial_basis="same_call_entry_rule_inference" if initial else "unknown",

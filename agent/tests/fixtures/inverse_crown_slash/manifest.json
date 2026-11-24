@@ -1,0 +1,46 @@
+{
+  "samples": [
+    {
+      "file": "wan_s0272.png",
+      "sha256": "d43b5fe5b92442164cb5ab651d132d58a280a68d2c4d4c0e0474d9347faff3f2",
+      "signal": "yes",
+      "note": "万劫红暴执行帧"
+    },
+    {
+      "file": "thrust_s0114.png",
+      "sha256": "864eec4ff7b16914379baa6454d576a2c1d683777ce16f8dc9cf42449eac86bd",
+      "signal": "unknown",
+      "note": "断念突刺对比帧"
+    },
+    {
+      "file": "sweep_s0123.png",
+      "sha256": "456a929cd4edb7ffe64013989218795e551f868e2dea552f5d82bb7b919e61f5",
+      "signal": "unknown",
+      "note": "断念横扫对比帧"
+    },
+    {
+      "file": "idle_b25.png",
+      "sha256": "2ac00c8c0f7b6fba293738620217727d01eea80d038e81b38b578614c0082d51",
+      "signal": "no",
+      "note": "收刀待机正形"
+    },
+    {
+      "file": "sheath_s0278.png",
+      "sha256": "07b8eda15510d9db219e09ce9002ce97ac5ab71d16d161165b1a6d6d10788027",
+      "signal": "no",
+      "note": "红鞘回归正形"
+    },
+    {
+      "file": "decoy_s0000.png",
+      "sha256": "106b64f6bec5dd6b5e9aa04460b3dedbc209ebb90843f541515f3fd35263a98c",
+      "signal": "unknown",
+      "note": "编队页红毯假阳负例"
+    },
+    {
+      "file": "gap_s0273.png",
+      "sha256": "fe688caa492e7ca3639f4e05c96d38ce855925f43b4d9f25bedb4d6af863c44c",
+      "signal": "unknown",
+      "note": "万劫后间隔帧"
+    }
+  ]
+}

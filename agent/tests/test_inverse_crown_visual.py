@@ -502,3 +502,59 @@ def test_actual_ready_producer_cannot_bypass_necessary_settlement(ready_calibrat
     assert case.controller.touches == case.controller.clicks == case.context.actions == []
     case.combat.ensure_strategy_ready(case.role)
     case.controller.post_screencap.assert_not_called()
+
+
+SLASH_FIXTURES = Path(__file__).parent / "fixtures" / "inverse_crown_slash"
+SLASH_SAMPLES = json.loads((SLASH_FIXTURES / "manifest.json").read_text(encoding="utf-8"))["samples"]
+SLASH_GEOM = module._StationaryVisualGeometry(
+    (1280, 720), (76, 62, 213, 3), (942, 594, 124, 126), (1004, 657), (493, 602, 294, 50))
+
+
+def slash_frame(name):
+    sample = next(item for item in SLASH_SAMPLES if item["file"] == name)
+    raw = evidence_path("inverse_crown_slash", sample["file"]).read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == sample["sha256"]
+    frame = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+    assert frame.shape == (720, 1280, 3)
+    return frame, sample
+
+
+@pytest.mark.parametrize("sample", SLASH_SAMPLES, ids=lambda sample: sample["file"])
+def test_real_slash_frames_keep_the_three_valued_contract(sample):
+    frame, _ = slash_frame(sample["file"])
+    assert module._stationary_slash_phase(frame, SLASH_GEOM).value == sample["signal"]
+
+
+def test_slash_shape_requires_the_calibrated_720p_geometry():
+    frame, _ = slash_frame("wan_s0272.png")
+    assert module._stationary_slash_phase(frame, None) is UNKNOWN
+    wrong = replace(SLASH_GEOM, core_roi=(494, 602, 294, 50))
+    assert module._stationary_slash_phase(frame, wrong) is UNKNOWN
+    small = cv2.resize(frame, (640, 360))
+    assert module._stationary_slash_phase(small, SLASH_GEOM) is UNKNOWN
+
+
+def test_blank_canvas_is_unknown_not_slash():
+    blank = np.zeros((720, 1280, 3), dtype=np.uint8)
+    assert module._stationary_slash_phase(blank, SLASH_GEOM) is UNKNOWN
+
+
+def test_read_stationary_signals_publishes_the_slash_phase(calibrated):
+    case = calibrated
+    payload = {"schema": 1, "screen_size": [1280, 720], "source_frame_sha256": "c" * 64,
+               "nodes": {"检查血量": [70, 15, 140, 29], "检查逆冕能量空": [76, 62, 213, 3]}}
+    case.cache[HUD_CALIBRATION_KEY] = make_hud_calibration(payload, "adb", (1280, 720), case.cache)
+    case.path.write_text(json.dumps(case.cache), encoding="utf-8")
+    for name, roi in payload["nodes"].items():
+        case.context.node_data[name]["recognition"]["param"]["roi"] = roi
+    frame, sample = slash_frame("wan_s0272.png")
+    case.image[602:652, 493:787] = frame[602:652, 493:787]
+    case.image[465:595, 1060:1280] = frame[465:595, 1060:1280]
+    snapshot = case.role._read_stationary_signals(case.image)
+    assert snapshot.slash_phase is module._Signal.YES
+    case.image[:] = 0
+    idle, _ = slash_frame("idle_b25.png")
+    case.image[602:652, 493:787] = idle[602:652, 493:787]
+    case.image[465:595, 1060:1280] = idle[465:595, 1060:1280]
+    snapshot = case.role._read_stationary_signals(case.image)
+    assert snapshot.slash_phase is module._Signal.NO
