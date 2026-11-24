@@ -89,7 +89,8 @@ def test_resolve_key_precedence():
 
 def test_check_hits_when_pending_and_misses_when_done(tmp_path):
     monkey_path = tmp_path / "daily_progress.json"
-    dp.mark_done("领取体力", now=dt.datetime(2026, 11, 23, 6, 0), path=monkey_path)
+    # 与 _check 同一真实时刻落账，避免硬编码日期跨游戏日后失效。
+    dp.mark_done("领取体力", path=monkey_path)
     real = dp.ledger_path
     dp.ledger_path = lambda: monkey_path
     try:
