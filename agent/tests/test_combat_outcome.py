@@ -241,7 +241,10 @@ def test_runner_layout_preflight_uses_same_rejection_schema_without_detail_leak(
 
 
 @pytest.mark.parametrize("preflight", [False, True])
-def test_runner_propagates_generic_exception_and_consumes_redacted_outcome(monkeypatch, capsys, preflight):
+def test_runner_contains_generic_exception_and_consumes_redacted_outcome(monkeypatch, capsys, preflight):
+    # ctypes 不翻译回调异常：裸 raise 会让原生 job 停在非终态（invalid(0)）
+    # 被 App 编排层判 task_not_terminal 掐断整条链（2026-11-23 幻痛囚笼
+    # CombatInputError 泄漏实锤）。必须收口为 success=False。
     action = runner.CombatRunner()
     context = FakeContext(node_data={"combat": {}})
     error = OSError("PRIVATE_EXCEPTION_SECRET")
@@ -253,9 +256,7 @@ def test_runner_propagates_generic_exception_and_consumes_redacted_outcome(monke
         monkeypatch.setattr(context, "get_node_data", fail)
     else:
         monkeypatch.setattr(CombatTask, "_wait_in_combat", fail)
-    with pytest.raises(OSError) as raised:
-        action.run(context, SimpleNamespace(node_name="combat"))
-    assert raised.value is error
+    assert action.run(context, SimpleNamespace(node_name="combat")).success is False
     assert action.last_outcome.callback_status == "ERROR"
     assert action.last_outcome.exit_reason == ("preflight_exception" if preflight else "exception")
     assert action.last_outcome.exception_type == "OSError"
@@ -402,15 +403,15 @@ assert outcome.game_outcome == "UNKNOWN"
 assert broken_sink.failures == 1, broken_sink.failures
 assert "PRIVATE_" not in json.dumps(outcome.to_event())
 if case in {"combat_exception", "combat_and_cleanup_exception"}:
-    assert observed is primary, type(observed)
+    assert observed is None and result.success is False, type(observed)
     assert outcome.exception_type == "ValueError"
     assert outcome.callback_status == "ERROR"
 elif case == "cleanup_exception":
-    assert observed is cleanup, type(observed)
+    assert observed is None and result.success is False, type(observed)
     assert outcome.exception_type == "OSError"
     assert outcome.callback_status == "ERROR"
 elif case == "preflight_exception":
-    assert observed is preflight, type(observed)
+    assert observed is None and result.success is False, type(observed)
     assert outcome.exception_type == "OSError"
     assert outcome.callback_status == "ERROR"
     assert outcome.exit_reason == "preflight_exception"
@@ -426,10 +427,9 @@ elif case in {"preflight_rejection", "combat_rejection", "combat_rejection_and_c
         "profile_invalid" if case == "preflight_rejection" else "strategy_not_ready"
     )
 else:
-    assert isinstance(observed, RuntimeError), type(observed)
+    assert observed is None and result.success is False, type(observed)
     assert outcome.callback_status == "ERROR"
     assert outcome.exception_type == "RuntimeError"
-    assert observed.__cause__.__class__ is BrokenPipeError
 if case in {"cleanup_exception", "combat_and_cleanup_exception", "combat_rejection_and_cleanup_exception"}:
     assert outcome.cleanup_exception_type == "OSError"
     assert outcome.cleanup_reason == "input_cleanup_exception"
@@ -477,9 +477,7 @@ def test_preflight_logger_initialization_failure_keeps_primary_contract(monkeypa
         assert action.last_outcome.callback_status == "REJECTED"
         assert action.last_outcome.exception_type == "InverseCrownProfileError"
     else:
-        with pytest.raises(OSError) as raised:
-            action.run(context, SimpleNamespace(node_name="bad"))
-        assert raised.value is primary
+        assert action.run(context, SimpleNamespace(node_name="bad")).success is False
         assert action.last_outcome.callback_status == "ERROR"
         assert action.last_outcome.exception_type == "OSError"
     assert action.last_outcome.emission_exception_type == "PermissionError"

@@ -95,16 +95,20 @@ class CombatRunner(CustomAction):
                 )
             return CustomAction.RunResult(success=False)
         except BaseException as exc:
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                raise
             if combat is None:
                 self._record_preflight_outcome(
                     "preflight_exception", "ERROR", type(exc).__name__,
                 )
-            # ctypes does not translate a Python callback exception into native
-            # action failure. Only this explicit R03 task policy consumes the
-            # existing frozen ERROR outcome as False, reaching its StopTask sink.
-            if r3_identity:
-                return CustomAction.RunResult(success=False)
-            raise
+            # ctypes 不会把 Python 回调异常翻译成原生 action 失败：裸 raise 会
+            # 让原生 job 停留在非终态（invalid(0)），App 编排层判 task_not_terminal
+            # 后掐断整条任务链——2026-11-23 14:47 幻痛囚笼 CombatInputError 泄漏
+            # 实锤（wait_status=0，12 个后续任务被跳过）；17:11 CombatCaptureError
+            # 同洞致 run CANCELLED。统一收口为 success=False 的干净节点失败：任务
+            # 走 graceful_failure_visited 正常收束、链继续；异常类型保留在 outcome，
+            # R03 的 StopTask 消费的同样是 success=False。
+            return CustomAction.RunResult(success=False)
         finally:
             if combat is not None:
                 self.last_outcome = combat.outcome
