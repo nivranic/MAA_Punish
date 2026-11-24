@@ -12,6 +12,7 @@ from test_support.fakes import FakeContext, make_hit
 
 ROOT = Path(__file__).resolve().parents[2]
 DIALOGUE = "跳过战斗对话"
+DEFEAT = "手动战斗_作战失败"
 
 
 def battle_node():
@@ -52,7 +53,7 @@ def test_runner_limits_dialogue_exit_to_the_current_r03_invocation(monkeypatch):
     assert runner.run(context, args).success
     context.node_data["战斗中"] = {}
     assert runner.run(context, args).success
-    assert observed == [(True, (DIALOGUE,)), (False, ())]
+    assert observed == [(True, (DIALOGUE, DEFEAT)), (False, ())]
 
 
 def test_only_r03_requests_the_battle_dialogue_exit():

@@ -504,7 +504,7 @@ def test_canonical_task_adds_only_local_policy_and_stop_sink():
     task = json.loads((ROOT / "tasks/矩阵循生.json").read_bytes())
     patch = task["task"][0]["pipeline_override"]
     assert patch["战斗中"] == {
-        "attach": {**NODE["attach"], "combat_exit_nodes": ["跳过战斗对话"]},
+        "attach": {**NODE["attach"], "combat_exit_nodes": ["跳过战斗对话", "手动战斗_作战失败"]},
         "on_error": ["矩阵循生_身份拒绝停止"],
     }
     assert patch["矩阵循生_身份拒绝停止"] == dict(recognition=dict(type="DirectHit"), action=dict(type="StopTask"), next=[], on_error=[], enabled=True)

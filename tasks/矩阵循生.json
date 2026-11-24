@@ -51,7 +51,8 @@
                 "战斗中": {
                     "attach": {
                         "combat_exit_nodes": [
-                            "跳过战斗对话"
+                            "跳过战斗对话",
+                            "手动战斗_作战失败"
                         ],
                         "roguelike3_identity": {
                             "version": 1,

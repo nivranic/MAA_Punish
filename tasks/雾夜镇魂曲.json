@@ -10,6 +10,13 @@
                 "选择模式_雾夜镇魂曲"
             ],
             "pipeline_override": {
+                "战斗中": {
+                    "attach": {
+                        "combat_exit_nodes": [
+                            "手动战斗_作战失败"
+                        ]
+                    }
+                },
                 "检查主界面2": {
                     "post_delay": 1000,
                     "next": [
