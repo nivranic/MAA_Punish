@@ -14,13 +14,16 @@ from test_r01_zero_refresh_native import ROOT, Controller, load_resource
 from test_support.native_lifecycle import stop_and_wait_idle
 
 DIALOGUE = "跳过战斗对话"
+BOSS = "BOSS战_矩阵循生"
+NARRATIVE = "矩阵循生_叙事右下按钮"
+ADVANCE = "矩阵循生_战斗对话推进"
 READY = "矩阵循生_战斗就绪"
 END = "战斗完成_矩阵循生"
 SINK = "矩阵循生_身份拒绝停止"
 
 
 @pytest.mark.parametrize("language", ["base", "en_US", "zh_TW", "ja_JP"])
-@pytest.mark.parametrize("entry", ["战斗事件_矩阵循生", "BOSS战_矩阵循生", "厄运连锁_矩阵循生"])
+@pytest.mark.parametrize("entry", ["战斗事件_矩阵循生", BOSS, "厄运连锁_矩阵循生"])
 def test_mid_fight_dialogue_returns_to_skip_and_continues_without_identity_stop(
     tmp_path, monkeypatch, language, entry,
 ):
@@ -42,8 +45,12 @@ def test_mid_fight_dialogue_returns_to_skip_and_continues_without_identity_stop(
             # A partial HUD can remain visible behind dialogue, as on device.
             if argv.node_name == "战斗中" and state["page"] in {"combat", "dialogue"}:
                 return (1100, 600, 50, 50)
-            if argv.node_name == DIALOGUE and state["page"] == "dialogue":
-                return (811, 550, 100, 30)
+            if state["page"] == "dialogue":
+                if argv.node_name == DIALOGUE or (entry == BOSS and argv.node_name == NARRATIVE):
+                    # On the archived frame both button recognitions hit the same visible skip.
+                    return (811, 550, 100, 30)
+                if entry == BOSS and argv.node_name == ADVANCE:
+                    return (400, 600, 200, 20)
             if argv.node_name == END and state["page"] == "reward":
                 return (600, 230, 100, 30)
             return None
