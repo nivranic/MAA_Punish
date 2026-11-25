@@ -48,11 +48,12 @@ def test_defeat_page_exits_combat_even_when_hud_is_missing():
     assert context.tasker.controller.clicks == []
 
 
-def test_defeat_page_yields_before_hud_checks_like_other_overlays():
+def test_defeat_page_yields_before_hud_checks_like_other_overlays(capsys):
     context = FakeContext(recognition_map={DEFEAT_R01: make_hit(), "战斗中": make_hit()})
     combat = CombatTask(context, CombatCheck(exit_nodes=(DEFEAT_R01,)))
     combat.frame = b"same-defeat-frame"
     assert combat._check_combat_presence() == "outer_interface"
+    assert f"识别到战斗退出界面: {DEFEAT_R01}" in capsys.readouterr().out
 
 
 def test_without_exit_policy_a_defeat_frame_does_not_exit_combat():

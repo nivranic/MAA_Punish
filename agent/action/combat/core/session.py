@@ -1393,7 +1393,9 @@ class CombatTask:
 
         固定 overlay（重启等）→ 血量连续为 0 → in_combat → in_outer_interface → 8 秒丢失超时。
         """
-        if self.combat_check.match_exit_overlay(self.context, self):
+        exit_overlay = self.combat_check.match_exit_overlay(self.context, self)
+        if exit_overlay:
+            self.logger.info("识别到战斗退出界面: %s", exit_overlay)
             return "outer_interface"
 
         hp_exit = self._check_hp_zero_exit()

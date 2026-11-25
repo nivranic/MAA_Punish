@@ -185,7 +185,6 @@ class BaseCombatCheck(ABC):
         for name in (*COMBAT_EXIT_OVERLAY_NODES, *self.exit_nodes):
             result = context.run_recognition(name, image)
             if result and result.hit:
-                logger.info("识别到战斗退出界面: %s", name)
                 return name
         return None
 
