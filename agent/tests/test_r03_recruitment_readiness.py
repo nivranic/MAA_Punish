@@ -59,27 +59,36 @@ def test_exact_opening_budget_does_not_constrain_a_later_budget_read(tmp_path):
     assert len(inputs) == 1 and observations == [True, (3, 3)]
 
 
-@pytest.mark.parametrize("ready,budget,expected", [
-    (True, (5, 5), True), (False, (5, 5), False), (True, None, False),
+@pytest.mark.parametrize("ready,list_budget,team_budget,expected", [
+    (True, (5, 5), (5, 5), True),
+    (False, None, (5, 5), False),
+    (True, None, (5, 5), True),
+    (True, None, None, False),
+    (True, (5, 5), (4, 5), False),
 ])
-def test_return_waits_for_current_list_evidence_before_navigation(monkeypatch, ready, budget, expected):
+def test_return_waits_for_current_list_evidence_before_navigation(
+    monkeypatch, ready, list_budget, team_budget, expected,
+):
     reader, context = R03Recruitment(RoleSelection()), FakeContext()
     # The initial animation snapshot is unreadable (the device read 515).
     monkeypatch.setattr(reader, "read_budget", Mock(return_value=None))
-    monkeypatch.setattr(reader, "read_formation", Mock(return_value={"budget": (5, 5)}))
-    monkeypatch.setattr(reader, "_completed_list_budget", lambda *_: budget)
+    formation = {"budget": team_budget} if team_budget is not None else None
+    monkeypatch.setattr(reader, "read_formation", Mock(return_value=formation))
+    monkeypatch.setattr(reader, "_completed_list_budget", lambda *_: list_budget)
     calls = []
 
     def run_task(entry, pipeline_override=None):
-        calls.append(entry)
+        calls.append((entry, pipeline_override))
         return SimpleNamespace(completed=ready if entry == "矩阵循生_招募列表就绪" else True)
 
     monkeypatch.setattr(context, "run_task", run_task)
     monkeypatch.setattr(reader, "completed", lambda _context, detail, _name: detail.completed)
     result = reader.return_to_formation(context)
-    assert (result is not None) is expected
-    if expected:
-        assert calls == ["矩阵循生_招募列表就绪", "矩阵循生_返回编队"]
+    assert result == (formation if expected else None)
+    assert [entry for entry, _ in calls] == ["矩阵循生_招募列表就绪"] + (["矩阵循生_返回编队"] if ready else [])
+    if ready:
+        assert calls[-1][1] == (R03Recruitment._list_budget_overrides(*list_budget) if list_budget else {})
+        reader.read_formation.assert_called_once()
     else:
-        assert "矩阵循生_返回编队" not in calls
+        reader.read_formation.assert_not_called()
     assert not context.actions and not context.tasker.controller.clicks

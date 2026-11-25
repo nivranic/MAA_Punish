@@ -6,6 +6,7 @@ import json
 import numpy as np
 import pytest
 from maa.controller import CustomController
+from maa.custom_action import CustomAction
 from maa.custom_recognition import CustomRecognition
 from maa.resource import Resource
 from maa.tasker import Tasker
@@ -80,10 +81,15 @@ def test_stamina_entry_requires_home_and_same_frame_counter(tmp_path, home, coun
 
 def test_stamina_usage_keeps_existing_switch_and_never_enters_black_card_purchase():
     task = json.loads((ROOT / "tasks/拟战场域.json").read_text(encoding="utf-8"))
-    cases = {case["name"]: case["pipeline_override"]["拟战场域"]["next"]
+    cases = {case["name"]: case["pipeline_override"]
              for case in task["option"]["使用临期体力"]["cases"]}
-    assert "吃体力药" in cases["Yes"]
-    assert "吃体力药" not in cases["No"]
+    for overrides in cases.values():
+        assert overrides["拟战场域"]["next"] == ["日常断点_拟战场域", "空任务"]
+    yes = cases["Yes"]["日常断点_拟战场域"]["next"]
+    no = cases["No"]["日常断点_拟战场域"]["next"]
+    assert no[0] == "拟战场域_作战任务"
+    assert "吃体力药" not in no
+    assert yes == ["吃体力药", *no]
     import jsonc
     nodes = jsonc.loads((ROOT / "resource/base/pipeline/daily_battle/Stamina.jsonc").read_text(encoding="utf-8"))
     assert nodes["无体力药"]["next"] == ["退出血清界面"]
@@ -180,8 +186,17 @@ def test_reward_completion_requires_score_and_all_five_claimed(
                 return (328, 655, 100, 49) if minimum <= value <= maximum else None
             return None
 
+    marks = []
+
+    class MarkProgress(CustomAction):
+        def run(self, context, argv):
+            key = context.get_node_data(argv.node_name)["attach"]["daily_progress_key"]
+            marks.append((argv.node_name, key))
+            return CustomAction.RunResult(success=True)
+
     resource = native_resource(tmp_path)
     assert resource.register_custom_recognition("DailyRewardPage", Page())
+    assert resource.register_custom_action("DailyProgressMark", MarkProgress())
     controller = Controller()
     assert controller.post_connection().wait().succeeded
     tasker = Tasker()
@@ -200,6 +215,7 @@ def test_reward_completion_requires_score_and_all_five_claimed(
         names = [tasker.get_node_detail(i).name for i in job.get().node_id_list]
         assert ("任务失败优雅退出" not in names) is completes
         assert ("每日活跃宝箱全部已领" in names) is completes
+        assert marks == ([("日常完成_领取任务", "领取任务")] if completes else [])
         assert state["collections"] == collects
         if completes:
             assert state["home"] == 1
@@ -244,8 +260,14 @@ def test_task_entry_requires_assistant_menu_and_profile_before_claiming(
                 return (75, 20, 30, 30)
             return None
 
+    class PendingDailyProgress(CustomRecognition):
+        def analyze(self, context, argv):
+            assert argv.node_name == "日常断点_领取任务"
+            return CustomRecognition.AnalyzeResult(box=(0, 0, 0, 0), detail={"status": "pending"})
+
     resource = native_resource(tmp_path, language)
     assert resource.register_custom_recognition("DailyAssistantHome", Home())
+    assert resource.register_custom_recognition("DailyProgressCheck", PendingDailyProgress())
     controller = Controller()
     assert controller.post_connection().wait().succeeded
     tasker = Tasker()
@@ -260,6 +282,8 @@ def test_task_entry_requires_assistant_menu_and_profile_before_claiming(
         job = tasker.post_task("任务", overrides).wait()
         assert job.succeeded
         names = [tasker.get_node_detail(i).name for i in job.get().node_id_list]
+        assert names[:2] == ["任务", "日常断点_领取任务"]
+        assert "空任务" not in names
         completed = menu_appears and profile_opens
         assert ("任务_领取" in names) is completed
         assert ("每日助理交流_完成返回" in names) is completed
@@ -267,6 +291,7 @@ def test_task_entry_requires_assistant_menu_and_profile_before_claiming(
         assert clicks[0] == (620, 150)
         assert len(clicks) == 1 + int(menu_appears) + int(completed)
         if completed:
-            assert names == ["任务", "每日助理交流", "每日助理交流_进入", "每日助理交流_完成返回", "任务_领取"]
+            assert names == ["任务", "日常断点_领取任务", "每日助理交流",
+                             "每日助理交流_进入", "每日助理交流_完成返回", "任务_领取"]
     finally:
         stop_and_wait_idle(tasker)

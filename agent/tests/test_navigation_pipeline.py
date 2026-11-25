@@ -457,8 +457,8 @@ def test_shared_battle_start_consumers_are_frozen():
         ("日常断点_历战映射", "HighRankMapping.jsonc"),
         ("开始挑战", "HighRankMapping.jsonc"),
         ("作战界面", "Simulated_Siege.jsonc"),
-        # 2026-11-23 登记的预存在陈旧项：82-86 批把 R01 三个节点改为固定坐标 Click
-        # 后，其 next 不再引用共享 作战开始（不再是 next-list consumer），冻结表同步收窄。
+        # R01 的固定坐标捷径不算 next-list 消费者；冲突确认另有共享启动路径。
+        ("确认进入战斗冲突", "Roguelike_1/Roguelike_1.jsonc"),
         ("战斗事件_厄愿潮声", "Roguelike_2/Roguelike_2.jsonc"),
         ("肉鸽战斗_寒境曙光", "Roguelike_4/Roguelike_4.jsonc"),
     }

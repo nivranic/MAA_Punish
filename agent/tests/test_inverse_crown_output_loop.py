@@ -1,8 +1,8 @@
 """逆冕输出循环：红环就绪 → 长按第1槽特殊球 → 长按普攻 → 大招分派。
 
-2026-11-10 依用户手录 60Hz 视频实证的输出循环（台账 2.301/2.302/2.303）：
-红环 ≈12/16 即爆发；囚笼长按大招、其余红环即点循环。本文件锁定普通
-（非 stationary）路径的相变与输入类别契约；时长/阈值是临时先验。
+基于 2026-11-10 手录输出循环（台账 2.301/2.302/2.303）：囚笼长按大招，
+其余按红环就绪点按循环。回归按当前普通路径的品阶阈值（基础 8/16、SSS
+系列 12/16）验证相变和输入类别，不把这些阈值写成普适的真机结论。
 """
 
 from unittest.mock import Mock
@@ -12,7 +12,7 @@ import pytest
 from action.combat.core.provider import CombatCheck
 from action.combat.core.session import CombatTask
 from action.combat.core.team import TeamSnapshot
-from action.combat.config.inverse_crown_profile import InverseCrownUnavailable
+from action.combat.config.inverse_crown_profile import InverseCrownProfile, InverseCrownUnavailable
 from action.combat.roles import inverse_crown as module
 from action.combat.roles.inverse_crown import InverseCrown
 from test_support.fakes import FakeClock, FakeContext, make_hit, make_miss
@@ -96,12 +96,21 @@ def test_stop_during_burst_hold_does_not_advance(loop):
     context.run_action.assert_called_once()
 
 
-@pytest.mark.parametrize("count,subphase", [(8, "charge"), (12, "tap_cast"), (16, "tap_cast")])
-def test_special_ball_branch_holds_attack_before_observing_cast_readiness(loop, count, subphase):
+@pytest.mark.parametrize("rank,count,subphase", [
+    ("SS", 7, "charge"), ("SS", 8, "tap_cast"),
+    ("SSS", 11, "charge"), ("SSS", 12, "tap_cast"), ("SSS", 16, "tap_cast"),
+])
+def test_special_ball_branch_holds_attack_before_observing_cast_readiness(loop, rank, count, subphase):
     _, _, role, _, counters = loop
+    role.inverse_crown_profile = InverseCrownProfile(source="self", rank=rank)
     role.phase = "special_attack"
     role.action.long_press_attack = Mock(return_value=True)
-    counters.return_value = count
+
+    def observe_after_hold():
+        role.action.long_press_attack.assert_called_once_with(module._CHARGED_SLASH_MS)
+        return count
+
+    counters.side_effect = observe_after_hold
 
     role.do_perform()
 
@@ -202,9 +211,11 @@ def test_tap_cast_stop_prevents_trailing_tap(loop):
     assert role._skill_sub == "tap_cast"
 
 
-def test_idle_below_ready_keeps_legacy_gates(loop):
+@pytest.mark.parametrize("rank,count", [("SS", 7), ("SSS", 11)])
+def test_idle_below_ready_keeps_legacy_gates(loop, rank, count):
     context, _, role, _, counters = loop
-    counters.return_value = 8
+    role.inverse_crown_profile = InverseCrownProfile(source="self", rank=rank)
+    counters.return_value = count
 
     role.do_perform()
 

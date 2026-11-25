@@ -473,14 +473,18 @@ def test_ordinary_dispatch_unchanged(monkeypatch, phase, method):
     assert called == [method]
 
 
-def test_ordinary_finish_keeps_existing_auxiliary_and_switch_contract(monkeypatch):
+@pytest.mark.parametrize("switch_after,phase", [(True, "switch"), (False, "idle")])
+def test_ordinary_finish_uses_ready_qte_once_and_preserves_the_next_phase(monkeypatch, switch_after, phase):
     role, _, _, _, _ = setup_role(monkeypatch, enabled=False)
     called = []
     monkeypatch.setattr(role.action, "auxiliary_machine", lambda: called.append("aux"))
-    monkeypatch.setattr(role.action, "use_qte", lambda: called.append("qte"))
-    role._skill_switch_after = True
+    monkeypatch.setattr(role.action, "use_ready_qte", lambda: called.append("ready_qte"))
+    monkeypatch.setattr(role.action, "use_qte", lambda: pytest.fail("must not use blind QTE"))
+    role._skill_switch_after = switch_after
     role._finish_skill()
-    assert role.phase == "switch" and called == ["aux", "qte"]
+    assert role.phase == phase and called == ["aux", "ready_qte"]
+    role._finish_skill()
+    assert role.phase == phase and called == ["aux", "ready_qte"]
 
 
 def test_boolean_cannot_silently_replace_three_value_signal():

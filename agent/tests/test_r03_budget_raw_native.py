@@ -15,7 +15,9 @@ from test_support.native_lifecycle import stop_and_wait_idle
     ('3/3', (3, 3)), ('1/3', (1, 3)), ('0/5', (0, 5)),
     ('5/5', (5, 5)), ('3', None), ('4/3', None), ('0/0', None),
 ])
-def test_unfiltered_fraction_keeps_budget_validation(tmp_path, language, text, expected):
+def test_unfiltered_fraction_keeps_budget_validation(tmp_path, monkeypatch, language, text, expected):
+    # Each case tests its own OCR, not the list fallback from a previous parameter.
+    monkeypatch.setattr(R03Recruitment, "_budget_cache", None)
     frame = np.full((720, 1280, 3), 220, dtype=np.uint8)
     # Gray glyphs are readable but excluded by the blue/dark text filter.
     cv2.putText(frame, text, (411, 648), cv2.FONT_HERSHEY_SIMPLEX,

@@ -38,14 +38,18 @@ def test_dorm_entry_waits_for_overview_before_returning_to_parent(tmp_path, lang
                 return (152, 651, 59, 29)
             return None
 
+    class PendingDailyProgress(CustomRecognition):
+        def analyze(self, context, argv):
+            assert argv.node_name == '日常断点_宿舍任务'
+            return CustomRecognition.AnalyzeResult(box=(0, 0, 0, 0), detail={'status': 'pending'})
+
     resource = load_resource(tmp_path, language)
     assert resource.register_custom_recognition('DormEntryPage', Page())
+    assert resource.register_custom_recognition('DailyProgressCheck', PendingDailyProgress())
     timing = dict(pre_delay=0, post_delay=0, timeout=180, rate_limit=1, on_error=[])
     overrides = {name: dict(timing) for name in [
-        '宿舍任务', '打开宿舍', '宿舍内部',
+        '宿舍任务', '日常断点_宿舍任务', '打开宿舍', '打开宿舍_已进入总览', '宿舍内部',
     ]}
-    if '打开宿舍_已进入总览' in resource.node_list:
-        overrides['打开宿舍_已进入总览'] = dict(timing)
     for name in ['打开宿舍', '宿舍内部']:
         overrides[name]['recognition'] = {'type': 'Custom', 'param': {'custom_recognition': 'DormEntryPage'}}
     overrides['宿舍内部'].update(action={'type': 'StopTask'}, next=[])
@@ -67,6 +71,15 @@ def test_dorm_entry_waits_for_overview_before_returning_to_parent(tmp_path, lang
         assert job.succeeded is (case in {'stale_home', 'slow_load', 'already_inside'})
         assert len(clicks) == (0 if case in {'already_inside', 'wrong_room'} else 1)
         assert state['page'] != 'room' or case == 'wrong_room'
+        names = [tasker.get_node_detail(i).name for i in job.get().node_id_list]
+        assert names[:2] == ['宿舍任务', '日常断点_宿舍任务']
+        assert '空任务' not in names
+        if case in {'stale_home', 'slow_load'}:
+            assert names[2:] == ['打开宿舍', '打开宿舍_已进入总览', '宿舍内部']
+        elif case == 'already_inside':
+            assert names[2:] == ['宿舍内部']
+        else:
+            assert '打开宿舍_已进入总览' not in names and '宿舍内部' not in names
         if clicks:
             x, y = clicks[0]
             assert 830 <= x < 875 and 393 <= y < 422

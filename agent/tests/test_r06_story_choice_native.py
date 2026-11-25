@@ -75,7 +75,11 @@ def test_story_choice_clears_before_skip_resumes(tmp_path, language, entry, mand
     overrides[entry] = {"recognition": "DirectHit", "pre_delay": 0, "post_delay": 0, "timeout": 1000, "on_error": []}
     overrides["跳过剧情"] = {"recognition": {"param": {"expected": "SKIP"}}}
     for name in [SKIP, CHOICE, "剧情选项消失_雾夜镇魂曲"]:
-        overrides[name] = {"pre_delay": 0, "post_delay": 0, "timeout": 1000, "rate_limit": 1, "on_error": []}
+        overrides[name] = {"pre_delay": 0, "post_delay": 0, "rate_limit": 1, "on_error": []}
+    for name in [SKIP, "剧情选项消失_雾夜镇魂曲"]:
+        overrides[name]["timeout"] = 1000
+    # Keep the production choice timeout: it must allow several native OCR rounds
+    # while the answer card is still visible in the transition frames.
     overrides["确认跳过"].update(next=["R06StoryDone"])
     overrides["R06StoryDone"] = {"recognition": "DirectHit", "action": "StopTask", "next": [], "on_error": []}
     controller, tasker = Capture(), Tasker()
@@ -94,6 +98,8 @@ def test_story_choice_clears_before_skip_resumes(tmp_path, language, entry, mand
         assert not expired and job.succeeded and state["page"] == "done"
         answer_clicks = [c for c in clicks if 330 <= c[2] < 390]
         assert len(answer_clicks) == (1 if mandatory else 0)
+        if mandatory:
+            assert state["transition_frames"] >= 4
         assert not any(page == "transition" for page, _, _ in clicks)
         assert clicks[-1][0] == "confirm"
     finally:

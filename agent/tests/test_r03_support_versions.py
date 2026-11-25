@@ -142,14 +142,20 @@ def test_filter_failure_is_returned_without_running_nested_global_cleanup(monkey
     monkeypatch.setattr(reader.selector, "_get_role_element_task", lambda *_: "打开暗属性")
 
     def run_task(entry, pipeline_override=None):
-        assert entry == "打开暗属性"
-        assert pipeline_override["打开暗属性"]["on_error"] == []
-        assert pipeline_override["确认进入暗属性"]["on_error"] == []
+        assert entry in {"打开暗属性", "确认进入暗属性"}
+        expected = {"确认进入暗属性"}
+        if entry == "打开暗属性":
+            expected.add(entry)
+        assert set(pipeline_override) == expected
+        assert all(node["on_error"] == [] for node in pipeline_override.values())
         return None
 
     context.run_task = Mock(side_effect=run_task)
     roles = {OWNED: {"template": ["synthetic.png"]}}
     result = (reader.recruit_support(context, roles, OWNED, 3, (1, 5)) if support
               else reader.recruit(context, roles, TRIAL, 3))
-    assert not result and context.run_task.call_count == 1
+    assert not result
+    assert [call.args[0] for call in context.run_task.call_args_list] == [
+        "打开暗属性", "确认进入暗属性", "打开暗属性",
+    ]
     context.run_action.assert_not_called()
