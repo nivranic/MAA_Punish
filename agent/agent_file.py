@@ -11,6 +11,7 @@ from action.basics.InterfaceZone.LoadRoiZone import LoadRoiZone
 from action.basics.ResetCount import ResetCount
 from action.basics.AuditPurchase import AuditPurchase
 from action.basics.AuditPurchaseReconcile import AuditPurchaseReconcile
+from action.basics.ClickAnchor import ClickAnchor
 from action.basics.ScopedRecovery import ScopedRecovery
 from action.basics.combat_start_failure import CombatStartFailure
 from action.basics.daily_progress import (
@@ -186,4 +187,9 @@ class Agent_ResetCount(ResetCount):
 
 @AgentServer.custom_action("CombatRunner")
 class Agent_CombatRunner(CombatRunner):
+    pass
+
+
+@AgentServer.custom_action("ClickAnchor")
+class Agent_ClickAnchor(ClickAnchor):
     pass

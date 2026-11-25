@@ -311,9 +311,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    940,
+                    920,
                     449,
-                    200,
+                    220,
                     76
                 ],
                 "expected": "卸下队伍"
@@ -335,7 +335,13 @@
             }
         },
         "action": {
-            "type": "Click"
+            "type": "Custom",
+            "param": {
+                "custom_action": "ClickAnchor",
+                "custom_action_param": {
+                    "position": "left"
+                }
+            }
         },
         "post_delay": 1500,
         "next": [
@@ -703,9 +709,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    852,
+                    812,
                     148,
-                    133,
+                    173,
                     112
                 ],
                 "expected": "成员"

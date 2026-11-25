@@ -369,7 +369,7 @@ jobs:
     outputs:
       variant: ${{ steps.signing.outputs.variant }}
     env:
-      # Aliothmoon/MaaFwApp main @ 2026-10-16
+      # Aliothmoon/MaaFwApp main @ 2026-10-16; fork patches require this verified baseline.
       MAAFWAPP_REF: bc55dac4c8231ab73e7ee42bd38c43e322838b14
       MAAFRAMEWORK_TAG: v5.14.2
       PI_PROFILE: ${{ github.workspace }}/.github/android/pi-profile.yaml
@@ -445,6 +445,7 @@ jobs:
         working-directory: build-android/MaaFwApp
         shell: bash
         env:
+          # 用当前 job 的只读 token 下载 MaaFramework，避免 GitHub API 匿名限流。
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail

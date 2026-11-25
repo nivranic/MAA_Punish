@@ -4,6 +4,7 @@ import pytest
 from maa.custom_recognition import CustomRecognition
 from maa.tasker import Tasker
 
+from action.basics.ClickAnchor import ClickAnchor
 from test_r01_zero_refresh_native import ROOT, Controller, load_resource
 from test_support.native_lifecycle import stop_and_wait_idle
 
@@ -41,6 +42,7 @@ def test_no_supported_recruit_abandons_round_then_restarts(language,tmp_path):
             if page=='ready' and name=='寒境曙光菜单启程_寒境曙光': return (1030,590,240,100)
             return None
     resource=load_resource(tmp_path,language)
+    assert resource.register_custom_action('ClickAnchor',ClickAnchor())
     assert resource.register_custom_recognition('R04Pages',Pages())
     nodes=jsonc.loads((ROOT/'resource/base/pipeline/Roguelike_4/Roguelike_4.jsonc').read_text(encoding='utf-8'))
     flow=['寒境曙光','选择人物_寒境曙光','刷新次数用尽失败_寒镜曙光',

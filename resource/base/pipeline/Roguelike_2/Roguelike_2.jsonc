@@ -206,9 +206,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    950,
+                    890,
                     600,
-                    325,
+                    385,
                     83
                 ],
                 "expected": [
@@ -282,7 +282,13 @@
             }
         },
         "action": {
-            "type": "Click"
+            "type": "Custom",
+            "param": {
+                "custom_action": "ClickAnchor",
+                "custom_action_param": {
+                    "position": "left"
+                }
+            }
         },
         "post_delay": 1500,
         "next": [
@@ -2092,7 +2098,7 @@
                 "roi": [
                     118,
                     171,
-                    203,
+                    253,
                     136
                 ],
                 "expected": "失落外典"
@@ -2104,9 +2110,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    1050,
+                    990,
                     39,
-                    155,
+                    215,
                     133
                 ],
                 "expected": "刷新"
@@ -2517,9 +2523,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    1016,
+                    956,
                     580,
-                    227,
+                    287,
                     140
                 ],
                 "expected": "开始旅途"
@@ -2534,10 +2540,10 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    1085,
+                    1020,
                     630,
-                    145,
-                    51
+                    210,
+                    75
                 ],
                 "expected": "退出"
             }
@@ -2551,9 +2557,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    793,
+                    733,
                     582,
-                    186,
+                    246,
                     138
                 ],
                 "expected": "终止"

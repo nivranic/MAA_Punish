@@ -59,7 +59,13 @@
             }
         },
         "action": {
-            "type": "Click"
+            "type": "Custom",
+            "param": {
+                "custom_action": "ClickAnchor",
+                "custom_action_param": {
+                    "position": "left"
+                }
+            }
         }
     },
     "打通诺曼复兴战条件2": {
@@ -276,7 +282,13 @@
             }
         },
         "action": {
-            "type": "Click"
+            "type": "Custom",
+            "param": {
+                "custom_action": "ClickAnchor",
+                "custom_action_param": {
+                    "position": "left"
+                }
+            }
         },
         "post_delay": 1000,
         "next": [
@@ -421,9 +433,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    1093,
+                    1052,
                     656,
-                    111,
+                    152,
                     53
                 ],
                 "expected": "挑战"

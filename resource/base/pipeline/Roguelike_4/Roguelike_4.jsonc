@@ -1442,7 +1442,13 @@
             }
         },
         "action": {
-            "type": "Click"
+            "type": "Custom",
+            "param": {
+                "custom_action": "ClickAnchor",
+                "custom_action_param": {
+                    "position": "left"
+                }
+            }
         },
         "post_delay": 1000,
         "next": [
@@ -1531,9 +1537,9 @@
             "type": "OCR",
             "param": {
                 "roi": [
-                    840,
+                    836,
                     610,
-                    160,
+                    164,
                     70
                 ],
                 "expected": "终止"

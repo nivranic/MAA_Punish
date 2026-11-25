@@ -185,6 +185,7 @@ class BaseCombatCheck(ABC):
         for name in (*COMBAT_EXIT_OVERLAY_NODES, *self.exit_nodes):
             result = context.run_recognition(name, image)
             if result and result.hit:
+                logger.debug("识别到战斗退出界面: %s", name)
                 return name
         return None
 
@@ -405,7 +406,7 @@ class CombatCheck(BaseCombatCheck):
                 logger.warning("选人名单无法组成队伍，按单人队: %s", published)
                 return TeamSnapshot.solo(fallback)
             combat.current_role_name = resolve_cls_label(snapshot.R)
-            logger.info("进战采用选人名单，跳过 QTE 人数判断")
+            logger.debug("进战采用选人名单，跳过 QTE 人数判断")
             logger.info(format_team_snapshot_line(snapshot))
             return snapshot
 
@@ -484,7 +485,7 @@ class CombatCheck(BaseCombatCheck):
             team_type = "两人队"
         else:
             team_type = "单人队"
-        logger.info(
+        logger.debug(
             "进战 QTE 检查: 可见=%s → %s",
             ",".join(bench) or "无",
             team_type,
