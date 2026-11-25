@@ -338,9 +338,9 @@ def test_shared_battle_start_click_is_bounded():
     # roughly one tap per battle) while bounding a stuck run to minutes.
     war = jsonc.loads((PIPELINE / "War_Zone.jsonc").read_text(encoding="utf-8"))
     click = war["点击作战开始"]
-    assert click["action"]["param"]["target"] == "作战开始"
     assert click["max_hit"] == 60
-    assert click["post_delay"] == 5000
+    # Physical target freshness, the per-attempt timeout and re-entry are
+    # exercised against the loaded graph in test_shared_combat_start_native.
 
 
 def test_mapping_battle_start_override_keeps_proven_budget():
@@ -353,11 +353,8 @@ def test_mapping_battle_start_override_keeps_proven_budget():
     # The rerun with max_hit=20 plus a [JumpBack]返回 fallback passed on the
     # real device (eight battles, one start each, zero idle taps); keep it.
     assert override["点击作战开始"]["max_hit"] == 20
-    assert override["作战开始"]["next"] == [
-        "[JumpBack]未选择队长",
-        "点击作战开始",
-        "[JumpBack]返回",
-    ]
+    war = jsonc.loads((PIPELINE / "War_Zone.jsonc").read_text(encoding="utf-8"))
+    assert override["作战开始"]["next"] == [*war["作战开始"]["next"], "[JumpBack]返回"]
 
 
 @pytest.mark.parametrize("page", ["settlement", "battle", "unknown"])

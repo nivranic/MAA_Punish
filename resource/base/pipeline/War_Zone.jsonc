@@ -690,10 +690,14 @@
             }
         },
         "post_delay": 1500,
+        "timeout": 3200,
         "next": [
+            "作战启动_阻塞提示",
             "[JumpBack]未选择队长",
+            "作战启动_进入过渡",
             "点击作战开始"
-        ]
+        ],
+        "on_error": ["作战启动_终止"]
     },
     "作战开始识别": {
         "recognition": {
@@ -733,14 +737,89 @@
         }
     },
     "点击作战开始": {
-        "action": {
-            "type": "Click",
+        // 重新抓拍，避免沿用上一个节点已过期的按钮框。
+        "recognition": {
+            "type": "And",
             "param": {
-                "target": "作战开始"
+                "all_of": ["作战开始识别", "作战开始背景颜色识别"],
+                "box_index": 0
             }
         },
-        "post_delay": 5000,
-        "max_hit": 60
+        "action": {
+            "type": "Click",
+            "param": {"target": true}
+        },
+        "post_delay": 0,
+        "rate_limit": 200,
+        "timeout": 12000,
+        "max_hit": 60,
+        "next": ["作战启动_阻塞提示", "作战启动_进入过渡"],
+        "on_error": ["作战启动_终止"]
+    },
+    "作战启动_阻塞提示": {
+        "recognition": {
+            "type": "OCR",
+            "param": {
+                "roi": [535, 336, 210, 40],
+                "expected": ["^队长不能为空$", "^首发位不能为空$"]
+            }
+        },
+        "pre_delay": 0,
+        "post_delay": 0,
+        "next": ["作战启动_终止"],
+        "on_error": []
+    },
+    "作战启动_模式后继": {
+        // 仅复用识别；加载、下载弹窗与战斗的 action 仍由原先的父链执行。
+        "recognition": {
+            "type": "Or",
+            "param": {
+                "any_of": ["战斗中", "载入中", "通用处理-未下载弹窗-角色皮肤没下载-检测层"]
+            }
+        }
+    },
+    "作战启动_进入过渡": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["作战启动_模式后继"]}
+        },
+        "pre_delay": 0,
+        "post_delay": 250,
+        "rate_limit": 150,
+        "timeout": 1500,
+        "next": ["作战启动_阻塞提示", "作战启动_仍在准备页", "作战启动_确认交接"],
+        "on_error": ["作战启动_终止"]
+    },
+    "作战启动_仍在准备页": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["作战开始"]}
+        },
+        "pre_delay": 0,
+        "post_delay": 0,
+        "next": ["作战启动_终止"],
+        "on_error": []
+    },
+    "作战启动_确认交接": {
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["作战启动_模式后继"]}
+        },
+        "pre_delay": 0,
+        "post_delay": 0,
+        "next": [],
+        "on_error": []
+    },
+    "作战启动_终止": {
+        "recognition": "DirectHit",
+        "action": {
+            "type": "Custom",
+            "param": {"custom_action": "CombatStartFailure"}
+        },
+        "pre_delay": 0,
+        "post_delay": 0,
+        "next": ["任务失败优雅退出"],
+        "on_error": []
     },
     "未选择队长": {
         "recognition": {

@@ -452,6 +452,25 @@
             "Node.Recognition.Succeeded": "$focus.战斗事件_厄愿潮声"
         }
     },
+    "厄愿潮声_启动后角色详情": {
+        // 原生同帧同时出现「编入队伍」与「战斗参数」才交回原父链；仅「队伍」太宽。
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["厄愿潮声_角色详情_编入队伍", "厄愿潮声_角色详情_战斗参数"]}
+        }
+    },
+    "厄愿潮声_角色详情_编入队伍": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [935, 419, 209, 139], "expected": "^编入队伍$"}
+        }
+    },
+    "厄愿潮声_角色详情_战斗参数": {
+        "recognition": {
+            "type": "OCR",
+            "param": {"roi": [235, 469, 107, 53], "expected": "^战斗参数$"}
+        }
+    },
     "意外点击_选择人物": {
         "recognition": {
             "type": "OCR",

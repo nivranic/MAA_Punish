@@ -456,8 +456,27 @@
         "action": {
             "type": "Click"
         },
+        "next": ["历战映射_成员整备作战接续"]
+    },
+    "历战映射_成员整备作战接续": {
+        // 战前旧地图也有「结算」。先以原清队识别确认已经进入编队，
+        // 再接手战斗和结算，不在成员整备点击失效时提前点结算。
+        "recognition": {
+            "type": "And",
+            "param": {"all_of": ["清除队伍"]}
+        },
+        "pre_delay": 0,
+        "post_delay": 0,
         "next": [
-            "清除队伍"
+            "[JumpBack]战斗中",
+            "[JumpBack]确定",
+            "结算",
+            "[JumpBack]战斗失败_历战",
+            "[JumpBack]继续挑战",
+            "[JumpBack]载入中",
+            "[JumpBack]通用处理-未下载弹窗-角色皮肤没下载-检测层",
+            "[JumpBack]点击空白处关闭",
+            "[JumpBack]清除队伍"
         ]
     },
     "前往作战": {

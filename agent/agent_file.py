@@ -12,6 +12,7 @@ from action.basics.ResetCount import ResetCount
 from action.basics.AuditPurchase import AuditPurchase
 from action.basics.AuditPurchaseReconcile import AuditPurchaseReconcile
 from action.basics.ScopedRecovery import ScopedRecovery
+from action.basics.combat_start_failure import CombatStartFailure
 from action.basics.daily_progress import (
     DailyProgressCheck,
     DailyProgressMark,
@@ -77,6 +78,12 @@ class Agent_AuditPurchaseReconcile(AuditPurchaseReconcile):
 @AgentServer.custom_action("ScopedRecovery")
 class Agent_ScopedRecovery(ScopedRecovery):
     pass
+
+
+@AgentServer.custom_action("CombatStartFailure")
+class Agent_CombatStartFailure(CombatStartFailure):
+    pass
+
 
 @AgentServer.tasker_sink()
 class Tasker_AspectRatioChecker(AspectRatioChecker):
