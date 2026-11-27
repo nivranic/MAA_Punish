@@ -541,6 +541,8 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
     // The launcher gate still owns orchestration. This gate only serializes final native
     // dispatch and expected-execution stop, including public stop's IO dispatcher hop.
     private val devRunCommandGate = kotlinx.coroutines.sync.Mutex()
+    // A blocked preparation RPC can outlive Stop without any native task.
+    private val pendingPreparation = java.util.concurrent.atomic.AtomicReference<Any?>(null)
     @Volatile internal var devLastAuditRun: DevAuditRunGuard? = null
         private set
 
@@ -578,8 +580,11 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
             }
             devLastAuditRun?.takeIf { it.executionId == executionId }?.revoke()
             auditBinding?.update(DevAuditRunGuard.Phase.StopRequested)
-            // The pending start observes the permanent revocation at the same gate.
-            if (auditBinding != null && !auditBinding.dispatched) return@withLock RunnerCommandResult.Accepted
+            // A queued Stop cancels preparation at the dispatch gate; it does
+            // not ask the service to stop a task that was never sent.
+            if (pendingPreparation.get() != null || (auditBinding != null && !auditBinding.dispatched)) {
+                return@withLock RunnerCommandResult.Accepted
+            }
             runCatching {
                 val accepted = servicePort.serviceOrNull()?.stopRun()
                 if (auditBinding != null) check(accepted == true) { "audit_stop_not_accepted" }
@@ -661,8 +666,9 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
 
 ''',
         '''    override suspend fun start(plan: RunPlan, executionId: String): RunnerCommandResult {
+        val preparation = Any()
         val auditBinding = devRunCommandGate.withLock {
-            if (_state.value.phase.isBusy) {
+            if (_state.value.phase.isBusy || pendingPreparation.get() != null) {
                 return RunnerCommandResult.Rejected(uiTextOf(R.string.msg_reject_already_running))
             }
             val binding = devSessionLease.value?.takeIf { it.auditLogging }?.let {
@@ -673,6 +679,7 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
                 DevAuditRunGuard(it, executionId, run, evidence)
             }
             devLastAuditRun = binding
+            pendingPreparation.set(preparation)
             _state.value = RunnerState(
                 phase = RunnerPhase.Preparing,
                 activeExecution = ActiveExecution(
@@ -688,15 +695,18 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
             )
             binding
         }
-        auditBinding?.let(::watchDevAuditLease)
-
         // Catch outside withContext: cancellation can happen before IO is entered.
         return try {
+            auditBinding?.let(::watchDevAuditLease)
             withContext(MaaDispatchers.IO) {
+                if (!canPrepare(executionId)) {
+                    return@withContext failPreparation(uiTextOf(R.string.msg_reject_service_rejected), executionId, auditBinding = auditBinding)
+                }
                 connectFailure()?.let { (reason, error) ->
                     return@withContext failPreparation(reason, executionId, error, auditBinding)
                 }
-                val rejection = launchOnService(plan, executionId, auditBinding)
+                val rejection = if (canPrepare(executionId)) launchOnService(plan, executionId, auditBinding)
+                    else uiTextOf(R.string.msg_reject_service_rejected)
                 if (rejection != null) return@withContext failPreparation(rejection, executionId, auditBinding = auditBinding)
                 val accepted = _state.updateAndGet { current ->
                     if (current.phase == RunnerPhase.Preparing && current.activeExecution?.executionId == executionId) {
@@ -729,6 +739,8 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
                 error = throwable,
                 auditBinding = auditBinding,
             )
+        } finally {
+            pendingPreparation.compareAndSet(preparation, null)
         }
     }
 
@@ -788,7 +800,8 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
         '''        service: RemoteService,
         executionId: String,
         auditBinding: DevAuditRunGuard?,
-    ): UiText? {''',
+    ): UiText? {
+        if (!canPrepare(executionId)) return uiTextOf(R.string.msg_reject_service_rejected)''',
     ),
     (
         'app/src/main/java/com/aliothmoon/maafw/runner/MaaFrameworkRunnerPort.kt',
@@ -811,9 +824,8 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
             } ?: return uiTextOf(R.string.msg_reject_service_rejected)
         }
         return devRunCommandGate.withLock {
-        if (_state.value.activeExecution?.executionId != executionId ||
-            (auditBinding != null && (_state.value.phase != RunnerPhase.Preparing ||
-                devLastAuditRun !== auditBinding || auditBinding.revoked ||
+        if (!canPrepare(executionId) ||
+            (auditBinding != null && (devLastAuditRun !== auditBinding || auditBinding.revoked ||
                 devSessionLease.value != auditBinding.lease))
         ) {
             auditBinding?.revoke()
@@ -835,6 +847,8 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
             return@withLock uiTextOf(R.string.msg_reject_service_rejected)
         }
         kotlinx.coroutines.currentCoroutineContext().ensureActive()
+        if (!canPrepare(executionId)) return@withLock uiTextOf(R.string.msg_reject_service_rejected)
+        pendingPreparation.set(null)
         auditBinding?.dispatched()
         if (!service.startRun(payloadJson)) {
             auditBinding?.finish(DevAuditRunGuard.Phase.NotDispatched)
@@ -843,15 +857,27 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
     ),
     (
         'app/src/main/java/com/aliothmoon/maafw/runner/MaaFrameworkRunnerPort.kt',
-        '''        return null
+        '''        if (shouldRetryStop(executionId)) {
+            runCatching { service.stopRun() }
+                .onFailure { Timber.w(it, "Failed to retry stop after run start") }
+        }
+        return null
     }
 
-    private fun shouldRetryStop''',
+    private fun shouldRetryStop(executionId: String): Boolean {
+        val current = _state.value
+        return current.phase == RunnerPhase.Stopping &&
+            current.activeExecution?.executionId == executionId
+    }''',
         '''        null
         }
     }
 
-    private fun shouldRetryStop''',
+    private suspend fun canPrepare(executionId: String): Boolean {
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+        val current = _state.value
+        return current.phase == RunnerPhase.Preparing && current.activeExecution?.executionId == executionId
+    }''',
     ),
     (
         'app/src/main/java/com/aliothmoon/maafw/runner/MaaFrameworkRunnerPort.kt',
@@ -908,7 +934,26 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
     (
         'app/src/test/java/com/aliothmoon/maafw/runner/MaaFrameworkRunnerPortTest.kt',
         '''    @Test
-    fun `stop during prepare is retried after start returns`() = runTest(dispatcher) {''',
+    fun `stop during prepare is retried after start returns`() = runTest(dispatcher) {
+        val service = FakePrivilegedService()
+        val hold = CompletableDeferred<Unit>()
+        val servicePort = FakePrivilegedServicePort(service).apply { holdUseService = hold }
+        val (runner, _) = port(this, service, servicePort)
+
+        val started = async { runner.start(plan(), "e1") }
+        advanceUntilIdle()
+        assertEquals(RunnerPhase.Preparing, runner.state.value.phase)
+
+        assertEquals(RunnerCommandResult.Accepted, runner.stop())
+        assertEquals(RunnerPhase.Stopping, runner.state.value.phase)
+
+        hold.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(RunnerCommandResult.Accepted, started.await())
+        assertEquals(RunnerPhase.Stopping, runner.state.value.phase)
+        assertEquals(2, service.stopRunCount)
+    }''',
         '''    @Test
     fun `cancellation before start enters IO still releases its audit watcher`() = runTest(dispatcher) {
         every { MaaDispatchers.IO } returns StandardTestDispatcher(testScheduler, name = "separate-io")
@@ -1267,7 +1312,36 @@ import com.aliothmoon.maafw.devsession.DevAuditRunGuard
     }
 
     @Test
-    fun `stop during prepare is retried after start returns`() = runTest(dispatcher) {''',
+    fun `stop during prepare revokes dispatch and waits for preparation to return`() = runTest(dispatcher) {
+        val service = FakePrivilegedService()
+        val hold = CompletableDeferred<Unit>()
+        val servicePort = FakePrivilegedServicePort(service).apply { holdUseService = hold }
+        val (runner, _) = port(this, service, servicePort)
+        val (callbacks, _) = recordCallbacks(runner)
+
+        val started = async { runner.start(plan(), "e1") }
+        testScheduler.runCurrent()
+        assertEquals(RunnerPhase.Preparing, runner.state.value.phase)
+        assertEquals(RunnerCommandResult.Accepted, runner.stop())
+        assertEquals(RunnerPhase.Stopping, runner.state.value.phase)
+        assertEquals(0, service.stopRunCount)
+        testScheduler.advanceTimeBy(8_000)
+        testScheduler.runCurrent()
+        assertEquals(RunnerPhase.Stopping, runner.state.value.phase)
+        assertTrue(runner.start(plan(), "too-early") is RunnerCommandResult.Rejected)
+        assertFalse(started.isCompleted)
+
+        hold.complete(Unit)
+        assertTrue(started.await() is RunnerCommandResult.Rejected)
+        assertEquals(RunnerPhase.Idle, runner.state.value.phase)
+        assertTrue(runner.state.value.latestResult is ExecutionResult.Cancelled)
+        assertEquals(null, service.lastRunPlanJson)
+        assertTrue(callbacks.isEmpty())
+
+        assertEquals(RunnerCommandResult.Accepted, runner.start(plan(), "e2"))
+        assertTrue(service.lastRunPlanJson != null)
+        callbacks.single().onFinished(RunOutcome.COMPLETED, null)
+    }''',
     ),
 )
 
@@ -1489,6 +1563,85 @@ RELOAD_PATCHES += (
     }
 
     private class RecordingTree : Timber.Tree() {''',
+    ),
+)
+
+# A stop recorded while preparation owns the slot is not a native stop.
+RELOAD_PATCHES += (
+    (
+        KOTLIN + "runner/MaaFrameworkRunnerPort.kt",
+        '''        val rejected = (next.latestResult as? ExecutionResult.Failed)?.reason ?: reason
+        return RunnerCommandResult.Rejected(rejected, error)''',
+        '''        val rejected = when (val result = next.latestResult) {
+            is ExecutionResult.Cancelled -> uiTextOf(R.string.result_cancelled)
+            is ExecutionResult.Failed -> result.reason
+            else -> reason
+        }
+        return RunnerCommandResult.Rejected(rejected, error)''',
+    ),
+    (
+        KOTLIN + "runner/MaaFrameworkRunnerPort.kt",
+        '''     * Preparing 时 startRun 还没发出去，那边本来就没在跑，不问。
+     * Stopping 也要问：PostStop 之后 onFinished 丢了，phase 会永远停在 Stopping
+     */
+    private suspend fun reconcileWhileRunning() {
+        _state.map { it.phase }.distinctUntilChanged().collectLatest { phase ->
+            if (phase != RunnerPhase.Running && phase != RunnerPhase.Stopping) return@collectLatest
+            while (true) {''',
+        '''     * 尚未投递的准备阶段（含准备期间收到 Stop）不问：远端还没有任务在跑。
+     * native 已投递的 Stopping 仍要问，以便补上丢失的完成回调。
+     */
+    private suspend fun reconcileWhileRunning() {
+        _state.map { it.phase }.distinctUntilChanged().collectLatest { phase ->
+            if (phase != RunnerPhase.Running && phase != RunnerPhase.Stopping) return@collectLatest
+            if (phase == RunnerPhase.Stopping && pendingPreparation.get() != null) return@collectLatest
+            while (true) {''',
+    ),
+    (
+        KOTLIN + "runner/MaaFrameworkRunnerPort.kt",
+        '''        // 环境性开关，不作为拒跑理由：设不上只是不存图，下一轮再试
+        runCatching { service.setSaveOnError(saveOnError()) }
+            .onFailure { Timber.w(it, "setSaveOnError failed") }
+        runCatching { service.setTextInputSink(textInputSink()) }
+            .onFailure { Timber.w(it, "setTextInputSink failed") }
+        val mode = runMode()
+        if (!service.setVirtualDisplayMode(mode.displayMode)) {
+            return uiTextOf(R.string.msg_reject_switch_display_mode, mode)
+        }
+        // 主屏模式不建屏也不设分辨率：尺寸是设备当下的物理尺寸，由特权进程侧的采集器供数
+        val (width, height) = if (mode == RunMode.BACKGROUND) {
+            val preset = resolutionPreset()
+            preset.resolution.also { (w, h) ->
+                service.setVirtualDisplayResolution(w, h, preset.dpi)
+            }
+        } else {
+            DisplayResolution(0, 0)
+        }
+        if (service.startVirtualDisplay() == DefaultDisplayConfig.DISPLAY_NONE) {''',
+        '''        if (!canPrepare(executionId)) return uiTextOf(R.string.msg_reject_service_rejected)
+        // 环境性开关，不作为拒跑理由：设不上只是不存图，下一轮再试
+        runCatching { service.setSaveOnError(saveOnError()) }
+            .onFailure { Timber.w(it, "setSaveOnError failed") }
+        if (!canPrepare(executionId)) return uiTextOf(R.string.msg_reject_service_rejected)
+        runCatching { service.setTextInputSink(textInputSink()) }
+            .onFailure { Timber.w(it, "setTextInputSink failed") }
+        if (!canPrepare(executionId)) return uiTextOf(R.string.msg_reject_service_rejected)
+        val mode = runMode()
+        if (!service.setVirtualDisplayMode(mode.displayMode)) {
+            return uiTextOf(R.string.msg_reject_switch_display_mode, mode)
+        }
+        if (!canPrepare(executionId)) return uiTextOf(R.string.msg_reject_service_rejected)
+        // 主屏模式不建屏也不设分辨率：尺寸是设备当下的物理尺寸，由特权进程侧的采集器供数
+        val (width, height) = if (mode == RunMode.BACKGROUND) {
+            val preset = resolutionPreset()
+            preset.resolution.also { (w, h) ->
+                service.setVirtualDisplayResolution(w, h, preset.dpi)
+            }
+        } else {
+            DisplayResolution(0, 0)
+        }
+        if (!canPrepare(executionId)) return uiTextOf(R.string.msg_reject_service_rejected)
+        if (service.startVirtualDisplay() == DefaultDisplayConfig.DISPLAY_NONE) {''',
     ),
 )
 

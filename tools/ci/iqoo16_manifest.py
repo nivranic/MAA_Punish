@@ -7,6 +7,7 @@ import argparse
 import json
 from pathlib import Path
 import re
+import sys
 
 REPOSITORY = "nivranic/MAA_Punish"
 APPLICATION_ID = "com.overflow65537.maafw.punish.iqoo16"
@@ -142,6 +143,11 @@ def generate_manifest(
 
 
 def main() -> int:
+    # 调用方（CI 与 .github/android/tests）都按 UTF-8 读子进程输出；Windows 控制台默认是
+    # ANSI 代码页，不固定会让中文错误信息在读取端解码失败
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--releases", required=True, type=Path, help="gh api --paginate --slurp 的 JSON 输出")
     parser.add_argument("--required-tag")

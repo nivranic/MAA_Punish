@@ -73,6 +73,16 @@ RECOVERY_PATCHES = (
         '        runner.emit(RunnerEvent.TaskFinished(0, true))\n',
     ),
     (
+        "app/src/test/java/com/aliothmoon/maafw/runner/RunLogRecorderTest.kt",
+        '        runner.emit(RunnerEvent.Callback("Tasker.Task.Failed", """{"entry":"A"}"""))\n',
+        '        runner.emit(RunnerEvent.TaskFinished(0, false))\n',
+    ),
+    (
+        "app/src/test/java/com/aliothmoon/maafw/runner/RunLogRecorderTest.kt",
+        '            RunnerEvent.Callback("Tasker.Task.Failed", """{"entry":"Start"}"""),\n',
+        '            RunnerEvent.TaskFinished(0, false),\n',
+    ),
+    (
         "app/proguard-rules.pro",
         "# libjnidispatch 按字面名 FindClass 的那些都在顶层包（Pointer / Memory / Function /\n# CallbackReference …），子包（ptr / internal / win32）没有 native 反查，交给 R8 裁\n-keep class com.sun.jna.* { *; }\n",
         """# libjnidispatch 按字面名 FindClass 的那些都在顶层包（Pointer / Memory / Function /

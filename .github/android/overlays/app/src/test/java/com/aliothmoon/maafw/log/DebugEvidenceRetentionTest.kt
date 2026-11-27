@@ -2,6 +2,8 @@ package com.aliothmoon.maafw.log
 
 import java.io.File
 import java.nio.file.Files
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
 import org.junit.After
@@ -56,12 +58,55 @@ class DebugEvidenceRetentionTest {
         val log = File(base, "log").apply { mkdirs() }
         try {
             Files.createSymbolicLink(File(log, "image.png").toPath(), outside.toPath())
+            Files.createSymbolicLink(File(log, "app.log").toPath(), outside.toPath())
             Files.createSymbolicLink(File(log, "escape").toPath(), outside.parentFile.toPath())
         } catch (e: java.nio.file.FileSystemException) {
             assumeNoException("Host does not grant symbolic-link creation", e)
         }
-        assertEquals(0, DebugEvidenceRetention.prune(listOf(log), now))
+        assertEquals(0, DebugEvidenceRetention.prune(listOf(log), now, appLogRoot = log))
+        assertTrue(Files.isSymbolicLink(File(log, "app.log").toPath()))
         assertTrue(outside.exists())
+    }
+
+    @Test fun onlyExplicitlyOwnedTopLevelAppLogsMigrateLegacyNames() {
+        val legacy = listOf("app.log", "app.1.log", "app.2.log", "app.3.log", "app.4.log")
+            .map { file("log/$it", 0) }
+        val unrelated = listOf("log/app.5.log", "log/run/app.log", "debug/app.1.log", "pi/debug/app.log",
+            "photos/app.log", "log/app.00000000.log", "log/maafw.log").map { file(it, 0) }
+        val roots = DebugEvidenceRetention.ownedRoots(base)
+        assertEquals(0, DebugEvidenceRetention.prune(roots, now))
+        assertEquals(legacy.size, DebugEvidenceRetention.prune(roots, now, appLogRoot = File(base, "log")))
+        assertTrue(legacy.none { it.exists() })
+        assertTrue(unrelated.all { it.exists() })
+        assertEquals(0, DebugEvidenceRetention.prune(roots, now, appLogRoot = File(base, "log")))
+    }
+
+    @Test fun overlappingSweepsConvergeWithoutDeletingNewSegments() {
+        val log = File(base, "log")
+        val roots = DebugEvidenceRetention.ownedRoots(base)
+        val stale = (1..24).map { file("log/expired-$it.log", 8 * day) }
+        val start = CountDownLatch(1)
+        val workers = Executors.newFixedThreadPool(2)
+        try {
+            val sweeps = (1..2).map {
+                workers.submit<Int> {
+                    check(start.await(5, TimeUnit.SECONDS))
+                    DebugEvidenceRetention.prune(roots, now, appLogRoot = log)
+                }
+            }
+            start.countDown()
+            val writer = AppLogSegments({ log }, { 0L }, { now })
+            writer.append(writer.capture("fresh\n"))
+            writer.closeBatch()
+            sweeps.forEach { it.get(5, TimeUnit.SECONDS) }
+            // A Windows provider can acknowledge both racing delete calls. Check
+            // the filesystem and an idempotent follow-up, not their summed count.
+            assertTrue(stale.none { it.exists() })
+            assertEquals(0, DebugEvidenceRetention.prune(roots, now, appLogRoot = log))
+            assertEquals("fresh\n", writer.listFiles().single().readText())
+        } finally {
+            workers.shutdownNow()
+        }
     }
 
     @Test fun hourlySweepHasHeadroomWithinSevenDays() {

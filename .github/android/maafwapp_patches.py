@@ -517,3 +517,47 @@ PATCHES += (
         "        MaaInfoRow(stringResource(R.string.settings_version_resource), resourceVersionLabel(context))",
     ),
 )
+
+# 全屏预览退出时把屏幕转回竖屏：上游只还原 requestedOrientation（通常是 UNSPECIFIED），
+# 那只是解除应用锁定方向，手机平放且自动旋转开着时系统保持最后一次方向，退出后界面一直横着。
+PATCHES += (
+    (
+        KOTLIN + "ui/tasks/TasksPreviewSection.kt",
+        '''    // 虚拟屏是横的，竖着看只有中间一条；退出时还原用户原本的方向设置
+    DisposableEffect(activity) {
+        val original = activity?.requestedOrientation
+        if (activity?.resources?.configuration?.orientation != Configuration.ORIENTATION_LANDSCAPE) {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
+        onDispose { if (original != null) activity.requestedOrientation = original }
+    }
+''',
+        '''    // 虚拟屏是横的，竖着看只有中间一条；退出时先把屏幕转回竖屏，再还原方向设置
+    DisposableEffect(activity) {
+        val original = activity?.requestedOrientation
+        val enteredLandscape =
+            activity?.resources?.configuration?.orientation == Configuration.ORIENTATION_LANDSCAPE
+        if (PreviewOrientationRestore.forceLandscapeOnEnter(enteredLandscape)) {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
+        onDispose {
+            val target = activity
+            if (target != null) {
+                val restore = PreviewOrientationRestore.exitSequence(
+                    enteredLandscape = enteredLandscape,
+                    original = original ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
+                )
+                target.requestedOrientation = restore.first
+                val delayed = restore.second
+                // 只还原成 UNSPECIFIED 不会把屏幕转回来，所以先强制竖屏，延迟后才交还方向控制
+                if (delayed != null && delayed != restore.first) {
+                    target.window?.decorView?.postDelayed({
+                        target.requestedOrientation = delayed
+                    }, PreviewOrientationRestore.RESTORE_DELAY_MS)
+                }
+            }
+        }
+    }
+''',
+    ),
+)

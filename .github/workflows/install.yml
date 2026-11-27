@@ -519,6 +519,9 @@ jobs:
             --tests 'com.aliothmoon.maafw.runner.MaaFrameworkRecoveryResultLogTest' \
             --tests 'com.aliothmoon.maafw.runner.RunLogRecorderTest' \
             --tests 'com.aliothmoon.maafw.runner.RunLogComposerTest' \
+            --tests 'com.aliothmoon.maafw.log.AppLogSegmentsTest' \
+            --tests 'com.aliothmoon.maafw.log.DebugEvidenceRetentionTest' \
+            --tests 'com.aliothmoon.maafw.ui.tasks.PreviewOrientationRestoreTest' \
             --stacktrace
 
       - name: Build APK
