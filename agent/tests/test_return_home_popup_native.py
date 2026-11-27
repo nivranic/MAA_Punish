@@ -6,6 +6,7 @@ import pytest
 from maa.custom_recognition import CustomRecognition
 from maa.tasker import Tasker
 
+from action.basics.ClickAnchor import ClickAnchor
 from test_r01_zero_refresh_native import ROOT, Controller, load_resource
 from test_support.native_lifecycle import stop_and_wait_idle
 
@@ -18,6 +19,7 @@ def test_return_home_handles_popups_after_reward_without_exiting_parent(
 ):
     state = {'page': 'submenu', 'remaining': popup_count}
     clicks = []
+    home_region = (196, 14, 84, 46) if language == 'en_US' else (260, 10, 70, 50)
 
     class Capture(Controller):
         def click(self, x, y):
@@ -41,10 +43,13 @@ def test_return_home_handles_popups_after_reward_without_exiting_parent(
                 '关闭公告': state['page'] == 'popup' and recognized,
                 '主界面_战斗节点': state['page'] == 'home',
             }
-            return (260, 10, 70, 50) if matches.get(argv.node_name) else None
+            if not matches.get(argv.node_name):
+                return None
+            return home_region if argv.node_name == '返回主菜单_文字' else (260, 10, 70, 50)
 
     resource = load_resource(tmp_path, language)
     assert resource.register_custom_recognition('HomePopupPage', Page())
+    assert resource.register_custom_action('ClickAnchor', ClickAnchor())
     startup = jsonc.loads((ROOT / 'resource/base/pipeline/Start_up.jsonc').read_text('utf-8'))
     preserved = {'返回主菜单', '关闭点击空白弹窗', '检查主界面'}
     names = {name.removeprefix('[JumpBack]') for name in startup['启动']['next']} - preserved
@@ -80,6 +85,8 @@ def test_return_home_handles_popups_after_reward_without_exiting_parent(
             ['popup'] * popup_count if recognized else []
         )
         assert state['page'] == ('home' if recognized else 'popup')
+        x, y, w, h = home_region
+        assert clicks[0] == ('submenu', x + w, y + h // 2)
         assert all((x, y) == (640, 10) for page, x, y in clicks if page == 'popup')
     finally:
         watchdog.cancel()

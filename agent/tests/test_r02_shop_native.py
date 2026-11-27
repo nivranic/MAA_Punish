@@ -26,16 +26,16 @@ def test_shop_confirmation_reaches_exit_without_cropping_title(tmp_path, languag
             return frame
 
         def click(self, x, y):
-            if state["page"] == "confirm":
-                assert 600 <= x < 680 and 510 <= y < 540
+            # Do not raise across the native callback boundary; assert the
+            # observed click sequence and the resolved boxes on the test thread.
+            current = state["page"]
+            clicks.append((current, x, y))
+            if current == "confirm":
                 state["page"] = "shop"
-                clicks.append("confirm")
-            elif state["page"] == "shop":
-                assert x >= 1000 and y >= 640
+            elif current == "shop":
                 state["page"] = "map"
-                clicks.append("leave")
             else:
-                raise AssertionError((state, x, y))
+                return False
             return True
 
     class Page(CustomRecognition):
@@ -61,7 +61,19 @@ def test_shop_confirmation_reaches_exit_without_cropping_title(tmp_path, languag
     assert controller.post_connection().wait().succeeded
     assert tasker.bind(resource, controller)
     try:
-        assert tasker.post_task("商店确认_厄愿潮声", overrides).wait().succeeded
-        assert clicks == ["confirm", "leave"] and state["page"] == "map"
+        job = tasker.post_task("商店确认_厄愿潮声", overrides).wait()
+        assert job.succeeded
+        assert [page for page, _, _ in clicks] == ["confirm", "shop"] and state["page"] == "map"
+        _, x, y = clicks[0]
+        assert 600 <= x < 680 and 510 <= y < 540
+        nodes = [tasker.get_node_detail(node_id) for node_id in job.get().node_id_list]
+        exit_, = [node for node in nodes if node.name == "结束交易_厄愿潮声"]
+        assert exit_.completed and exit_.recognition.hit
+        # Native OCR pads the rendered glyphs (e.g. x=996 when drawn at
+        # x=1000). A real click within that box is not a fixture failure.
+        left, top, width, height = exit_.recognition.box
+        _, x, y = clicks[1]
+        assert left <= x < left + width and top <= y < top + height
+        assert 980 <= x < 1160 and 630 <= y < 690
     finally:
         stop_and_wait_idle(tasker)

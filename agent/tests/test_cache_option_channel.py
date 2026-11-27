@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime
 import json
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -124,10 +123,8 @@ class _FakeContext:
 
 
 @pytest.fixture
-def cache_file():
-    # 不用 pytest 的 tmp_path：本机 %TEMP%\pytest-of-errov 目录 ACL 异常
-    with tempfile.TemporaryDirectory(prefix="maa_punish_cache_") as directory:
-        yield Path(directory) / "role_cache.json"
+def cache_file(tmp_path):
+    return tmp_path / "role_cache.json"
 
 
 def _prepare(cache_file: Path, monkeypatch, cache_data: dict | None) -> _FakeLogger:

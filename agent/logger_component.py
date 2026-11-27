@@ -2,11 +2,14 @@ import logging
 import itertools
 import json
 import os
+import re
+import stat
 import sys
 import threading
 import time
-from datetime import datetime, timedelta
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from audit_config import AUDIT_CONFIG
 
@@ -15,6 +18,98 @@ RETENTION_DAYS = 3
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
 _AUDIT_LOCK = threading.RLock()
 _AUDIT_SEQUENCE = itertools.count(1)
+_FILE_LOCK = threading.RLock()
+_LAST_SWEEP: dict[Path, float] = {}
+_SWEEP_INTERVAL = 3600
+_OWNED_NAME = re.compile(r"custom_([0-9]{8})(?:_(00|12))?\.log")
+
+
+def _prune_ordinary_logs(directory: Path, wall_now: float) -> None:
+    """Sweep exact top-level producer names at startup and during continued writes."""
+    with _FILE_LOCK:
+        elapsed = time.monotonic()
+        previous = _LAST_SWEEP.get(directory)
+        if previous is not None and 0 <= elapsed - previous < _SWEEP_INTERVAL:
+            return
+        _LAST_SWEEP[directory] = elapsed
+        if directory.is_symlink() or directory.is_junction():
+            return
+        retention = timedelta(days=RETENTION_DAYS)
+        utc_cutoff = datetime.fromtimestamp(wall_now, timezone.utc) - retention
+        local_cutoff = datetime.fromtimestamp(wall_now) - retention
+        failures = 0
+        try:
+            for path in directory.iterdir():
+                match = _OWNED_NAME.fullmatch(path.name)
+                if match is None:
+                    continue
+                try:
+                    date = datetime.strptime(match[1], "%Y%m%d")
+                    hour = match[2]
+                    expired = (date < local_cutoff if hour is None else
+                               date.replace(hour=int(hour), tzinfo=timezone.utc) <= utc_cutoff)
+                    if expired and stat.S_ISREG(path.lstat().st_mode):
+                        path.unlink()
+                except (FileNotFoundError, ValueError):
+                    continue  # concurrent cleanup, or a name that is not a real date
+                except OSError:
+                    failures += 1
+        except FileNotFoundError:
+            return
+        except OSError:
+            failures += 1
+        if failures:
+            # Do not recursively write to the sink whose filesystem just failed.
+            print(f"[AgentLog] 无法清理 {failures} 项日志，稍后重试", file=sys.stderr)
+
+
+class _OrdinaryFileHandler(logging.FileHandler):
+    """A half-day UTC segment per emission; no file descriptor stays open while idle."""
+
+    def __init__(self, directory: Path):
+        self.directory = directory.absolute()
+        super().__init__(self.directory / "custom_not_opened.log", mode="a", encoding="utf-8", delay=True)
+
+    def _open(self):
+        path = Path(self.baseFilename)
+        if self.directory.is_symlink() or self.directory.is_junction() or path.is_symlink():
+            raise OSError("refusing a linked Agent log path")
+
+        def open_regular(name, flags):
+            descriptor = os.open(name, flags | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0), 0o666)
+            try:
+                if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                    raise OSError("refusing a non-regular Agent log")
+                return descriptor
+            except BaseException:
+                os.close(descriptor)
+                raise
+
+        return open(path, self.mode, encoding=self.encoding, errors=self.errors, opener=open_regular)
+
+    def emit(self, record):
+        if self._closed:
+            return
+        with _FILE_LOCK:
+            now = time.time()
+            try:
+                self.directory.mkdir(parents=True, exist_ok=True)
+                _prune_ordinary_logs(self.directory, now)
+                if not 0 <= now - record.created < _SWEEP_INTERVAL:
+                    return  # a delayed record is still eligible for the independent stdout sink
+                current = datetime.fromtimestamp(now, timezone.utc)
+                hour = (current.hour // 12) * 12
+                self.baseFilename = str(self.directory / f"custom_{current:%Y%m%d}_{hour:02d}.log")
+                super().emit(record)
+            except OSError:
+                self.handleError(record)
+            finally:
+                if self.stream is not None:
+                    stream, self.stream = self.stream, None
+                    try:
+                        stream.close()
+                    except OSError:
+                        self.handleError(record)
 
 
 @dataclass(frozen=True)
@@ -70,9 +165,7 @@ class LoggerComponent:
 
         if not AUDIT_CONFIG.enabled:
             os.makedirs(LOG_DIR, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d")
-            log_file_path = os.path.join(LOG_DIR, f"custom_{timestamp}.log")
-            file_handler = logging.FileHandler(log_file_path, mode="a", encoding="utf-8")
+            file_handler = _OrdinaryFileHandler(Path(LOG_DIR))
             file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
             self._add_handler(logger, file_handler)
 
@@ -109,32 +202,10 @@ class LoggerComponent:
         self._handlers.append(handler)
 
     def _clear_old_logs(self):
-        if AUDIT_CONFIG.enabled:
-            return
-        if not os.path.isdir(LOG_DIR):
-            return
-
-        threshold = datetime.now() - timedelta(days=RETENTION_DAYS)
-        for root, _, files in os.walk(LOG_DIR):
-            for file_name in files:
-                if not (file_name.startswith("custom_") and file_name.endswith(".log")):
-                    continue
-                try:
-                    timestamp_str = file_name.split("_")[1].split(".")[0]
-                    file_date = datetime.strptime(timestamp_str, "%Y%m%d")
-                except Exception as exc:
-                    self.logger.error(f"处理文件 {file_name} 时出错: {exc}")
-                    continue
-                if file_date < threshold:
-                    file_path = os.path.join(root, file_name)
-                    try:
-                        os.remove(file_path)
-                    except Exception as exc:
-                        self.logger.error(
-                            f"删除过期日志文件失败: {file_path} - {exc}"
-                        )
-                    else:
-                        self.logger.info(f"已删除过期日志文件: {file_path}")
+        if not AUDIT_CONFIG.enabled:
+            for handler in self._handlers:
+                if isinstance(handler, _OrdinaryFileHandler):
+                    _prune_ordinary_logs(handler.directory, time.time())
 
     def close(self):
         if not getattr(self, "logger", None):

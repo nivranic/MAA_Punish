@@ -15,15 +15,21 @@ from maa.resource import Resource
 from maa.tasker import Tasker
 
 from action.basics import ScopedRecovery as recovery
-
+from action.basics import daily_progress as dp
+from test_support.daily_progress import register_daily_progress
+from test_support.native_lifecycle import stop_and_wait_idle
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_daily_guild_entry_uses_the_current_graceful_failure_handler():
+def test_daily_guild_entry_blocks_admission_errors_but_keeps_work_failure_owner():
     defaults = json.loads((ROOT / "resource/base/default_pipeline.json").read_text(encoding="utf-8"))
     guild = jsonc.loads((ROOT / "resource/base/pipeline/Guild.jsonc").read_text(encoding="utf-8"))
-    for name in ("指挥局", "检查是否在指挥局内部"):
+    root = guild["指挥局"]
+    guard = root["attach"][dp.GUARD_POINTER]
+    assert root["next"] == [dp.ADMIT_NODE] and root["on_error"] == []
+    assert guard == "日常断点_指挥局"
+    for name in (guard, "检查是否在指挥局内部"):
         assert guild[name].get("on_error", defaults["Default"]["on_error"]) == ["任务失败优雅退出"]
 
 
@@ -93,6 +99,7 @@ class PageRecognition(CustomRecognition):
 
 @pytest.mark.parametrize("case,page,expected_inputs,expected_outcome", [
     ("guild-navigation", "guild", 1, "home_original_task_failed"),
+    ("untrusted-admit", "guild", 0, "stopped_unknown"),
     ("already-home", "home", 0, "home_original_task_failed"),
     ("unknown", "unknown", 0, "stopped_unknown"),
     ("rogue-reward", "rogue-reward", 0, "stopped_unknown"),
@@ -118,46 +125,52 @@ def test_explicit_legacy_recovery_is_scoped_and_normal_d03_is_preserved(
     action = recovery.ScopedRecovery()
     assert resource.register_custom_recognition("RecoveryPageFixture", recognizer)
     assert resource.register_custom_action("ScopedRecovery", action)
+    register_daily_progress(resource, monkeypatch, tmp_path / "daily-progress.json")
     controller = MemoryController(state)
     assert controller.post_connection().wait().succeeded
     tasker = Tasker()
     assert tasker.bind(resource, controller)
+    timing = {"timeout": 15, "rate_limit": 0, "pre_delay": 0, "post_delay": 0,
+              "pre_wait_freezes": {"time": 0}, "post_wait_freezes": {"time": 0}}
+    # Daily tasks inherit the graceful handler on work nodes. Exercise the
+    # retained legacy callback with test-local work failure edges only.
     patch = {name: {
+        **timing,
         "recognition": {"type": "Custom", "param": {"custom_recognition": "RecoveryPageFixture"}},
-        "timeout": 15, "rate_limit": 0, "pre_delay": 0, "post_delay": 0,
-        "pre_wait_freezes": {"time": 0}, "post_wait_freezes": {"time": 0},
         "on_error": [recovery.RECOVERY_NODE],
-    } for name in resource.node_list if name not in {recovery.RECOVERY_NODE, recovery.BACK_NODE}}
-    # 断点续接守卫/落账节点对本用例透传（不验账本语义，只保 D03 链路形状）。
-    # on_error 与其余节点一致路由 ScopedRecovery，保持超时型 Failed 的原语义。
-    for name in resource.node_list:
-        if name.startswith("日常断点_") or name.startswith("日常完成_"):
-            patch[name] = {
-                "recognition": {"type": "DirectHit", "param": {}},
-                "action": {"type": "DoNothing"},
-                "timeout": 15, "rate_limit": 0, "pre_delay": 0, "post_delay": 0,
-                "pre_wait_freezes": {"time": 0}, "post_wait_freezes": {"time": 0},
-                "on_error": [recovery.RECOVERY_NODE],
-            }
-    # Daily tasks now inherit the graceful handler. Exercise the retained
-    # legacy callback only through an explicit test-local route.
+    } for name in resource.node_list
+        if name not in {"指挥局", recovery.RECOVERY_NODE, recovery.BACK_NODE}
+        and not name.startswith((dp.ADMIT_NODE, "日常断点_", "日常完成_"))}
+    guard = "日常断点_指挥局"
+    patch[guard] = {**timing, "on_error": [recovery.RECOVERY_NODE]}
+    if case == "untrusted-admit":
+        # The substitute admits normally, so history shows the same logical
+        # name and Custom success; the effective callback identity differs.
+        assert resource.register_custom_action("TestOtherAdmit", dp.DailyProgressAdmit())
+        patch[dp.ADMIT_NODE] = {"action": {"type": "Custom", "param": {"custom_action": "TestOtherAdmit"}}}
     # Keep the actual return-icon TemplateMatch, target ROI and image. Only its
     # surrounding page recognition is a scripted endpoint, never live OCR.
     patch[recovery.BACK_NODE] = {"pre_delay": 0, "post_delay": 0}
-    job = tasker.post_task("指挥局", patch)
-    job.wait()
-    if case != "normal":
-        until = time.monotonic() + 2
-        while action.last_result is None and time.monotonic() < until:
-            time.sleep(.005)
-        assert action.last_result is not None
-        assert action.last_result["business_success"] is False
-        assert action.last_result["outcome"] == expected_outcome
-        assert action.last_result["returns"] == (1 if case == "guild-navigation" else 0)
-        assert action.last_result["original_failure_cleanup_verified"] is False
-    else:
-        assert job.succeeded and action.last_result is None
-    tasker.post_stop().wait()
+    try:
+        job = tasker.post_task("指挥局", patch).wait()
+        if case != "normal":
+            until = time.monotonic() + 2
+            while action.last_result is None and time.monotonic() < until:
+                time.sleep(.005)
+            assert action.last_result is not None
+            assert action.last_result["business_success"] is False
+            assert action.last_result["outcome"] == expected_outcome
+            assert action.last_result["returns"] == (1 if case == "guild-navigation" else 0)
+            assert action.last_result["original_failure_cleanup_verified"] is False
+            if case == "untrusted-admit":
+                assert action.last_result["reason"] == "d03_admission_contract_changed"
+        else:
+            assert job.succeeded and action.last_result is None
+        history = [tasker.get_node_detail(i) for i in job.get().node_id_list]
+        assert [node.name for node in history[:3]] == ["指挥局", dp.ADMIT_NODE, guard]
+        assert history[1].completed and history[1].action.action == "Custom" and history[1].action.success
+    finally:
+        stop_and_wait_idle(tasker)
     assert len(controller.inputs) == expected_inputs
     assert all(item[0] == "Click" for item in controller.inputs)
     if case == "guild-navigation":

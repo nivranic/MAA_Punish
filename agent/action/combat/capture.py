@@ -92,8 +92,24 @@ def _capture_scoped(context, combat, scope, deadline):
         scope.fail("截图等待期限已到")
         raise CombatCaptureError("截图等待期限已到，未下发新截图")
     scope.capture_in_flight = True
+    submitted = False
     try:
-        job = scope.controller_for_jobs().post_screencap()
+        try:
+            controller = scope.controller_for_jobs()
+        except Exception:
+            # No native screencap request was submitted. Release the capture
+            # slot so cleanup does not mistake this for an unconfirmed job.
+            scope.pending_capture = None
+            scope.capture_in_flight = False
+            raise
+        # Controller acquisition can be slow and may synchronously stop or
+        # replace this scope. Recheck ownership and the absolute limit before
+        # submitting anything to native.
+        scope.assert_active()
+        if scope.monotonic() >= limit:
+            raise CombatCaptureError("截图获取控制器后已超过期限，未下发新截图")
+        submitted = True
+        job = controller.post_screencap()
         scope.pending_capture = job
         scope.wait_job(job, limit)
         scope.assert_active()
@@ -117,7 +133,7 @@ def _capture_scoped(context, combat, scope, deadline):
             terminal = scope.pending_capture is not None and scope.pending_capture.done
         except Exception:
             terminal = False
-        if terminal:
+        if terminal or not submitted:
             scope.pending_capture = None
             scope.capture_in_flight = False
         scope.fail(f"capture_failed: {error}")

@@ -6,10 +6,9 @@
         "pre_delay": 0,
         "post_delay": 0,
         "rate_limit": 0,
-        "next": [
-            "日常断点_拟战场域",
-            "空任务"
-        ]
+        "attach": {"daily_progress_guard_node": "日常断点_拟战场域"},
+        "next": ["日常账本准入"],
+        "on_error": []
     },
     "日常断点_拟战场域": {
         "recognition": {
@@ -55,14 +54,12 @@
         },
         "pre_delay": 0,
         "action": {
-            "type": "Click",
+            "type": "Custom",
             "param": {
-                "target_offset": [
-                    60,
-                    0,
-                    -60,
-                    0
-                ]
+                "custom_action": "ClickAnchor",
+                "custom_action_param": {
+                    "position": "center"
+                }
             }
         },
         "post_delay": 0,

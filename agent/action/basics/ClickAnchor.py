@@ -3,6 +3,8 @@
     "position": "right", "x": -6, "y": 3
     → 先取 (x+w, y+h//2)，再往左 6px、往下 3px
 
+动作结果跟随 Controller 的点击状态，不把已提交但失败的点击当成成功。
+
 基准点：top_left / top / top_right / left / center / right /
         bottom_left / bottom / bottom_right（默认 center）
 x 正=右、负=左；y 正=下、负=上。
@@ -55,5 +57,5 @@ class ClickAnchor(CustomAction):
         logger.debug(
             f"ClickAnchor: {position} ({x}, {y}, {w}, {h}) + ({dx}, {dy}) -> ({px}, {py})"
         )
-        context.tasker.controller.post_click(px, py).wait()
-        return CustomAction.RunResult(success=True)
+        result = context.tasker.controller.post_click(px, py).wait()
+        return CustomAction.RunResult(success=result.succeeded)

@@ -5,13 +5,15 @@ import pytest
 from maa.custom_recognition import CustomRecognition
 from maa.tasker import Tasker
 
+from action.basics.daily_progress import ADMIT_NODE
 from test_r01_zero_refresh_native import Controller, load_resource
+from test_support.daily_progress import register_daily_progress
 from test_support.native_lifecycle import stop_and_wait_idle
 
 
 @pytest.mark.parametrize('language', ['base', 'en_US', 'zh_TW', 'ja_JP'])
 @pytest.mark.parametrize('case', ['stale_home', 'slow_load', 'never_load', 'already_inside', 'wrong_room'])
-def test_dorm_entry_waits_for_overview_before_returning_to_parent(tmp_path, language, case):
+def test_dorm_entry_waits_for_overview_before_returning_to_parent(tmp_path, monkeypatch, language, case):
     state = {'page': {'already_inside': 'overview', 'wrong_room': 'room'}.get(case, 'home'),
              'frames': 0}
     clicks = []
@@ -38,14 +40,9 @@ def test_dorm_entry_waits_for_overview_before_returning_to_parent(tmp_path, lang
                 return (152, 651, 59, 29)
             return None
 
-    class PendingDailyProgress(CustomRecognition):
-        def analyze(self, context, argv):
-            assert argv.node_name == '日常断点_宿舍任务'
-            return CustomRecognition.AnalyzeResult(box=(0, 0, 0, 0), detail={'status': 'pending'})
-
     resource = load_resource(tmp_path, language)
     assert resource.register_custom_recognition('DormEntryPage', Page())
-    assert resource.register_custom_recognition('DailyProgressCheck', PendingDailyProgress())
+    register_daily_progress(resource, monkeypatch, tmp_path / 'daily-progress.json')
     timing = dict(pre_delay=0, post_delay=0, timeout=180, rate_limit=1, on_error=[])
     overrides = {name: dict(timing) for name in [
         '宿舍任务', '日常断点_宿舍任务', '打开宿舍', '打开宿舍_已进入总览', '宿舍内部',
@@ -72,12 +69,12 @@ def test_dorm_entry_waits_for_overview_before_returning_to_parent(tmp_path, lang
         assert len(clicks) == (0 if case in {'already_inside', 'wrong_room'} else 1)
         assert state['page'] != 'room' or case == 'wrong_room'
         names = [tasker.get_node_detail(i).name for i in job.get().node_id_list]
-        assert names[:2] == ['宿舍任务', '日常断点_宿舍任务']
+        assert names[:3] == ['宿舍任务', ADMIT_NODE, '日常断点_宿舍任务']
         assert '空任务' not in names
         if case in {'stale_home', 'slow_load'}:
-            assert names[2:] == ['打开宿舍', '打开宿舍_已进入总览', '宿舍内部']
+            assert names[3:] == ['打开宿舍', '打开宿舍_已进入总览', '宿舍内部']
         elif case == 'already_inside':
-            assert names[2:] == ['宿舍内部']
+            assert names[3:] == ['宿舍内部']
         else:
             assert '打开宿舍_已进入总览' not in names and '宿舍内部' not in names
         if clicks:

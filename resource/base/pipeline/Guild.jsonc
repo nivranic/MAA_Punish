@@ -1,9 +1,8 @@
 {
     "指挥局": {
-        "next": [
-            "日常断点_指挥局",
-            "空任务"
-        ]
+        "attach": {"daily_progress_guard_node": "日常断点_指挥局"},
+        "next": ["日常账本准入"],
+        "on_error": []
     },
     "日常断点_指挥局": {
         "recognition": {
@@ -37,8 +36,39 @@
             "daily_progress_key": "指挥局"
         },
         "next": [
-            "返回主菜单"
+            "返回主菜单",
+            "[JumpBack]指挥局_返回",
+            "指挥局_已在主界面"
         ]
+    },
+    "指挥局_返回": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "检查是否在指挥局内部",
+                    "返回_文字"
+                ],
+                "box_index": 1
+            }
+        },
+        "action": {
+            "type": "Click"
+        },
+        "post_delay": 1500
+    },
+    "指挥局_已在主界面": {
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "主界面_战斗节点"
+                ]
+            }
+        },
+        "action": {
+            "type": "DoNothing"
+        }
     },
     "检查是否在指挥局内部": {
         "recognition": {

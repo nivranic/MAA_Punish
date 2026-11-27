@@ -154,6 +154,12 @@ def test_collapsed_run_discards_roster_before_starting_another_run(tmp_path):
         job = tasker.post_task("链路崩溃", {
             TEAM_ROSTER_NODE: {"attach": {"R": "Oblivion", "B": "GeneralFight", "Y": ""}},
             "链路崩溃": {"recognition": {"type": "DirectHit"}, "post_delay": 0},
+            # This test only observes the roster handed to the next adventure.
+            # The actual settlement inputs are covered by the settlement replay.
+            "矩阵循生_败局结算统计": {
+                "recognition": {"type": "DirectHit"}, "action": {"type": "DoNothing"},
+            },
+            "矩阵循生_败局回枢纽": {"recognition": {"type": "DirectHit"}},
             "矩阵循生": {
                 "action": {"type": "Custom", "param": {"custom_action": "R03NextRunRoster"}},
                 "next": [],

@@ -605,6 +605,8 @@
     "focus.未知事件_矩阵循生": "<span style=\"color:Tomato\">文本識別錯誤</span>",
     "focus.未解锁开局": "<span style=\"color:Tomato\">未解鎖對應開局</span>",
     "focus.未解锁自动作战": "<span style=\"color:Tomato\">未解鎖自動作戰</span>",
+    "focus.未解锁自动作战_战斗准备": "<span style=\"color:Orange\">識別到「戰鬥準備」按鈕，本次跳過刷A級碎片</span>",
+    "focus.助理交流入口缺失_转任务": "<span style=\"color:Orange\">點擊助理未出現「交流」入口（只彈出信賴對話），本次跳過助理交流並繼續領取任務</span>",
     "focus.查看Boss_不明构造体": "不明構造體α",
     "focus.查看Boss_冰队": "已選擇冰隊",
     "focus.查看Boss_暗队": "已選擇暗隊",

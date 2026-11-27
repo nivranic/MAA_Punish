@@ -21,6 +21,7 @@ from maa.custom_action import CustomAction
 from maa.define import Rect
 from maa.pipeline import JActionType, JClick
 
+from action.basics.daily_progress import ADMIT_NODE
 from action.combat.input_control import CombatInputError, CombatInputScope
 from logger_component import LoggerComponent
 
@@ -41,8 +42,8 @@ PRIOR_RELEASE_VERIFY_SECONDS = 2.0
 _ROOMS = ("蔚蓝之夏", "岁雪新宵", "庭梨栖雪", "漫花清夏", "鲸律星屿", "云海空岛", "经典舱室")
 _D03_NAVIGATION = {"指挥局": "DoNothing", GUILD_NODE: "DoNothing", "打开指挥局": "Click",
                    "切换主界面状态": "Click", "意外点击_主界面": "Click", "识别文字颜色": "DoNothing",
-                   # 断点续接守卫（2026-11-23）：账本检查节点，动作恒 DoNothing，属安全导航。
-                   "日常断点_指挥局": "DoNothing",
+                   # 准入 Custom 必须再核对回调和历史位置；守卫本身不输入。
+                   ADMIT_NODE: "Custom", "日常断点_指挥局": "DoNothing",
                    **{"移动_" + name: "Swipe" for name in _ROOMS},
                    **{"识别_" + name: "DoNothing" for name in _ROOMS}}
 _D03_BUSINESS = frozenset({"检查指定按钮", "关闭奖励_指挥局", "返回", BACK_NODE})
@@ -156,6 +157,17 @@ class ScopedRecovery(CustomAction):
                     or node.action is None or node.action.success is not True
                     or node.action.action != _D03_NAVIGATION[node.name]):
                 raise CombatInputError("d03_history_not_safe_navigation")
+            if node.name == ADMIT_NODE:
+                # Maa 5.14.2's ActionDetail records Custom success but has no
+                # callback name in raw_detail. Also check the effective node.
+                if names != ["指挥局"]:
+                    raise CombatInputError("d03_admission_history_invalid")
+                admit = context.get_node_data(ADMIT_NODE) or {}
+                active()
+                if (admit.get("recognition", {}).get("type") != "DirectHit"
+                        or admit.get("action", {}).get("type") != "Custom"
+                        or admit.get("action", {}).get("param", {}).get("custom_action") != "DailyProgressAdmit"):
+                    raise CombatInputError("d03_admission_contract_changed")
             names.append(node.name)
         if not names or names[0] != "指挥局":
             raise CombatInputError("d03_entry_history_missing")

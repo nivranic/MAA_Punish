@@ -7,6 +7,7 @@ import pytest
 from maa.custom_recognition import CustomRecognition
 from maa.tasker import Tasker
 
+from action.basics.ClickAnchor import ClickAnchor
 from test_r01_zero_refresh_native import ROOT, Controller, load_resource
 from test_support.native_lifecycle import stop_and_wait_idle
 
@@ -24,6 +25,7 @@ from test_support.native_lifecycle import stop_and_wait_idle
 def test_startup_leaves_only_confirmed_matrix_partner(tmp_path, language, start, event, back, collection, team):
     state = {"page": start}
     clicks = []
+    home_region = (196, 14, 84, 46) if language == "en_US" else (285, 10, 75, 55)
 
     class Capture(Controller):
         def click(self, x, y):
@@ -38,7 +40,7 @@ def test_startup_leaves_only_confirmed_matrix_partner(tmp_path, language, start,
                 "肉鸽内部": (state["page"] == "map" and collection, (1030, 650, 70, 30)),
                 "更换人物": (state["page"] == "map" and team, (735, 650, 70, 30)),
                 "返回_文字": (state["page"] in {"event", "map"} and back, (130, 20, 60, 40)),
-                "返回主菜单_文字": (state["page"] == "menu", (285, 10, 75, 55)),
+                "返回主菜单_文字": (state["page"] == "menu", home_region),
                 "检查主界面2": (state["page"] == "home", (50, 50, 50, 50)),
             }
             hit, box = matches.get(argv.node_name, (False, None))
@@ -46,6 +48,7 @@ def test_startup_leaves_only_confirmed_matrix_partner(tmp_path, language, start,
 
     resource = load_resource(tmp_path, language)
     assert resource.register_custom_recognition("R03StartupPage", Page())
+    assert resource.register_custom_action("ClickAnchor", ClickAnchor())
     startup = jsonc.loads((ROOT / "resource/base/pipeline/Start_up.jsonc").read_text(encoding="utf-8"))
     preserved = {"返回主菜单", "启动_从矩阵搭档返回", "启动_从矩阵地图返回"}
     names = {name.removeprefix("[JumpBack]") for name in startup["启动"]["next"]} - preserved
@@ -77,8 +80,10 @@ def test_startup_leaves_only_confirmed_matrix_partner(tmp_path, language, start,
         assert len(clicks) == ((3 if start == "event" else 2) if succeeds else 0)
         assert state["page"] == ("home" if succeeds else start)
         if clicks:
-            x, y = clicks[0]
-            assert 130 <= x < 190 and 20 <= y < 60
+            for x, y in clicks[:-1]:
+                assert 130 <= x < 190 and 20 <= y < 60
+            x, y, w, h = home_region
+            assert clicks[-1] == (x + w, y + h // 2)
     finally:
         watchdog.cancel()
         watchdog.join()
@@ -98,9 +103,18 @@ def test_startup_returns_from_matrix_formation_without_recruiting(tmp_path, lang
 
     class Capture(Controller):
         def click(self, x, y):
-            box = regions.get(state["page"])
-            if box is None or not (box[0] <= x < box[0] + box[2] and box[1] <= y < box[1] + box[3]):
-                wrong.append((state["page"], x, y))
+            page = state["page"]
+            box = regions.get(page)
+            if box is not None:
+                bx, by, width, height = box
+                if page == "menu":
+                    expected = (x, y) == (bx + width, by + height // 2)
+                else:
+                    expected = bx <= x < bx + width and by <= y < by + height
+            else:
+                expected = False
+            if not expected:
+                wrong.append((page, x, y))
                 return False
             clicks.append(state["page"])
             state["page"] = {"formation": "menu", "menu": "home"}[state["page"]]
@@ -119,6 +133,7 @@ def test_startup_returns_from_matrix_formation_without_recruiting(tmp_path, lang
 
     resource = load_resource(tmp_path, language)
     assert resource.register_custom_recognition("R03StartupFormation", Page())
+    assert resource.register_custom_action("ClickAnchor", ClickAnchor())
     keep = {"启动", "返回主菜单", "返回主菜单_reco", "启动_从矩阵编队返回", "检查主界面", "检查主界面2"}
     patch = {}
     for parent in ("启动", "返回主菜单"):

@@ -179,6 +179,7 @@ class CombatTask:
         self.r3_identity_grace_until: float | None = None
         self.fresh_entry = None
         self._entry_start_attempted = False
+        self._loading_entry_team = False
         self.wait_combat_time = (
             wait_combat_time if wait_combat_time is not None else self.WAIT_COMBAT_TIME
         )
@@ -263,7 +264,14 @@ class CombatTask:
             self.combat_ui_visible = True
             self.logger.info("进入战斗")
 
-            if not self.load_team():
+            self._loading_entry_team = True
+            try:
+                loaded = self.load_team()
+            finally:
+                self._loading_entry_team = False
+            if self._entry_exit_pending():
+                return
+            if not loaded:
                 self.out_of_combat_reason = "team_detect_failed"
                 return
             if self.fresh_entry is not None:
@@ -498,11 +506,8 @@ class CombatTask:
 
     def _blind_attack_tick(self) -> None:
         """角色识别等阻塞流程中周期性盲发普攻（检查角色前连点两次）。"""
-        if (
-            self._should_stop()
-            or self.is_observation_protected()
-            or self.roguelike3_identity_required
-        ):
+        stopped = self._entry_exit_pending() if self._loading_entry_team else self._should_stop()
+        if stopped or self.is_observation_protected() or self.roguelike3_identity_required:
             return
         blind_attack_click(
             self.context, attack_count=CHAR_CHECK_ATTACK_COUNT, combat=self
@@ -550,13 +555,18 @@ class CombatTask:
         r3_identity = self.roguelike3_identity_required
         if not protected and not r3_identity:
             self._blind_attack_tick()
+            if self._loading_entry_team and self._entry_exit_pending():
+                return "未知", roster_cls
         prefer = [roster_cls] if roster_cls else []
         display_name, detected_cls = detect_current_role(
             self.context,
             image,
             prefer_cls=prefer,
             on_tick=None if protected or r3_identity else self._blind_attack_tick,
+            cancel_after_tick=self._entry_exit_pending if self._loading_entry_team else None,
         )
+        if self._loading_entry_team and self._entry_exit_pending():
+            return "未知", roster_cls
         key = color.upper()
         if r3_identity:
             role = self.roles.get(key)
@@ -925,9 +935,17 @@ class CombatTask:
         )
         logged = False
         while True:
+            if self._loading_entry_team and self._entry_exit_pending():
+                return False
             try:
                 snapshot = self.combat_check.detect_team(self.context, self)
             except Roguelike3IdentityError as exc:
+                if (
+                    self._loading_entry_team
+                    and exc.reason == "r3_field_identity_unknown"
+                    and self._entry_exit_on_current_frame()
+                ):
+                    return False
                 retryable = (
                     deadline is not None
                     and exc.reason == "r3_field_identity_unknown"
@@ -945,6 +963,11 @@ class CombatTask:
                 self.frame = None
                 continue
             break
+        # Team inference can recapture for QTE, even if no assist was sent.
+        # A positive exit on that frame (or an earlier assist frame) must win
+        # over either a valid roster or a generic team-detection failure.
+        if self._loading_entry_team and self._entry_exit_on_current_frame():
+            return False
         if snapshot is None:
             self.logger.warning("角色识别失败")
             return False
@@ -1579,18 +1602,48 @@ class CombatTask:
             self.logger.info("R03 本场阵亡: @%s hp=%s", color, hp_text)
         self._r3_living_identity = None
 
+    def _entry_exit_pending(self) -> bool:
+        """Keep a proven exit for the whole entry; an observed Stop wins."""
+        if self._should_stop():
+            self.out_of_combat_reason = "stopped"
+        return bool(self.out_of_combat_reason)
+
+    def _entry_exit_on_current_frame(self) -> bool:
+        if self._entry_exit_pending():
+            return True
+        if self.frame is None:
+            return False
+        overlay = self.combat_check.match_exit_overlay(self.context, self)
+        if self._entry_exit_pending():
+            return True
+        if not overlay:
+            return False
+        self.out_of_combat_reason = "outer_interface"
+        self.logger.info("识别到战斗退出界面: %s", overlay)
+        return True
+
+    def _entry_hud_ready(self, image: Any) -> bool:
+        """A current frame may authorize entry input only with a positive HUD."""
+        if image is None or self.frame is not image or self._entry_exit_on_current_frame():
+            return False
+        hud = self.combat_check.in_combat(self.context, self)
+        return not self._entry_exit_pending() and hud
+
     def _wait_in_combat(self) -> None:
         deadline = time.monotonic() + self.wait_combat_time
         while time.monotonic() < deadline:
-            if self._should_stop():
-                self.out_of_combat_reason = "stopped"
+            if self._entry_exit_pending():
                 return
-            self._capture_frame()
-            if self.combat_check.in_combat(self.context, self):
+            image = self._capture_frame()
+            if self._entry_hud_ready(image):
                 self._in_combat = True
+                return
+            if self._entry_exit_pending():
                 return
             time.sleep(self.WAIT_POLL_INTERVAL)
 
+        if self._entry_exit_pending():
+            return
         self.logger.info("等待进入战斗超时")
         self.out_of_combat_reason = "enter_timeout"
 

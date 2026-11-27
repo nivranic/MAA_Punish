@@ -55,7 +55,7 @@ def test_detected_boss_clicks_card_and_uses_existing_combat_entry(tmp_path):
                       "action": {"type": "StopTask"}}
                for name in ("确认结束购物_矩阵循生", "终止_矩阵循生", "返回")},
             **{name: {"enabled": False} for name in (
-                "战斗完成_矩阵循生", "战斗失败", "放弃战斗_矩阵循生",
+                "战斗完成_矩阵循生", "链路崩溃", "放弃战斗_矩阵循生",
                 "算力单元不足", "重启_寒境曙光", "跳过战斗对话", "战斗中",
                 "出击_矩阵循生", "载入中", "通用处理-未下载弹窗-角色皮肤没下载-检测层",
             )},

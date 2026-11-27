@@ -28,10 +28,7 @@
                     "description": "$case.选择物品.涂装设计草稿-宿舍商店.description",
                     "pipeline_override": {
                         "购买物品": {
-                            "next": [
-                                "日常断点_购买物品_宿舍",
-                                "空任务"
-                            ]
+                            "attach": {"daily_progress_guard_node": "日常断点_购买物品_宿舍"}
                         },
                         "日常断点_购买物品_宿舍": {
                             "attach": {
@@ -59,10 +56,7 @@
                     "description": "$case.选择物品.武器设计草稿-宿舍商店.description",
                     "pipeline_override": {
                         "购买物品": {
-                            "next": [
-                                "日常断点_购买物品_宿舍",
-                                "空任务"
-                            ]
+                            "attach": {"daily_progress_guard_node": "日常断点_购买物品_宿舍"}
                         },
                         "日常断点_购买物品_宿舍": {
                             "attach": {

@@ -1,9 +1,8 @@
 {
     "纷争战区": {
-        "next": [
-            "日常断点_纷争战区",
-            "空任务"
-        ]
+        "attach": {"daily_progress_guard_node": "日常断点_纷争战区"},
+        "next": ["日常账本准入"],
+        "on_error": []
     },
     "日常断点_纷争战区": {
         "recognition": {

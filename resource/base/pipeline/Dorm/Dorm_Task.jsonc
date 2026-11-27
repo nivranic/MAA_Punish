@@ -1,9 +1,8 @@
 {
     "宿舍任务": {
-        "next": [
-            "日常断点_宿舍任务",
-            "空任务"
-        ]
+        "attach": {"daily_progress_guard_node": "日常断点_宿舍任务"},
+        "next": ["日常账本准入"],
+        "on_error": []
     },
     "日常断点_宿舍任务": {
         "recognition": {

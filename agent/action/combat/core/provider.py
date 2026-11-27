@@ -449,16 +449,21 @@ class CombatCheck(BaseCombatCheck):
             hasattr(combat, "is_observation_protected")
             and combat.is_observation_protected()
         )
+        loading_entry = getattr(combat, "_loading_entry_team", False)
         display_name, field_cls = detect_current_role(
             context,
             image,
             prefer_cls=prefer,
+            cancel_after_tick=combat._entry_exit_pending if loading_entry else None,
             on_tick=(
                 None if protected or r3_identity else lambda: blind_attack_click(
                     context, attack_count=CHAR_CHECK_ATTACK_COUNT, combat=combat
                 )
             ),
         )
+        if loading_entry and combat._entry_exit_pending():
+            # A later assist frame handed control back to the task owner.
+            return None
         if r3_identity:
             combat.field_identity = "unknown"
             require_roguelike3_field_identity(
@@ -475,6 +480,8 @@ class CombatCheck(BaseCombatCheck):
 
         combat.frame = None
         image = self._get_frame(context, combat)
+        if loading_entry and combat._entry_exit_on_current_frame():
+            return None
         visible_qte = detect_visible_team_colors(context, image)
 
         roster = roster_from_entry_qte(field_cls, visible_qte, published)

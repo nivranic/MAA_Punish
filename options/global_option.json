@@ -781,6 +781,14 @@
                         }
                     }
                 },
+                "松开攻击": {
+                    "action": {
+                        "type": "KeyUp",
+                        "param": {
+                            "key": "{攻击.primary}"
+                        }
+                    }
+                },
                 "按下闪避": {
                     "action": {
                         "type": "KeyDown",

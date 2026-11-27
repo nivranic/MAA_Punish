@@ -14,7 +14,9 @@ from action.basics.AuditPurchaseReconcile import AuditPurchaseReconcile
 from action.basics.ClickAnchor import ClickAnchor
 from action.basics.ScopedRecovery import ScopedRecovery
 from action.basics.combat_start_failure import CombatStartFailure
+from action.basics.r03_unconfirmed_settlement import R03UnconfirmedSettlement
 from action.basics.daily_progress import (
+    DailyProgressAdmit,
     DailyProgressCheck,
     DailyProgressMark,
     DailyProgressReset,
@@ -31,6 +33,7 @@ from recognition.exclusives.CacheRole import CacheRole
 from recognition.exclusives.ExpressionRecognition import ExpressionRecognition
 from recognition.exclusives.CheckBlueZone import CheckBlueZone
 from recognition.exclusives.CheckROIZoneCache import CheckROIZoneCache
+from recognition.exclusives.D08MapSettlement import D08MapSettlement
 from recognition.exclusives.PurchaseObservation import (
     D12PurchaseObservation, D13PurchaseObservation, D14PurchaseObservation,
 )
@@ -57,8 +60,18 @@ class Agent_AuditPurchase(AuditPurchase):
     pass
 
 
+@AgentServer.custom_action("DailyProgressAdmit")
+class Agent_DailyProgressAdmit(DailyProgressAdmit):
+    pass
+
+
 @AgentServer.custom_recognition("DailyProgressCheck")
 class Agent_DailyProgressCheck(DailyProgressCheck):
+    pass
+
+
+@AgentServer.custom_recognition("D08MapSettlement")
+class Agent_D08MapSettlement(D08MapSettlement):
     pass
 
 
@@ -83,6 +96,11 @@ class Agent_ScopedRecovery(ScopedRecovery):
 
 @AgentServer.custom_action("CombatStartFailure")
 class Agent_CombatStartFailure(CombatStartFailure):
+    pass
+
+
+@AgentServer.custom_action("R03UnconfirmedSettlement")
+class Agent_R03UnconfirmedSettlement(R03UnconfirmedSettlement):
     pass
 
 

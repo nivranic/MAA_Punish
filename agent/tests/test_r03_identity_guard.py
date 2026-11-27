@@ -446,6 +446,35 @@ def test_r03_load_team_does_not_retry_mismatch(monkeypatch):
     no_inputs(item.context)
 
 
+def test_r03_entry_mismatch_with_exit_overlay_is_not_downgraded(monkeypatch):
+    """A real mismatch stays REJECTED even if an exit overlay is on the same frame."""
+    item = combat(roster={"R": "Oblivion", "B": "", "Y": ""})
+    item._loading_entry_team = True
+
+    def mismatch(*_args, **_kwargs):
+        raise Roguelike3IdentityError("r3_published_roster_invalid")
+
+    monkeypatch.setattr(item.combat_check, "detect_team", mismatch)
+    monkeypatch.setattr(item.combat_check, "match_exit_overlay", lambda *_: "失败_宣叙妄响")
+    with pytest.raises(Roguelike3IdentityError, match="r3_published_roster_invalid"):
+        item.load_team()
+    no_inputs(item.context)
+
+
+def test_r03_entry_transient_unknown_with_exit_overlay_still_exits(monkeypatch):
+    """Transient unknown remains retryable/exit-friendly during entry."""
+    item = combat(roster={"R": "Oblivion", "B": "", "Y": ""})
+    item._loading_entry_team = True
+
+    def unknown(*_args, **_kwargs):
+        raise Roguelike3IdentityError("r3_field_identity_unknown")
+
+    monkeypatch.setattr(item.combat_check, "detect_team", unknown)
+    monkeypatch.setattr(item.combat_check, "match_exit_overlay", lambda *_: "失败_宣叙妄响")
+    assert item.load_team() is False
+    no_inputs(item.context)
+
+
 def test_r03_invalid_policy_runner_rejects_without_constructing_combat(monkeypatch):
     import action.combat.entry.runner as runner
     context = FakeContext(node_data={"战斗中": {"attach": {"roguelike3_identity": {}}}})

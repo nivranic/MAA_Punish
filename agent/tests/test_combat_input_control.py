@@ -182,6 +182,53 @@ def test_capture_replaced_during_poll_cannot_publish_to_new_scope():
     assert combat.frame is marker and job.get_calls == 0 and scope.stop_unconfirmed
 
 
+@pytest.mark.parametrize("boundary", ["deadline", "stop", "replaced", "acquire_failed"])
+def test_capture_controller_acquisition_boundaries_never_submit(boundary, monkeypatch):
+    clock, context, controller, combat, scope = _setup()
+    marker = np.ones((2, 2, 3), dtype=np.uint8)
+    if boundary == "replaced":
+        combat.frame = marker
+
+    def acquire():
+        if boundary == "deadline":
+            clock.now += 0.2
+        elif boundary == "stop":
+            context.tasker.stopping = True
+        elif boundary == "replaced":
+            combat.input_scope = object()
+            combat.frame = marker
+        else:
+            raise RuntimeError("controller unavailable")
+        return controller
+
+    monkeypatch.setattr(scope, "controller_for_jobs", acquire)
+    with pytest.raises(CombatCaptureError):
+        scope.capture_frame()
+    assert controller.posts == []
+    assert scope.pending_capture is None and not scope.capture_in_flight
+    assert scope.frame_metadata is None and scope.last_frame_metadata is None
+    assert scope.blocked and scope.stop_unconfirmed
+    assert combat.frame is (marker if boundary == "replaced" else None)
+
+
+def test_capture_submission_uncertainty_retains_ownership_without_cache_read(monkeypatch):
+    _, _, controller, _, scope = _setup()
+    controller.posts = []
+
+    def fail_post():
+        controller.posts.append("capture")
+        raise OSError("screencap post result unknown")
+
+    monkeypatch.setattr(controller, "post_screencap", fail_post)
+    with pytest.raises(CombatCaptureError):
+        scope.capture_frame()
+    assert controller.posts == ["capture"]
+    assert scope.pending_capture is None and scope.capture_in_flight
+    with pytest.raises(CombatInputError):
+        scope.capture_frame()
+    assert controller.posts == ["capture"]
+
+
 def test_successful_hold_uses_fresh_frames_and_releases_once():
     clock, context, controller, combat, scope = _setup()
     controller.jobs["down"].append(TimedFakeJob(clock, finish_at=0.02))
@@ -504,6 +551,43 @@ def test_shared_stop_after_observation_releases_without_a_second_frame():
         scope.hold_semantic("攻击", duration=0.2, observe=observe, should_stop=lambda: stopped)
     assert controller.posts == ["down", "capture", "up"]
     assert not scope.release_pending and scope.stop_unconfirmed
+
+
+def test_stop_during_successful_up_receipt_releases_once_without_success():
+    clock, context, controller, _, scope = _setup()
+
+    class StoppingUp(TimedFakeJob):
+        @property
+        def succeeded(self):
+            context.tasker.stopping = True
+            return super().succeeded
+
+    controller.jobs["up"].append(StoppingUp(clock))
+    with pytest.raises(CombatInputError):
+        scope.hold_semantic("攻击", duration=0.2, observe=lambda _: True)
+    assert controller.posts == ["down", "capture", "up"]
+    assert controller.touches == [("down", 1200, 620, 0, 1), ("up", 0)]
+    assert scope.owned_contact is None and not scope.release_pending
+    assert scope.blocked and scope.stop_unconfirmed
+
+
+def test_combat_actions_hold_stop_during_up_receipt_does_not_report_success():
+    clock, context, controller, combat, scope = _setup()
+
+    class StoppingUp(TimedFakeJob):
+        @property
+        def succeeded(self):
+            context.tasker.stopping = True
+            return super().succeeded
+
+    controller.jobs["up"].append(StoppingUp(clock))
+    actions = CombatActions(context)
+    actions._role = SimpleNamespace(combat=combat)
+    with pytest.raises(CombatInputError):
+        actions.hold_primary_input("攻击", duration=0.2, observe=lambda _: True)
+    assert controller.posts == ["down", "capture", "up"]
+    assert scope.owned_contact is None and not scope.release_pending
+    assert scope.blocked and scope.stop_unconfirmed
 
 
 @pytest.mark.parametrize("target, offset, expected", [

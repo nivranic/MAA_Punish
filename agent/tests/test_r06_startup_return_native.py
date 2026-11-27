@@ -7,6 +7,7 @@ import pytest
 from maa.custom_recognition import CustomRecognition
 from maa.tasker import Tasker
 
+from action.basics.ClickAnchor import ClickAnchor
 from test_r01_zero_refresh_native import ROOT, Controller, load_resource
 from test_support.native_lifecycle import stop_and_wait_idle
 
@@ -17,6 +18,7 @@ from test_support.native_lifecycle import stop_and_wait_idle
 def test_startup_leaves_only_confirmed_fog_event(tmp_path, language, event, back):
     state = {"page": "event"}
     clicks = []
+    home_region = (196, 14, 84, 46) if language == "en_US" else (285, 10, 75, 55)
 
     class Capture(Controller):
         def click(self, x, y):
@@ -29,7 +31,7 @@ def test_startup_leaves_only_confirmed_fog_event(tmp_path, language, event, back
             matches = {
                 "雾夜镇魂曲内部条件1": (state["page"] == "event" and event, (280, 80, 70, 60)),
                 "返回_文字": (state["page"] == "event" and back, (130, 20, 60, 40)),
-                "返回主菜单_文字": (state["page"] == "menu", (285, 10, 75, 55)),
+                "返回主菜单_文字": (state["page"] == "menu", home_region),
                 "检查主界面2": (state["page"] == "home", (50, 50, 50, 50)),
             }
             hit, box = matches.get(argv.node_name, (False, None))
@@ -37,6 +39,7 @@ def test_startup_leaves_only_confirmed_fog_event(tmp_path, language, event, back
 
     resource = load_resource(tmp_path, language)
     assert resource.register_custom_recognition("R06StartupPage", Page())
+    assert resource.register_custom_action("ClickAnchor", ClickAnchor())
     startup = jsonc.loads((ROOT / "resource/base/pipeline/Start_up.jsonc").read_text(encoding="utf-8"))
     preserved = {"返回主菜单", "启动_从雾夜事件返回"}
     names = {name.removeprefix("[JumpBack]") for name in startup["启动"]["next"]} - preserved
@@ -69,6 +72,8 @@ def test_startup_leaves_only_confirmed_fog_event(tmp_path, language, event, back
         if clicks:
             x, y = clicks[0]
             assert 130 <= x < 190 and 20 <= y < 60
+            x, y, w, h = home_region
+            assert clicks[-1] == (x + w, y + h // 2)
     finally:
         watchdog.cancel()
         watchdog.join()

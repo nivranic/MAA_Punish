@@ -168,6 +168,7 @@ def detect_current_role(
     on_tick: Callable[[], Any] | None = None,
     prefer_cls: Sequence[str] | None = None,
     skip_cls: Sequence[str] | None = None,
+    cancel_after_tick: Callable[[], bool] | None = None,
 ) -> tuple[str, str]:
     """
     按 attack_template 模板匹配当前上场角色。
@@ -175,11 +176,14 @@ def detect_current_role(
     默认专属 cls 优先于 GeneralFight，避免通用占位误匹配谬影。
     prefer_cls 会插到扫描队列最前（上次识别 / 队友），skip_cls 跳过已查过的 cls。
     on_tick 在本次扫描前调用一次（如盲发普攻，避免识别空转）。
+    cancel_after_tick 可在此后取消旧帧扫描，仍返回既有「未知」结果。
     同帧模板扫描合并为原生 Or，仍按角色顺序首命中即止。
 
     :return: (展示名, cls_name)
     """
-    return _detect_role_same_frame(context, image, prefer_cls, skip_cls, on_tick)
+    return _detect_role_same_frame(
+        context, image, prefer_cls, skip_cls, on_tick, cancel_after_tick,
+    )
 
 
 def _detect_role_same_frame(
@@ -188,6 +192,7 @@ def _detect_role_same_frame(
     prefer_cls: Sequence[str] | None,
     skip_cls: Sequence[str] | None,
     on_tick: Callable[[], Any] | None = None,
+    cancel_after_tick: Callable[[], bool] | None = None,
 ) -> tuple[str, str]:
     """单次请求保留角色分组及首命中顺序；不缓存有效布局参数。"""
     if context.tasker.stopping:
@@ -197,6 +202,8 @@ def _detect_role_same_frame(
         return "未知", _GENERIC_CLS
     if on_tick is not None:
         on_tick()
+        if cancel_after_tick is not None and cancel_after_tick():
+            return "未知", _GENERIC_CLS
     if context.tasker.stopping:
         return "未知", _GENERIC_CLS
 

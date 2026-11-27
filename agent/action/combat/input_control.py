@@ -350,31 +350,45 @@ class CombatInputScope:
         observe: Callable[[Any], bool | None],
         should_stop: Callable[[], bool] | None = None,
         position_validator: Callable[[tuple[int, int]], bool] | None = None,
+        start_deadline: float | None = None,
+        minimum_hold: float = 0.0,
     ) -> bool:
-        """Hold a main input until observe returns True or duration expires.
+        """Hold a main input until observed completion or the budget expires.
 
-        ``observe`` must only observe the provided new frame. False/None keep
-        holding within the same stage budget; timeout returns False after Up.
-        Input/capture/stop failures raise and block all subsequent scope input.
-        Optional ``position_validator`` receives the immutable resolved point
-        consumed by this Down. Only literal True permits input; rejection or
-        an exception precedes contact registration and posts no Down/Up/Stop.
+        ``observe`` receives a new frame even during ``minimum_hold``. Only a
+        True observed at or after that interval (measured from successful Down
+        Job status) completes the hold. Stop and failed releases still fail.
+        ``start_deadline`` bounds the host Down post, not physical delivery.
+        Budget exhaustion without an error returns False after Up.
         """
-        self.assert_active()
+        def require_idle():
+            self.assert_active()
+            if self.owned_contact is not None or self.release_pending or self.capture_in_flight:
+                raise CombatInputError("当前主触点或截图已被占用")
+
+        require_idle()
         if not math.isfinite(duration) or duration <= 0:
             raise ValueError("持有预算必须为有限正秒数")
-        if self.owned_contact is not None or self.capture_in_flight:
-            raise CombatInputError("当前主触点或截图已被占用")
+        if not math.isfinite(minimum_hold) or not 0 <= minimum_hold < duration:
+            raise ValueError("最短持有时长必须非负且小于持有预算")
+        if start_deadline is not None and not math.isfinite(start_deadline):
+            raise ValueError("持有开始期限必须为有限数值")
         x, y = primary_input_position(self.context, node_name)
         if position_validator is not None and position_validator((x, y)) is not True:
             raise CombatInputError("主输入坐标校验未确认")
         if should_stop is not None and should_stop():
             self.request_stop("observation_stop")
             raise CombatInputError("共享观察要求停止")
-        # Context resolution and optional callbacks can synchronously stop or
-        # invalidate this scope even when should_stop is absent or returns False.
-        self.assert_active()
-        deadline = self.monotonic() + duration
+        try:
+            controller = self.controller_for_jobs()
+            require_idle()
+            now = self.monotonic()
+            if start_deadline is not None and now >= start_deadline:
+                raise CombatInputTimeout("持有开始期限已到")
+        except BaseException:
+            self.discard_idle_controller()
+            raise
+        deadline = now + duration
         self.invalidate_frame()
         # Register before posting: even a post exception can leave a late Down.
         self.owned_contact = 0
@@ -382,20 +396,21 @@ class CombatInputScope:
         self._down_post_uncertain = True
         completed = False
         try:
-            self._down_job = self.controller_for_jobs().post_touch_down(
-                x, y, contact=0, pressure=1
-            )
+            self._down_job = controller.post_touch_down(x, y, contact=0, pressure=1)
             self._down_post_uncertain = False
             self.wait_job(
                 self._down_job, min(deadline, self.monotonic() + self.input_timeout)
             )
+            earliest_finish = self.monotonic() + minimum_hold
             while self.monotonic() < deadline:
                 self.assert_active()
                 if should_stop is not None and should_stop():
                     self.request_stop("observation_stop")
                     raise CombatInputError("共享观察要求停止")
                 image = self.capture_frame(deadline=deadline)
-                completed = observe(image) is True
+                completed = (
+                    observe(image) is True and self.monotonic() >= earliest_finish
+                )
                 self.assert_active()
                 if self.monotonic() >= deadline:
                     raise CombatInputTimeout("观察返回时已超过持有期限")
@@ -414,6 +429,7 @@ class CombatInputScope:
             released = self._release()
         if not released:
             raise CombatInputError(self.failure_reason or "触点释放未确认")
+        self.assert_active()
         return completed
 
     def close(self) -> bool:

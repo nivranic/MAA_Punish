@@ -1,9 +1,8 @@
 {
     "诺曼复兴战": {
-        "next": [
-            "日常断点_诺曼复兴战",
-            "空任务"
-        ]
+        "attach": {"daily_progress_guard_node": "日常断点_诺曼复兴战"},
+        "next": ["日常账本准入"],
+        "on_error": []
     },
     "日常断点_诺曼复兴战": {
         "recognition": {
@@ -27,7 +26,8 @@
             "[JumpBack]意外点击_物品",
             "[JumpBack]滑动_诺曼复兴战内部",
             "[JumpBack]意外点击_限定活动",
-            "[JumpBack]意外点击_矿区作战"
+            "[JumpBack]意外点击_矿区作战",
+            "[JumpBack]返回"
         ]
     },
     "日常完成_诺曼复兴战": {

@@ -7,6 +7,8 @@ import re
 import jsonc
 import pytest
 
+from action.basics.daily_progress import ADMIT_NODE, GUARD_POINTER
+
 
 PIPELINE = Path(__file__).resolve().parents[2] / "resource/base/pipeline"
 
@@ -276,7 +278,11 @@ def test_mapping_settlement_retry_uses_button_result_and_is_bounded():
 
 def _entry_next(war, parent):
     """入口工作链：断点续接接线后入口 next 首位是 守卫节点，原链在其 next 下。"""
-    branches = war[parent]["next"]
+    node = war[parent]
+    guard = (node.get("attach") or {}).get(GUARD_POINTER)
+    if guard:
+        return war[guard]["next"]
+    branches = node["next"]
     if branches and str(branches[0]).startswith("日常断点_"):
         return war[str(branches[0])]["next"]
     return branches
@@ -314,12 +320,78 @@ def test_war_profile_close_symbol_bypasses_batch_text_detection():
     assert y >= 47 and y + height <= 100  # Exclude the + above and score below.
 
 
-def test_mapping_settlement_precedes_zero_counter_start_fallback():
+def test_mapping_gates_only_map_settlement_and_drops_the_currency_retry():
     mapping = jsonc.loads((PIPELINE / "HighRankMapping.jsonc").read_text(encoding="utf-8"))
-    branches = mapping["开始挑战"]["next"]
-    # Settlement also shows 0 currency at the start-retry ROI. Checking that
-    # fallback first clicks the currency and opens its details instead of settling.
-    assert branches.index("结算") < branches.index("[JumpBack]开始挑战_点击丢失")
+    name = "历战映射_地图本轮结算准入"
+    start = mapping["开始挑战"]
+    gate = mapping[name]
+    assert start["next"] == [
+        "[JumpBack]战斗中",
+        "[JumpBack]确定",
+        name,
+        "[JumpBack]战斗失败_历战",
+        "[JumpBack]继续挑战",
+        "[JumpBack]载入中",
+        "[JumpBack]通用处理-未下载弹窗-角色皮肤没下载-检测层",
+        "[JumpBack]点击空白处关闭",
+        "[JumpBack]作战开始",
+        "[JumpBack]意外点击_物品详情",
+    ]
+    assert "开始挑战_点击丢失" not in mapping
+    assert start["on_error"] == gate["on_error"] == ["作战启动_终止"]
+    # The pre-battle map and the old score screen both show 结算, so the plain OCR
+    # alone is not enough: only a real HUD handover after this start may continue.
+    assert gate["recognition"] == {
+        "type": "And",
+        "param": {
+            "all_of": [
+                "结算",
+                {
+                    "recognition": {
+                        "type": "Custom",
+                        "param": {"custom_recognition": "D08MapSettlement"},
+                    }
+                },
+            ],
+            "box_index": 0,
+        },
+    }
+    assert gate["action"] == {"type": "DoNothing"} and gate["next"] == ["结算"]
+    assert gate["pre_delay"] == gate["post_delay"] == gate["rate_limit"] == 0
+    assert {key for key, node in mapping.items() if name in node.get("next", [])} == {"开始挑战"}
+    assert mapping["历战映射_成员整备作战接续"]["next"] == [
+        "[JumpBack]战斗中",
+        "[JumpBack]确定",
+        "结算",
+        "[JumpBack]战斗失败_历战",
+        "[JumpBack]继续挑战",
+        "[JumpBack]载入中",
+        "[JumpBack]通用处理-未下载弹窗-角色皮肤没下载-检测层",
+        "[JumpBack]点击空白处关闭",
+        "[JumpBack]清除队伍",
+    ]
+    assert mapping["结算"]["action"]["type"] == "Click"
+    tasks = PIPELINE.parents[2] / "tasks/历战映射.json"
+    overrides = jsonc.loads(tasks.read_text(encoding="utf-8"))["task"][0]["pipeline_override"]
+    assert overrides["战斗中"]["on_error"] == ["历战映射_异常收尾"]
+    assert overrides["点击作战开始"]["max_hit"] == 20
+
+
+def test_mapping_cold_entry_requires_its_own_path_before_shared_start():
+    mapping = jsonc.loads((PIPELINE / "HighRankMapping.jsonc").read_text(encoding="utf-8"))
+    entry = mapping["历战映射"]
+    assert entry["next"] == [ADMIT_NODE] and entry["on_error"] == []
+    guard = entry["attach"][GUARD_POINTER]
+    assert guard == "日常断点_历战映射"
+    cold = mapping[guard]
+    assert cold["on_error"] == ["作战启动_终止"]
+    # No page-level guessing from the shared start button: the cold entry has to
+    # walk its own path (开始挑战 → map gate → 结算) instead of tapping 作战开始.
+    assert "[JumpBack]作战开始" not in cold["next"]
+    assert {"[JumpBack]开始挑战", "[JumpBack]成员整备"} <= set(cold["next"])
+    assert "[JumpBack]作战开始" in mapping["开始挑战"]["next"]
+    assert mapping["成员整备"]["next"] == ["历战映射_成员整备作战接续"]
+    assert mapping["历战映射_成员整备作战接续"]["recognition"]["param"]["all_of"] == ["清除队伍"]
 
 
 def test_mapping_item_modal_close_is_inside_live_x_and_bounded():
@@ -450,8 +522,6 @@ def test_shared_battle_start_consumers_are_frozen():
         ("选择角色程序", "Role_Selection.jsonc"),
         ("使用预设", "Role_Selection.jsonc"),
         ("写入预设队伍色位", "Role_Selection.jsonc"),
-        # 断点续接接线：历战映射 入口的工作链搬入守卫节点（2026-11-23，链条语义不变）。
-        ("日常断点_历战映射", "HighRankMapping.jsonc"),
         ("开始挑战", "HighRankMapping.jsonc"),
         ("作战界面", "Simulated_Siege.jsonc"),
         # R01 的固定坐标捷径不算 next-list 消费者；冲突确认另有共享启动路径。
@@ -488,3 +558,94 @@ def test_cage_challenge_tab_keeps_the_full_shared_footer_label():
     # The old x=1130 crop retained only 战 on the actual battle panel footer.
     assert x <= 1100 and x + width >= 1157
     assert y <= 669 and y + height >= 694
+
+
+def test_battlefield_battle_button_taps_a_fixed_center_point():
+    # 11-27 device A/B on the real 主界面: the 战斗 box (990,258,134,96) only opens
+    # the 作战面板 from its centre; the old Click target_offset [60,0,-60,0] kept the
+    # full 96 px height and randomised y, so ~30% of draws hit the 活动总览 hot band at
+    # the box top (y=259/287) and 打开资源 then never matched. A fixed centre tap
+    # removes the random component entirely.
+    nav = jsonc.loads(
+        (PIPELINE / "daily_battle/Navigation.jsonc").read_text(encoding="utf-8")
+    )
+    node = nav["打开战斗_拟战场域"]
+    action = node["action"]
+    assert action["type"] == "Custom"
+    assert action["param"]["custom_action"] == "ClickAnchor"
+    assert action["param"]["custom_action_param"] == {"position": "center"}
+    assert "target_offset" not in action["param"]
+    assert node["next"] == ["打开资源"]
+
+
+def test_battlefield_auto_and_multi_challenge_branches_stay_wired():
+    # 11-27 code read: 拟战 has two entries after 确认进入拟战场域. The auto path is
+    # device-verified (01:26 run); the 多重挑战 path is reached through a node named
+    # 开始手动战斗 whose recognition text is actually 多重挑战, so a rename or a
+    # recognition edit would silently disable the multi-challenge popup handling.
+    battle = jsonc.loads((PIPELINE / "daily_battle/Auto_Battle.jsonc").read_text(encoding="utf-8"))
+    manual = jsonc.loads((PIPELINE / "daily_battle/Manual_Battle.jsonc").read_text(encoding="utf-8"))
+    nav = jsonc.loads((PIPELINE / "daily_battle/Navigation.jsonc").read_text(encoding="utf-8"))
+
+    assert nav["确认进入拟战场域"]["next"] == ["开始自动战斗", "开始手动战斗"]
+    assert battle["开始自动战斗"]["recognition"]["param"]["expected"] == "最大"
+    assert battle["点击自动作战"]["next"] == [
+        "[JumpBack]等级提升",
+        "检查结果_体力不足",
+        "检查结果_战斗完成",
+    ]
+
+    entry = manual["开始手动战斗"]
+    assert entry["recognition"]["type"] == "OCR"
+    assert entry["recognition"]["param"]["expected"] == "多重挑战"
+    assert entry["next"] == ["[JumpBack]覆盖布局菜单", "作战开始_拟战场域", "手动战斗_体力不足"]
+    assert manual["手动战斗_作战失败"]["next"] == ["返回主菜单"]
+    assert manual["手动战斗_战斗成功"]["next"] == ["返回主菜单"]
+    # 手动战斗_体力不足 is the only node that recognises the real 体力不足 dialog.
+    assert manual["手动战斗_体力不足"]["recognition"]["param"]["expected"] == "是否使用"
+
+
+def test_battlefield_insufficient_serum_gate_reuses_the_auto_battle_button():
+    # The auto path has no 体力不足 dialog to read: 检查结果_体力不足 matches the very
+    # same 自动作战 button the click just failed to dismiss. Both nodes must move
+    # together, and the shared recognition is intentionally the button (not a dialog).
+    battle = jsonc.loads((PIPELINE / "daily_battle/Auto_Battle.jsonc").read_text(encoding="utf-8"))
+    click = battle["点击自动作战"]["recognition"]
+    gate = battle["检查结果_体力不足"]["recognition"]
+    assert gate == click
+    assert gate["type"] == "OCR" and gate["param"]["expected"] == "自动作战"
+    assert battle["检查结果_体力不足"]["next"] == ["返回主菜单"]
+    # 检查结果_战斗完成 clicks the settlement 确定 and falls back to 返回主菜单.
+    done = battle["检查结果_战斗完成"]
+    assert done["recognition"]["param"]["all_of"] == ["确定_文字"]
+    assert done["next"][0] == "返回主菜单"
+
+
+def test_stamina_topup_guard_requires_a_serum_reading_below_one_battle():
+    # 2026-11-27 05:09 device run: 拟战 开血清页时血清 39/240（够一场 30），却照样
+    # 用掉了当天刚免费领的 60 毫升补给包（39 + 60 - 30 + 2 = 71）。补血清本身要能跑，
+    # 但只应在「一场都打不起」时触发，所以 吃体力药 多一个纯识别的血清门槛。
+    stamina = jsonc.loads((PIPELINE / "daily_battle/Stamina.jsonc").read_text(encoding="utf-8"))
+    topup = stamina["吃体力药"]["recognition"]
+    assert topup["type"] == "And"
+    assert topup["param"]["all_of"] == ["主界面_战斗节点", "拟战_主页血清数量", "拟战_需补血清"]
+    # box_index must stay on the serum readout: it is the click target of the top-up.
+    assert topup["param"]["box_index"] == 1
+
+    guard = stamina["拟战_需补血清"]["recognition"]
+    readout = stamina["拟战_主页血清数量"]["recognition"]
+    assert guard["type"] == "OCR"
+    assert guard["param"]["roi"] == readout["param"]["roi"]
+
+    below = re.compile(guard["param"]["expected"])
+    above = re.compile(readout["param"]["expected"])
+    for value in ("0", "1", "9", "10", "29"):
+        text = f"{value}/240"
+        assert below.fullmatch(text), text
+        assert above.fullmatch(text), text
+    for value in ("30", "31", "39", "71", "239", "240"):
+        text = f"{value}/240"
+        assert not below.fullmatch(text), text
+        assert above.fullmatch(text), text
+    # 一场 拟战 的血清成本是 30，所以门槛必须正好落在 30 上，而不是 29 或 31。
+    assert below.fullmatch("30/240") is None

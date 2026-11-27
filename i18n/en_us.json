@@ -600,6 +600,8 @@
     "focus.未知事件_矩阵循生": "<span style=\"color:Tomato\">Text recognition error</span>",
     "focus.未解锁开局": "<span style=\"color:Tomato\">The selected opening is not unlocked</span>",
     "focus.未解锁自动作战": "<span style=\"color:Tomato\">Auto Clear is not unlocked</span>",
+    "focus.未解锁自动作战_战斗准备": "<span style=\"color:Orange\">Battle Ready button found instead of Auto Clear, skipping the A-rank shard run</span>",
+    "focus.助理交流入口缺失_转任务": "<span style=\"color:Orange\">No Communication entry after tapping the assistant (trust dialogue only); skipping it and continuing to claim tasks</span>",
     "focus.查看Boss_不明构造体": "Unknown Construct α",
     "focus.查看Boss_冰队": "Ice team selected",
     "focus.查看Boss_暗队": "Dark team selected",

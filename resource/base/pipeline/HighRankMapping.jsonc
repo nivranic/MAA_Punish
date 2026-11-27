@@ -90,15 +90,10 @@
         }
     },
     "历战映射": {
-        "on_error": [
-            "返回主菜单",
-            "任务失败优雅退出"
-        ],
         "timeout": 5000,
-        "next": [
-            "日常断点_历战映射",
-            "空任务"
-        ]
+        "attach": {"daily_progress_guard_node": "日常断点_历战映射"},
+        "next": ["日常账本准入"],
+        "on_error": []
     },
     "日常断点_历战映射": {
         "recognition": {
@@ -111,10 +106,8 @@
             "daily_progress_key": "历战映射"
         },
         "timeout": 5000,
-        "on_error": [
-            "返回主菜单",
-            "任务失败优雅退出"
-        ],
+        // 不凭通用 Start 或返回按钮推断当前玩法；未知页无输入收尾。
+        "on_error": ["作战启动_终止"],
         "next": [
             "活动未开启",
             "[JumpBack]覆盖布局菜单",
@@ -128,8 +121,7 @@
             "[JumpBack]意外点击_限定活动",
             "[JumpBack]意外点击_环境情报",
             "[JumpBack]意外点击_物品详情",
-            "[JumpBack]意外点击_历战分数",
-            "[JumpBack]作战开始"
+            "[JumpBack]意外点击_历战分数"
         ]
     },
     "日常完成_历战映射": {
@@ -282,8 +274,7 @@
         "next": [
             "[JumpBack]战斗中",
             "[JumpBack]确定",
-            "结算",
-            "[JumpBack]开始挑战_点击丢失",
+            "历战映射_地图本轮结算准入",
             "[JumpBack]战斗失败_历战",
             "[JumpBack]继续挑战",
             "[JumpBack]载入中",
@@ -291,33 +282,32 @@
             "[JumpBack]点击空白处关闭",
             "[JumpBack]作战开始",
             "[JumpBack]意外点击_物品详情"
-        ]
+        ],
+        "on_error": ["作战启动_终止"]
     },
-    "开始挑战_点击丢失": {
+    "历战映射_地图本轮结算准入": {
+        // 战前地图和旧成绩也能识别到结算；只有本次开始之后的真实 HUD 交接才可继续。
         "recognition": {
-            "type": "OCR",
+            "type": "And",
             "param": {
-                "roi": [
-                    734,
-                    602,
-                    78,
-                    38
+                "all_of": [
+                    "结算",
+                    {
+                        "recognition": {
+                            "type": "Custom",
+                            "param": {"custom_recognition": "D08MapSettlement"}
+                        }
+                    }
                 ],
-                "expected": "^0$",
-                "only_rec": true
+                "box_index": 0
             }
         },
-        "action": {
-            "type": "Click",
-            "param": {
-                "target": [
-                    644,
-                    575,
-                    258,
-                    131
-                ]
-            }
-        }
+        "action": {"type": "DoNothing"},
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": ["结算"],
+        "on_error": ["作战启动_终止"]
     },
     "继续挑战": {
         "recognition": {

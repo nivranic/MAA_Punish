@@ -5,6 +5,7 @@ import pytest
 from maa.custom_recognition import CustomRecognition
 from maa.tasker import Tasker
 
+from action.basics.ClickAnchor import ClickAnchor
 from test_r01_zero_refresh_native import Controller, load_resource
 from test_support.native_lifecycle import stop_and_wait_idle
 
@@ -28,7 +29,11 @@ def test_reward_chapter_map_menu_home_are_navigated_in_order(tmp_path, language,
     class Capture(Controller):
         def click(self, x, y):
             bx, by, width, height = regions[state["page"]]
-            if not (bx <= x < bx + width and by <= y < by + height):
+            if state["page"] == 3:
+                expected = (x, y) == (bx + width, by + height // 2)
+            else:
+                expected = bx <= x < bx + width and by <= y < by + height
+            if not expected:
                 wrong.append((state["page"], x, y))
                 return False
             clicks.append(state["page"])
@@ -54,6 +59,7 @@ def test_reward_chapter_map_menu_home_are_navigated_in_order(tmp_path, language,
 
     resource = load_resource(tmp_path, language)
     assert resource.register_custom_recognition("StartupMatrixPages", Page())
+    assert resource.register_custom_action("ClickAnchor", ClickAnchor())
     keep = {REWARD, TRANSITION, MAP_BACK, RETURN, "返回主菜单_reco", "检查主界面", "检查主界面2"}
     patch = {}
     for parent in ("启动", RETURN):

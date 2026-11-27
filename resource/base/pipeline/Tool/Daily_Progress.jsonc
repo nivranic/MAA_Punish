@@ -1,4 +1,21 @@
 {
+    "日常账本准入": {
+        "recognition": {"type": "DirectHit"},
+        "action": {"type": "Custom", "param": {"custom_action": "DailyProgressAdmit"}},
+        "pre_delay": 0,
+        "post_delay": 0,
+        "timeout": 1500,
+        "next": [],
+        "on_error": []
+    },
+    "日常账本准入_拒绝": {
+        "recognition": {"type": "DirectHit"},
+        "action": {"type": "Custom", "param": {"custom_action": "DailyProgressAdmit"}},
+        "pre_delay": 0,
+        "post_delay": 0,
+        "next": [],
+        "on_error": []
+    },
     // 清空日常断点账本（daily_progress.json），使日常预设下次全量重跑。
     // 手动工具任务入口；正常日常流程不经过此处。
     "重置日常断点": {
@@ -14,6 +31,7 @@
         },
         "next": [
             "空任务"
-        ]
+        ],
+        "on_error": []
     }
 }

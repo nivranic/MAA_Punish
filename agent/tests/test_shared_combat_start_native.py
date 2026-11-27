@@ -11,8 +11,12 @@ from maa.custom_action import CustomAction
 from maa.custom_recognition import CustomRecognition
 from maa.tasker import Tasker
 
+from action.basics import daily_progress
 from action.basics.combat_start_failure import CombatStartFailure
+from recognition.exclusives.D08MapSettlement import D08MapSettlement
+from test_d08_map_settlement_native import draw_hud, draw_text
 from test_r01_zero_refresh_native import ROOT, Controller, load_resource as load_native_resource
+from test_support.daily_progress import register_daily_progress
 from test_support.native_lifecycle import stop_and_wait_idle
 
 
@@ -217,23 +221,35 @@ def test_existing_owner_sees_each_battle_and_start_cap_counts_physical_clicks(
 
 
 @pytest.mark.parametrize("entry_route", [
-    "map_to_loading", "map_to_preparation", "members", "members_delayed", "members_stalled", "unrelated_hud",
+    "map_to_loading", "map_to_preparation", "members", "members_delayed", "members_stalled",
+    "foreign_formation", "unrelated_hud", "ledger_done", "ledger_unreadable",
 ])
-def test_mapping_owner_keeps_combat_inside_a_proven_d08_branch(tmp_path, entry_route):
+def test_mapping_owner_keeps_combat_inside_a_proven_d08_branch(tmp_path, monkeypatch, entry_route):
     daily = "日常断点_历战映射"
     map_start = "开始挑战"
     members = "成员整备"
     clear = "清除队伍"
     formation_steps = [clear, "队伍净空_红", "队伍净空_黄", "队伍净空", "选择首发", "选择角色程序"]
     saved = "结算"
-    map_page, members_page, formation, loading, battle, results = range(6)
+    terminate = "作战启动_终止"
+    map_page, members_page, formation, loading, battle, results, foreign = range(7)
     next_scene = {
         "map_to_loading": map_page, "map_to_preparation": map_page,
         "members": members_page, "members_delayed": members_page, "members_stalled": members_page,
-        "unrelated_hud": battle,
+        "foreign_formation": foreign, "unrelated_hud": battle,
+        "ledger_done": foreign, "ledger_unreadable": map_page,
     }
-    frames = [np.full((720, 1280, 3), s, np.uint8) for s in range(6)]
+    frames = [np.full((720, 1280, 3), s, np.uint8) for s in range(7)]
+    draw_text(frames[map_page], "START", 1001, 658)
+    draw_hud(frames[battle])
     state = next_scene[entry_route]
+    mapping = json.loads((ROOT / "tasks/历战映射.json").read_text(encoding="utf-8"))["task"][0]
+    ledger = tmp_path / "daily-progress.json"
+    if entry_route == "ledger_done":
+        daily_progress.mark_done(mapping["entry"], path=ledger)
+    elif entry_route == "ledger_unreadable":
+        ledger.write_bytes(b"\xff broken")
+    original_ledger = ledger.read_bytes() if ledger.exists() else None
     starts = []
     battle_calls = []
     stale_map_frames = 0
@@ -257,8 +273,8 @@ def test_mapping_owner_keeps_combat_inside_a_proven_d08_branch(tmp_path, entry_r
                     state = formation
             elif state == formation:
                 state = battle
-            else:
-                raise AssertionError((x, y, state))
+            # Keep an unrelated page stable: if the graph clicks it, record the
+            # attempted input and let the native failure path run to completion.
             return True
 
     class Page(CustomRecognition):
@@ -272,6 +288,10 @@ def test_mapping_owner_keeps_combat_inside_a_proven_d08_branch(tmp_path, entry_r
             # The D08 map can already show a settlement action before combat.
             if argv.node_name == saved and scene == members_page:
                 return (1045, 132, 46, 19)
+            # A foreign formation can still satisfy the generic Start and Back
+            # recognitions. Neither is evidence of D08 ownership.
+            if scene == foreign and argv.node_name in {TEXT, COLOR, "返回", "返回主菜单"}:
+                return RIGHT
             if hit_page.get(argv.node_name) == scene:
                 return RIGHT
             return None
@@ -286,47 +306,83 @@ def test_mapping_owner_keeps_combat_inside_a_proven_d08_branch(tmp_path, entry_r
                 state = results
             return True
 
+    inspected = {}
+
+    class NextTask(CustomAction):
+        def run(self, context, argv):
+            for name in (GRACEFUL, START, CLICK, HUD):
+                inspected[name] = context.get_node_data(name)
+            return True
+
     resource, controller, tasker = load_resource(tmp_path), Screen(), Tasker()
+    register_daily_progress(resource, monkeypatch, ledger)
     assert resource.register_custom_recognition("TestMappingOwnerPage", Page())
+    assert resource.register_custom_recognition("D08MapSettlement", D08MapSettlement())
     assert resource.register_custom_action("TestMappingOwnerProgress", Progress())
+    assert resource.register_custom_action("CombatRunner", Progress())
+    assert resource.register_custom_action("InspectNextTask", NextTask())
     assert controller.post_connection().wait().succeeded and tasker.bind(resource, controller)
     detection = {"type": "Custom", "param": {"custom_recognition": "TestMappingOwnerPage"}}
     progress = {"type": "Custom", "param": {"custom_action": "TestMappingOwnerProgress"}}
-    mapping = json.loads((ROOT / "tasks/历战映射.json").read_text(encoding="utf-8"))
-    patch = mapping["task"][0]["pipeline_override"]
+    patch = mapping["pipeline_override"]
     for name in (
-        map_start, members, clear, saved, LOADING, HUD, POPUP, TEXT, COLOR, TOAST, "未选择队长",
+        members, clear, saved, LOADING, POPUP, TEXT, COLOR, TOAST, "未选择队长",
         "活动未开启", "覆盖布局菜单", "识别历战分数", "前往作战", "打开历战映射", "打开挑战", "打开战斗",
         "意外点击_限定活动", "意外点击_环境情报", "意外点击_物品详情", "意外点击_历战分数", "确定", "返回",
-        "开始挑战_点击丢失", "战斗失败_历战", "继续挑战", "点击空白处关闭",
+        "战斗失败_历战", "继续挑战", "点击空白处关闭", "返回主菜单",
     ):
         patch.setdefault(name, {}).update(recognition=detection)
-    for name in (daily, map_start, members, clear, saved, LOADING, HUD, START, CLICK,
-                 HANDOFF, "作战启动_进入过渡", "作战启动_终止", GRACEFUL, STOP):
+    for name in (mapping["entry"], daily_progress.ADMIT_NODE, daily, map_start, members, clear, saved, LOADING, HUD, START, CLICK,
+                 HANDOFF, "作战启动_进入过渡", terminate, GRACEFUL, STOP, "返回主菜单"):
         patch.setdefault(name, {}).update(pre_delay=0, post_delay=0, post_wait_freezes=0,
                                           rate_limit=10, timeout=650)
-    patch[daily].update(recognition="DirectHit", on_error=[])
-    patch[members].update(on_error=[])
     patch["历战映射_成员整备作战接续"] = {"pre_delay": 0, "post_delay": 0, "rate_limit": 10, "timeout": 650}
     # Isolate formation side effects, not the role workflow's real next edges.
     for step in formation_steps:
         patch.setdefault(step, {}).update(recognition=detection, action="DoNothing", pre_delay=0,
                                           post_delay=0, post_wait_freezes=0, rate_limit=10, timeout=650)
+    patch[map_start]["recognition"] = {"param": {"expected": "^START$", "only_rec": True}}
     patch[saved].update(action="StopTask")
     patch[LOADING].update(action=progress)
-    patch[HUD].update(action=progress)
     try:
-        job = tasker.post_task(daily, patch).wait()
+        job = tasker.post_task(mapping["entry"], patch).wait()
         native_success = job.succeeded
+        native_failure = job.failed
         names = [tasker.get_node_detail(i).name for i in job.get().node_id_list]
+        if entry_route in {"foreign_formation", "unrelated_hud"}:
+            probe = tasker.post_task("空任务", {"空任务": {"action": {
+                "type": "Custom", "param": {"custom_action": "InspectNextTask"},
+            }}}).wait()
+            assert probe.succeeded
     finally:
         stop_and_wait_idle(tasker)
 
-    if entry_route == "unrelated_hud":
-        assert not native_success and not starts and not battle_calls and HUD not in names, names
+    admitted = [mapping["entry"], daily_progress.ADMIT_NODE]
+    assert names[:2] == admitted, names
+    assert (ledger.read_bytes() if ledger.exists() else None) == original_ledger
+    if entry_route == "ledger_unreadable":
+        assert native_failure and names == admitted and not starts and not battle_calls, names
+        return
+    if entry_route != "ledger_done":
+        assert names[2] == daily, names
+    if entry_route in {"foreign_formation", "unrelated_hud"}:
+        # Native StopTask is a clean ending, but the named marker means failure
+        # to the App. Merely stopping after an illegal click is not sufficient.
+        assert not starts and not battle_calls, (starts, names)
+        assert native_success and names[-3:] == [terminate, GRACEFUL, STOP], names
+        assert {START, CLICK, HUD, "返回主菜单", "返回"}.isdisjoint(names), names
+        assert any(edge["name"] == "返回" and edge["jump_back"] for edge in inspected[GRACEFUL]["next"])
+        assert all(edge["name"] != "返回" for edge in inspected[START]["next"])
+        assert inspected[CLICK]["max_hit"] == 60
+        assert all(edge["name"] != "历战映射_异常收尾" for edge in inspected[HUD]["on_error"])
+    elif entry_route == "ledger_done":
+        assert native_success and names == [*admitted, "空任务"] and not starts and not battle_calls, names
     elif entry_route == "members_stalled":
-        assert not native_success and starts == [members_page] and not battle_calls, names
-        assert saved not in names and CLICK not in names, names
+        # Members still uses its existing default failure handling; it must
+        # not complete D08 from the stale map's settlement button.
+        assert native_success and names[-2:] == [GRACEFUL, STOP], names
+        assert starts == [members_page] and not battle_calls, names
+        assert {saved, CLICK, terminate}.isdisjoint(names), names
     else:
         assert native_success and names[-1] == saved and names.count(HUD) == 1, names
         assert battle_calls == [entry_route]

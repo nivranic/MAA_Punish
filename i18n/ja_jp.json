@@ -605,6 +605,8 @@
     "focus.未知事件_矩阵循生": "<span style=\"color:Tomato\">文本识别错误</span>",
     "focus.未解锁开局": "<span style=\"color:Tomato\">未解锁对应开局</span>",
     "focus.未解锁自动作战": "<span style=\"color:Tomato\">未解锁自动作战</span>",
+    "focus.未解锁自动作战_战斗准备": "<span style=\"color:Orange\">「戦闘準備」ボタンのため、Aランク欠片周回をスキップ</span>",
+    "focus.助理交流入口缺失_转任务": "<span style=\"color:Orange\">アシスタントをタップしても「交流」入口が出ないため（信頼会話のみ）、交流をスキップして任務受取を続行</span>",
     "focus.查看Boss_不明构造体": "不明构造体α",
     "focus.查看Boss_冰队": "已选择冰队",
     "focus.查看Boss_暗队": "已选择暗队",

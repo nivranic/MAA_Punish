@@ -137,6 +137,35 @@ def test_safe_guild_navigation_uses_one_native_click_and_one_controller(setup):
     assert action.last_result["original_failure_cleanup_verified"] is False
 
 
+@pytest.mark.parametrize("fault", [None, "wrong-callback", "wrong-recognition", "late", "repeat"])
+def test_daily_admission_history_only_accepts_single_effective_gate_after_root(setup, fault):
+    action, context, argv, _ = setup(GUILD, HOME)
+    admit = recovery.ADMIT_NODE
+    context.pipeline[admit] = {
+        "recognition": {"type": "DirectHit"},
+        "action": {"type": "Custom", "param": {"custom_action": "DailyProgressAdmit"}},
+    }
+    context.tasker.nodes[4] = node(admit, action="Custom")
+    context.tasker.nodes[5] = node("日常断点_指挥局")
+    context.detail.node_id_list = [1, 4, 5, 2, 3]
+    if fault == "wrong-callback":
+        context.pipeline[admit]["action"]["param"]["custom_action"] = "Other"
+    elif fault == "wrong-recognition":
+        context.pipeline[admit]["recognition"]["type"] = "OCR"
+    elif fault == "late":
+        context.detail.node_id_list = [1, 5, 4, 2, 3]
+    elif fault == "repeat":
+        context.tasker.nodes[6] = node(admit, action="Custom")
+        context.detail.node_id_list = [1, 4, 5, 6, 2, 3]
+    assert action.run(context, argv).success is False
+    if fault is None:
+        assert len(context.actions) == 1 and action.last_result["outcome"] == "home_original_task_failed"
+    else:
+        assert not context.actions and context.tasker.stop_requests == 1
+        expected = "d03_admission_contract_changed" if fault.startswith("wrong") else "d03_admission_history_invalid"
+        assert action.last_result["reason"] == expected
+
+
 def test_home_is_no_input_but_never_original_business_success(setup):
     action, context, argv, _ = setup(HOME)
     context.detail.entry = "历战映射"

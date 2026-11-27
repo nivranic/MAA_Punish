@@ -10,6 +10,8 @@ import re
 import jsonc
 import pytest
 
+from action.basics.daily_progress import ADMIT_NODE, GUARD_POINTER, REJECT_NODE
+
 
 ROOT = Path(__file__).resolve().parents[2]
 NODES = jsonc.loads((ROOT / "resource/base/pipeline/Collect_Quest.jsonc").read_text(encoding="utf-8"))
@@ -97,11 +99,27 @@ def test_daily_activity_target_is_inside_its_reward_chest(branch, box):
 
 @pytest.mark.parametrize("bundle", ["base", "zh_TW", "ja_JP", "en_US", "pgr_win32", "playcover"])
 def test_fixed_quest_route_keeps_daily_rewards_and_cannot_enter_limited_activity(bundle):
-    nodes = dict(NODES)
-    overlay = ROOT / "resource" / bundle / "pipeline/Collect_Quest.jsonc"
-    if bundle != "base" and overlay.exists():
-        for name, override in jsonc.loads(overlay.read_text(encoding="utf-8")).items():
-            nodes[name] = {**nodes.get(name, {}), **override}
+    gate_file = "Tool/Daily_Progress.jsonc"
+    gate_nodes = jsonc.loads((ROOT / "resource/base/pipeline" / gate_file).read_text(encoding="utf-8"))
+    nodes = {**NODES, **gate_nodes}
+    if bundle != "base":
+        for relpath in ("Collect_Quest.jsonc", gate_file):
+            overlay = ROOT / "resource" / bundle / "pipeline" / relpath
+            if overlay.exists():
+                for name, override in jsonc.loads(overlay.read_text(encoding="utf-8")).items():
+                    nodes[name] = {**nodes.get(name, {}), **override}
+
+    entry = nodes["任务"]
+    assert entry["next"] == [ADMIT_NODE] and entry["on_error"] == []
+    guard = entry["attach"][GUARD_POINTER]
+    assert guard == "日常断点_领取任务"
+    assert nodes[guard]["recognition"]["param"]["custom_recognition"] == "DailyProgressCheck"
+    for name in (ADMIT_NODE, REJECT_NODE):
+        gate = nodes[name]
+        assert gate["recognition"]["type"] == "DirectHit" and gate.get("enabled", True)
+        assert gate["action"] == {"type": "Custom", "param": {"custom_action": "DailyProgressAdmit"}}
+        assert gate["next"] == gate["on_error"] == []
+
     visited, pending = set(), ["任务"]
     while pending:
         name = pending.pop()
@@ -109,10 +127,38 @@ def test_fixed_quest_route_keeps_daily_rewards_and_cannot_enter_limited_activity
             continue
         visited.add(name)
         node = nodes.get(name, {})
-        for edge in node.get("next", []) + node.get("on_error", []):
+        # Admit creates these task-local routes only after the ledger read.
+        # Failure has no fallback; done reaches the empty task, not the rewards.
+        edges = [guard, REJECT_NODE, "空任务"] if name == ADMIT_NODE else node.get("next", []) + node.get("on_error", [])
+        for edge in edges:
             target = edge["name"] if isinstance(edge, dict) else re.sub(r"^(?:\[[^]]+\])+", "", edge)
             if target in nodes:
                 pending.append(target)
     assert {"逐浪拾光", "前往任务", "领取_逐浪拾光"}.isdisjoint(visited)
     assert {"每周任务", "勤务任务", "每日任务", "一键领取_任务",
             "一键领取_定期", "领取补签卡1", "领取补签卡2", "领取活跃100"} <= visited
+
+
+def test_missing_assistant_entry_falls_back_to_task_page():
+    # 2026-11-26 device evidence: tapping the assistant opens a trust dialogue
+    # overlay (random lines, no 交流 button), so 每日助理交流_进入 timed out and
+    # the whole task exited through 任务失败优雅退出. The fallback keeps the
+    # weekly claim alive by opening the task page instead.
+    entry = NODES["每日助理交流_进入"]
+    assert entry["on_error"] == ["助理交流入口缺失_转任务", "任务失败优雅退出"]
+    # The assistant click itself also fails when the entry never appears, so
+    # both nodes keep the same recovery order.
+    assert NODES["每日助理交流"]["on_error"] == ["助理交流入口缺失_转任务", "任务失败优雅退出"]
+    fallback = NODES["助理交流入口缺失_转任务"]
+    assert fallback["recognition"] == {"type": "And", "param": {"all_of": ["主界面_战斗节点"]}}
+    assert fallback["action"] == {"type": "DoNothing"}
+    assert fallback["next"] == ["任务_领取"]
+    assert fallback["focus"] == {"Node.Recognition.Succeeded": "$focus.助理交流入口缺失_转任务"}
+    # 任务_领取 must still be able to open the task page from a main screen.
+    assert "[JumpBack]打开任务" in NODES["任务_领取"]["next"]
+
+
+@pytest.mark.parametrize("locale", ["zh_cn", "zh_tw", "en_us", "ja_jp"])
+def test_assistant_fallback_focus_is_translated(locale):
+    data = jsonc.loads((ROOT / f"i18n/{locale}.json").read_text(encoding="utf-8"))
+    assert data["focus.助理交流入口缺失_转任务"].strip()

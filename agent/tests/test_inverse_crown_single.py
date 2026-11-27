@@ -9,7 +9,7 @@ from action.combat.input_control import CombatInputError
 from action.combat.roles import inverse_crown as module
 from test_inverse_crown_stationary import observations, setup_role as setup_signal_role, YES
 from test_inverse_crown_visual import appearance_frame
-from test_support.fakes import make_hit
+from test_support.fakes import TimedFakeJob, make_hit
 
 
 def setup_role(monkeypatch):
@@ -94,6 +94,22 @@ def test_unfinished_settlement_never_starts_an_ultimate(monkeypatch):
     assert not controller.touches and role._settlement_pending
 
 
+def test_public_single_rebuilds_after_two_observed_consumptions(monkeypatch):
+    role, combat, context, controller, _ = setup_role(monkeypatch)
+    observations(monkeypatch, role, [
+        {}, dict(ultimate_ready=YES), dict(resource_appearance="full"), dict(resource_appearance="empty"),
+        {}, dict(ultimate_ready=YES), dict(resource_appearance="full"), dict(resource_appearance="empty"),
+        {},
+    ])
+    expected_phases = ["prepare", "ultimate_finish", "ultimate_finish", "prepare"] * 2 + ["prepare"]
+    for phase in expected_phases:
+        role.do_perform()
+        assert role.phase == phase and combat.input_scope.owned_contact is None
+    attack, skill = ("down", 1105, 500), ("down", 1000, 650)
+    assert [p for p in controller.posts if isinstance(p, tuple)] == [attack, skill, attack, skill, attack]
+    assert controller.posts.count("up") == 5 and not context.actions
+
+
 def test_no_ready_signal_replenishes_resource_instead_of_waiting_without_input(monkeypatch):
     role, _, context, controller, _ = setup_role(monkeypatch)
     observations(monkeypatch, role, [{}])
@@ -118,6 +134,106 @@ def test_prepare_does_not_repeat_slow_shared_observation_before_tap(monkeypatch)
     assert not combat.input_scope.blocked
 
 
+@pytest.mark.parametrize("boundary", ["special_leaf", "special_target", "ultimate_target", "controller"])
+def test_expired_prepare_never_posts_the_first_hold(monkeypatch, boundary):
+    role, combat, context, controller, clock = setup_role(monkeypatch)
+    scope = combat.input_scope
+    role._single_prepare()
+    clock.now = role._stationary_deadline - 0.05
+    observations(monkeypatch, role, [dict(ultimate_ready=YES) if boundary == "ultimate_target" else {}])
+    context.recognition_map[module._SPECIAL_BALL_NODE] = make_hit()
+
+    if boundary == "special_leaf":
+        recognize = context.run_recognition
+
+        def slow(name, *args, **kwargs):
+            if name == module._SPECIAL_BALL_NODE:
+                clock.now += 0.075
+            return recognize(name, *args, **kwargs)
+
+        monkeypatch.setattr(context, "run_recognition", slow)
+    elif boundary == "controller":
+        acquire = scope.controller_for_jobs
+
+        def slow():
+            if not scope.capture_in_flight:
+                clock.now += 0.075
+            return acquire()
+
+        monkeypatch.setattr(scope, "controller_for_jobs", slow)
+    else:
+        resolve = context.get_node_data
+        node = "技能" if boundary == "ultimate_target" else "长按1号球"
+
+        def slow(name, *args, **kwargs):
+            if name == node:
+                clock.now += 0.075
+            return resolve(name, *args, **kwargs)
+
+        monkeypatch.setattr(context, "get_node_data", slow)
+
+    with pytest.raises(CombatInputError, match="budget_exhausted|开始期限"):
+        role.do_perform()
+    assert not controller.touches and scope.owned_contact is None and not scope.release_pending
+    assert role.phase == "recover" and scope.blocked and context.tasker.stop_requests == 1
+
+
+@pytest.mark.parametrize("ultimate, resolution", [(False, 0.45), (True, 0.45)])
+def test_single_hold_dwell_starts_after_down_ack(monkeypatch, ultimate, resolution):
+    role, combat, context, controller, clock = setup_role(monkeypatch)
+    context.recognition_map[module._SPECIAL_BALL_NODE] = make_hit()
+    observations(monkeypatch, role, [dict(ultimate_ready=YES) if ultimate else {}])
+    resolve, down, up = context.get_node_data, controller.post_touch_down, controller.post_touch_up
+    node = "技能" if ultimate else "长按1号球"
+    intervals = []
+    ack_delay = 0.045
+
+    def slow_resolve(name, *args, **kwargs):
+        if name == node:
+            clock.now += resolution
+        return resolve(name, *args, **kwargs)
+
+    def record_down(*args, **kwargs):
+        down(*args, **kwargs)
+        ack_at = clock.now + ack_delay
+        intervals.append([ack_at])
+        return TimedFakeJob(clock, finish_at=ack_at)
+
+    def record_up(*args, **kwargs):
+        intervals[-1].append(clock.now)
+        return up(*args, **kwargs)
+
+    monkeypatch.setattr(context, "get_node_data", slow_resolve)
+    monkeypatch.setattr(controller, "post_touch_down", record_down)
+    monkeypatch.setattr(controller, "post_touch_up", record_up)
+    role.do_perform()
+    expected = [2.0] if ultimate else [3.0, 4.0]
+    assert len(intervals) == len(expected)
+    for (ack, released), seconds in zip(intervals, expected):
+        assert seconds <= released - ack <= seconds + 0.03
+    assert combat.input_scope.owned_contact is None
+    assert role.phase == ("ultimate_finish" if ultimate else "prepare")
+
+
+def test_slow_resolution_never_posts_a_stale_special_hold(monkeypatch):
+    role, combat, context, controller, clock = setup_role(monkeypatch)
+    context.recognition_map[module._SPECIAL_BALL_NODE] = make_hit()
+    observations(monkeypatch, role, [{}])
+    resolve = context.get_node_data
+
+    def slow_resolve(name, *args, **kwargs):
+        if name == "长按1号球":
+            clock.now += 3.1
+        return resolve(name, *args, **kwargs)
+
+    monkeypatch.setattr(context, "get_node_data", slow_resolve)
+    with pytest.raises(CombatInputError, match="开始期限|budget"):
+        role.do_perform()
+    assert not controller.touches
+    assert combat.input_scope.owned_contact is None and not combat.input_scope.release_pending
+    assert role.phase == "recover" and combat.input_scope.blocked
+
+
 def test_stop_during_special_releases_without_starting_attack(monkeypatch):
     role, combat, context, controller, clock = setup_role(monkeypatch)
     context.recognition_map[module._SPECIAL_BALL_NODE] = make_hit()
@@ -131,13 +247,29 @@ def test_stop_during_special_releases_without_starting_attack(monkeypatch):
     assert role.phase == "recover"
 
 
+@pytest.mark.parametrize("ultimate, stop_at", [(False, 3.25), (True, 0.2)])
+def test_external_stop_during_later_holds_releases_and_suppresses_followup(monkeypatch, ultimate, stop_at):
+    role, combat, context, controller, clock = setup_role(monkeypatch)
+    context.recognition_map[module._SPECIAL_BALL_NODE] = make_hit()
+    observations(monkeypatch, role, [dict(ultimate_ready=YES) if ultimate else {}])
+    clock.on_sleep = lambda now: setattr(context.tasker, "stopping", now >= stop_at)
+    with pytest.raises(CombatInputError):
+        role.do_perform()
+    assert [p for p in controller.posts if isinstance(p, tuple)] == (
+        [("down", 1000, 650)] if ultimate else [("down", 975, 510), ("down", 1105, 500)]
+    )
+    assert controller.posts[-1] == "up" and controller.posts.count("up") == (1 if ultimate else 2)
+    assert combat.input_scope.owned_contact is None and not combat.input_scope.release_pending
+    assert role.phase == "recover" and not context.actions
+
+
 def test_failed_release_preserves_pending_settlement_and_blocks_next_cycle(monkeypatch):
     role, combat, context, controller, _ = setup_role(monkeypatch)
     context.recognition_map[module._SPECIAL_BALL_NODE] = make_hit()
     observations(monkeypatch, role, [{}])
     holds = []
 
-    def hold(node, seconds):
+    def hold(node, seconds, **_timing):
         holds.append(node)
         if node == "攻击":
             raise CombatInputError("release failed")

@@ -446,7 +446,7 @@ class InverseCrown(BaseRole):
             self.phase = "idle"
             self._phase_idle()
 
-    def _single_hold(self, node_name: str, seconds: float) -> None:
+    def _single_hold(self, node_name: str, seconds: float, *, start_deadline=None) -> None:
         """Execute one bounded input, releasing through the existing scope.
 
         The elapsed interval completes the requested hold, not a claim about
@@ -457,25 +457,26 @@ class InverseCrown(BaseRole):
         scope.assert_active()
         if getattr(self.combat, "fresh_entry", None) is not None:
             self.combat.fresh_entry.retire()
-        started = scope.monotonic()
 
-        def observe(image):
+        def observe(_image):
             if self.combat._hp_zero_since is not None:
                 scope.request_stop("hp_zero")
                 raise CombatInputError("inverse_crown:hp_zero")
-            return scope.monotonic() - started >= seconds
+            return True  # shared stop/death checks passed; the scope times the hold
 
         completed = self.action.hold_primary_input(
             node_name,
             duration=seconds + scope.capture_timeout + scope.input_timeout + 2.0,
             observe=observe,
+            start_deadline=start_deadline,
+            minimum_hold=seconds,
         )
         if completed is not True or scope.owned_contact is not None or scope.release_pending:
             raise CombatInputError("inverse_crown:single_hold_unconfirmed")
         scope.assert_active()
         self.action.logger.info(
-            "inverse_crown_single input=%s requested_ms=%d elapsed_ms=%d released=true",
-            node_name, round(seconds * 1000), round((scope.monotonic() - started) * 1000),
+            "inverse_crown_single input=%s requested_ms=%d host_dwell_met=true released=true",
+            node_name, round(seconds * 1000),
         )
 
     def _single_prepare(self) -> None:
@@ -524,15 +525,28 @@ class InverseCrown(BaseRole):
                 return
             if snapshot.ultimate_ready is _Signal.YES:
                 self.phase = "ultimate_charge"
-                self._single_hold("技能", _SINGLE_SKILL_HOLD_SECONDS)
+                self._single_hold(
+                    "技能", _SINGLE_SKILL_HOLD_SECONDS,
+                    start_deadline=min(
+                        snapshot.captured_at + _SNAPSHOT_MAX_AGE,
+                        self._stationary_deadline,
+                    ),
+                )
                 self.phase = "ultimate_finish"
                 self._stationary_deadline = scope.monotonic() + _SINGLE_FINISH_TIMEOUT
                 return
             special = self.action.check_status(_SPECIAL_BALL_NODE, image=self.combat.frame)
             self._validate_stationary_snapshot(snapshot, retained=True)
             if special:
+                self._check_stationary_budget()
                 self.phase = "special_hold"
-                self._single_hold("长按1号球", _BURST_HOLD_MS / 1000)
+                self._single_hold(
+                    "长按1号球", _BURST_HOLD_MS / 1000,
+                    start_deadline=min(
+                        snapshot.captured_at + _SNAPSHOT_MAX_AGE,
+                        self._stationary_deadline,
+                    ),
+                )
                 self.phase = "attack_settlement"
                 self._settlement_pending = True
                 # Keep the pair in this call. A main-loop role scan or QTE

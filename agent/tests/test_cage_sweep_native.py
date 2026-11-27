@@ -13,6 +13,7 @@ from maa.custom_recognition import CustomRecognition
 from maa.resource import Resource
 from maa.tasker import Tasker
 
+from action.basics.daily_progress import ADMIT_NODE, GUARD_POINTER
 from test_support.native_lifecycle import stop_and_wait_idle
 
 
@@ -35,10 +36,10 @@ def test_each_room_checks_lower_layers_before_final_score_or_manual_battle(zone)
     assert NODES[expected[0].replace("[JumpBack]", "")]["max_hit"] == 1
     assert NODES["囚笼_自动作战"]["max_hit"] == 6
     assert NODES["囚笼_确认扫荡"]["max_hit"] == 6
-    # 断点续接接线后入口工作链在守卫节点 next 下。
-    entry_next = NODES["幻痛囚笼"]["next"]
-    if str(entry_next[0]).startswith("日常断点_"):
-        entry_next = NODES[str(entry_next[0])]["next"]
+    # 准入后，原囚笼工作链仍由专属守卫拥有。
+    entry = NODES["幻痛囚笼"]
+    assert entry["next"] == [ADMIT_NODE]
+    entry_next = NODES[entry["attach"][GUARD_POINTER]]["next"]
     assert entry_next.index("挑战次数不足") < entry_next.index("检查A区")
 
 

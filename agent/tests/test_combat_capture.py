@@ -10,6 +10,7 @@ import pytest
 
 from action.combat.capture import CombatCaptureError, capture_frame
 from action.combat.config.LoadSetting import ROLE_ACTIONS
+from action.combat.config.inverse_crown_profile import InverseCrownProfile
 from action.combat.core import switch
 from action.combat.core.provider import CombatCheck
 from action.combat.core.session import CombatTask
@@ -233,6 +234,42 @@ def test_capture_failure_at_any_session_stage_runs_existing_cleanup(stage, monke
     assert combat._role_swap_cd_until == {}
     assert combat._hp_zero_since is None
     assert combat.context.actions == []
+
+
+def test_scoped_entry_capture_controller_failure_reports_error_without_input():
+    context = FakeContext()
+    backend = context.tasker
+
+    class UnavailableTasker:
+        @property
+        def controller(self):
+            raise OSError("controller disconnected")
+
+        def __getattr__(self, name):
+            return getattr(backend, name)
+
+    context.tasker = UnavailableTasker()
+    combat = CombatTask(
+        context,
+        _EntryCheck(),
+        inverse_crown_profile=InverseCrownProfile(enabled=True, scene="single"),
+    )
+    combat.wait_combat_time = 0.1
+    with pytest.raises(CombatCaptureError):
+        combat.combat_once()
+
+    assert combat.input_scope is not None
+    assert not combat.input_scope.capture_in_flight
+    assert combat.input_scope.pending_capture is None
+    assert combat.input_scope._controller is None
+    assert combat.team is None and combat.roles == {}
+    assert combat.frame is None
+    assert context.actions == []
+    assert backend.controller.clicks == [] and backend.controller.touches == []
+    assert backend.stop_requests == 1
+    assert combat.outcome.exit_reason == "exception"
+    assert combat.outcome.callback_status == "ERROR"
+    assert combat.outcome.exception_type == "CombatCaptureError"
 
 
 @pytest.mark.parametrize("role_cls", [Aeternion, Arete, Dirge, Lacrimosa])

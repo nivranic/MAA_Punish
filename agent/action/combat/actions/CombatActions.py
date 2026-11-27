@@ -145,7 +145,9 @@ class CombatActions:
             node_name, start_deadline=start_deadline, should_stop=before_down
         )
 
-    def hold_primary_input(self, node_name, *, duration, observe, should_stop=None):
+    def hold_primary_input(
+        self, node_name, *, duration, observe, should_stop=None, start_deadline=None, minimum_hold=0.0
+    ):
         """专项单触点主动作；观察回调须无攻击、闪避或辅助输入。"""
         combat = self._combat_task()
         scope = getattr(combat, "input_scope", None)
@@ -162,7 +164,8 @@ class CombatActions:
             return observe(image)
 
         return scope.hold_semantic(
-            node_name, duration=duration, observe=observe_frame, should_stop=should_stop
+            node_name, duration=duration, observe=observe_frame, should_stop=should_stop,
+            start_deadline=start_deadline, minimum_hold=minimum_hold,
         )
 
     def _run_recognition(

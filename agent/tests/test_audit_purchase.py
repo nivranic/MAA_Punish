@@ -500,3 +500,92 @@ def test_d14_maximum_control_is_not_the_purchase_submit_point(f):
     with pytest.raises(commit.CommitDenied, match="wrong_purchase_case"):
         f.run()
     assert not f.inputs and not f.emitter.events
+
+
+def ocr_child(name, texts):
+    items = [SimpleNamespace(text=text) for text in texts]
+    return RecognitionDetail(1, name, "OCR", True, [0, 0, 1, 1], items, items,
+                             items[0] if items else None, {}, None, [])
+
+
+def purchase_argv(tokens):
+    child = ocr_child("识别购买界面购买", tokens)
+    parent = reco("购买", "And", 3, AndRecognitionResult([child]), [{"reco_id": 1}])
+    return SimpleNamespace(node_name="购买", reco_detail=parent, box=[30, 40, 50, 60])
+
+
+class Recorder:
+    def __init__(self, inputs):
+        self.inputs = inputs
+
+    def run_action_direct(self, action_type, param, box=None, reco_detail=None):
+        self.inputs.append("click")
+        return SimpleNamespace(success=True)
+
+
+def wire_normal_mode(f, monkeypatch):
+    from action.basics import AuditPurchase as module
+    logged = []
+    f.emitter.logger = SimpleNamespace(error=lambda *args: logged.append(args),
+                                        warning=lambda *args: logged.append(args))
+    monkeypatch.setattr(module, "LoggerComponent", lambda _: f.emitter)
+    monkeypatch.setattr(module, "PurchaseCommit", lambda _: f.gate())
+    monkeypatch.setattr(module, "require_current_purchase_day", lambda context, argv: None)
+    f.config = AuditConfig()
+    # Fixture.context holds this same dict; mutate it so the live node matches.
+    f.node.clear()
+    f.node.update({"action": {"type": "Custom", "param": {"custom_action": "AuditPurchase"}},
+                   "attach": {"audit_run": {"enabled": False}}})
+    f.context.clone = lambda: Recorder(f.inputs)
+    return module, logged
+
+
+@pytest.mark.parametrize("tokens,expected", [
+    (["还可购买", "0"], 0),
+    (["还可购买 0"], 0),
+    (["还可购买0"], 0),
+    (["还可购买", "2"], 2),
+    (["20000", "还可购买1"], 1),
+    (["还可购买"], None),
+    (["已售罄"], None),
+    (["20000", "购买"], None),
+    ([], None),
+])
+def test_purchase_limit_reads_only_the_displayed_limit_line(tokens, expected):
+    from action.basics.AuditPurchase import purchase_limit
+    assert purchase_limit(purchase_argv(tokens)) == expected
+
+
+@pytest.mark.parametrize("argv", [
+    SimpleNamespace(), SimpleNamespace(reco_detail=None),
+    SimpleNamespace(reco_detail=reco("购买", "And", 3, AndRecognitionResult([]), [])),
+])
+def test_purchase_limit_stays_unknown_without_limit_tokens(argv):
+    from action.basics.AuditPurchase import purchase_limit
+    assert purchase_limit(argv) is None
+
+
+@pytest.mark.parametrize("tokens,clicks", [
+    (["还可购买", "0"], 0),
+    (["还可购买0"], 0),
+    (["还可购买", "1"], 1),
+    (["20000", "购买"], 1),
+    (["还可购买"], 1),
+])
+def test_normal_mode_skips_a_click_the_page_cannot_accept(f, monkeypatch, tokens, clicks):
+    module, logged = wire_normal_mode(f, monkeypatch)
+    result = module.AuditPurchase().run(f.context, purchase_argv(tokens))
+    assert result.success is True, (logged, f.inputs, f.context.tasker.stops)
+    assert len(f.inputs) == clicks
+    assert bool(logged) is (clicks == 0)
+    assert not (f.paths.marker_root / "pending.claim").exists()
+
+
+def test_audit_intent_node_never_reaches_the_ordinary_limit_skip(f, monkeypatch):
+    from action.basics import AuditPurchase as module
+    monkeypatch.setattr(module, "LoggerComponent", lambda _: f.emitter)
+    monkeypatch.setattr(module, "purchase_limit",
+                        lambda argv: pytest.fail("an audit-intent node must not reach the ordinary skip"))
+    result = module.AuditPurchase().run(f.context, f.argv)
+    assert result.success is False and not f.inputs and f.context.tasker.stops == 1
+

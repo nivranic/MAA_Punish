@@ -1,10 +1,9 @@
 {
     "领取体力": {
         "timeout": 120000,
-        "next": [
-            "日常断点_领取体力",
-            "空任务"
-        ]
+        "attach": {"daily_progress_guard_node": "日常断点_领取体力"},
+        "next": ["日常账本准入"],
+        "on_error": []
     },
     "日常断点_领取体力": {
         "recognition": {

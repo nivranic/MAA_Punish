@@ -83,21 +83,29 @@ def blind_attack_click(
     context: Context, *, attack_count: int = 1, combat: CombatTask | None = None
 ) -> None:
     """识别等待期间盲发普攻/闪避，走 Pipeline 节点（Win32 为 ClickKey）。"""
-    if context.tasker.stopping or (
-        combat is not None and combat.is_observation_protected()
-    ):
+    entry = combat is not None and getattr(combat, "_loading_entry_team", False)
+
+    def blocked() -> bool:
+        stopped = combat._entry_exit_pending() if entry else context.tasker.stopping
+        return stopped or (combat is not None and combat.is_observation_protected())
+
+    if blocked():
         return
     for _ in range(max(1, attack_count)):
-        if context.tasker.stopping or (
-            combat is not None and combat.is_observation_protected()
-        ):
+        if blocked():
             return
         image = capture_frame(context, combat)
-        auto_dodge(context, image, combat=combat, logger=logger)
-        if context.tasker.stopping or (
-            combat is not None and combat.is_observation_protected()
-        ):
+        if entry and not combat._entry_hud_ready(image):
             return
+        auto_dodge(context, image, combat=combat, logger=logger)
+        if blocked():
+            return
+        if entry and combat.frame is not image:
+            # A dodge attempt invalidates the observed frame even when the
+            # action reports failure. Only a new safe frame authorizes attack.
+            image = capture_frame(context, combat)
+            if not combat._entry_hud_ready(image) or blocked():
+                return
         context.run_action("攻击")
 
 

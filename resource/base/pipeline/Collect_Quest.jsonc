@@ -1,9 +1,8 @@
 {
     "任务": {
-        "next": [
-            "日常断点_领取任务",
-            "空任务"
-        ]
+        "attach": {"daily_progress_guard_node": "日常断点_领取任务"},
+        "next": ["日常账本准入"],
+        "on_error": []
     },
     "日常断点_领取任务": {
         "recognition": {
@@ -49,7 +48,7 @@
         "action": {"type": "Click", "param": {"target": [620, 150]}},
         "post_delay": 200,
         "timeout": 4000,
-        "on_error": ["任务失败优雅退出"],
+        "on_error": ["助理交流入口缺失_转任务", "任务失败优雅退出"],
         "next": ["每日助理交流_进入"]
     },
     "每日助理交流_入口文字": {
@@ -64,8 +63,15 @@
         "action": {"type": "Click"},
         "post_delay": 1000,
         "timeout": 8000,
-        "on_error": ["任务失败优雅退出"],
+        "on_error": ["助理交流入口缺失_转任务", "任务失败优雅退出"],
         "next": ["每日助理交流_完成返回"]
+    },
+    "助理交流入口缺失_转任务": {
+        "recognition": {"type": "And", "param": {"all_of": ["主界面_战斗节点"]}},
+        "action": {"type": "DoNothing"},
+        "post_delay": 300,
+        "focus": {"Node.Recognition.Succeeded": "$focus.助理交流入口缺失_转任务"},
+        "next": ["任务_领取"]
     },
     "每日助理交流_档案文字": {
         "recognition": {"type": "OCR", "param": {

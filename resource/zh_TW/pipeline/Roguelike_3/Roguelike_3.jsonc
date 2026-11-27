@@ -170,7 +170,7 @@
         }
     },
     "链路崩溃_文字": {
-        "expected": "鏈路崩潰"
+        "recognition": {"param": {"expected": "^鏈路崩潰$"}}
     },
     "选择难度_矩阵循生_困难模式": {
         "recognition": {

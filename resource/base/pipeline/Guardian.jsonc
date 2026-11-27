@@ -1,9 +1,8 @@
 {
     "维系者行动": {
-        "next": [
-            "日常断点_维系者行动",
-            "空任务"
-        ]
+        "attach": {"daily_progress_guard_node": "日常断点_维系者行动"},
+        "next": ["日常账本准入"],
+        "on_error": []
     },
     "日常断点_维系者行动": {
         "recognition": {
