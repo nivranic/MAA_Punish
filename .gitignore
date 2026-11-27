@@ -466,6 +466,8 @@ uv.lock
 *.jks
 *.keystore
 role_cache.json
+daily_progress.json
+inv_code.json
 
 # Local Python environments and verification caches
 .venv/
@@ -501,9 +503,11 @@ local.properties
 !/.github/android/overlays/app/src/main/java/com/aliothmoon/maafw/log/
 /.github/android/overlays/app/src/main/java/com/aliothmoon/maafw/log/*
 !/.github/android/overlays/app/src/main/java/com/aliothmoon/maafw/log/DebugEvidenceRetention.kt
+!/.github/android/overlays/app/src/main/java/com/aliothmoon/maafw/log/AppLogSegments.kt
 !/.github/android/overlays/app/src/test/java/com/aliothmoon/maafw/log/
 /.github/android/overlays/app/src/test/java/com/aliothmoon/maafw/log/*
 !/.github/android/overlays/app/src/test/java/com/aliothmoon/maafw/log/DebugEvidenceRetentionTest.kt
+!/.github/android/overlays/app/src/test/java/com/aliothmoon/maafw/log/AppLogSegmentsTest.kt
 
 # mimosa 安全扫描插件本地会话状态
 .mimosa/
