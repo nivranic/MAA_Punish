@@ -466,6 +466,16 @@
             }
         }
     },
+    "续玩_宣叙妄响_文字": {
+        "recognition": {
+            "param": {
+                "expected": [
+                    "To Be Continued",
+                    "次回へ続く"
+                ]
+            }
+        }
+    },
     "战斗失败_宣叙妄响_文字": {
         "recognition": {
             "param": {
