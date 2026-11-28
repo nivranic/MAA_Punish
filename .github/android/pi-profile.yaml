@@ -26,6 +26,12 @@ exclude:
   - agent/**/__pycache__/**
   - agent/pytest.ini
   - agent/**/.gitignore
+  # 开发机上的本地状态（都是 Git 忽略的）：不列进来就会被上面的 agent/** 打进 APK，
+  # 带着会话 hook 状态与源码基线，还会让设备上的升级重解删不掉旧残留。
+  # tools/ci/check_android_pi_profile.py 会挡住新出现的顶层点目录和缓存目录。
+  - agent/.mimosa/**
+  - agent/pytest-cache/**
+  - agent/build-debug/**
 
 agent:
   sourceDir: ../../build-android/agent-dist

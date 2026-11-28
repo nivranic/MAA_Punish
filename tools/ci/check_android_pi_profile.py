@@ -8,6 +8,7 @@ import 分片读不到只会降级成警告并跳过（该分片的 option/setti
 
 本脚本只检查客户端加载 PI 时必然要读的那几类文件（import 分片、languages、icon、
 license、agent 脚本入口），resource/ 与 agent/ 的载荷由配方里的整目录 glob 负责。
+另外挡住开发机上的本地状态（顶层点目录／点文件、pytest 缓存、本地构建产物）被 agent/** 打进 APK。
 """
 
 from __future__ import annotations
@@ -21,6 +22,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PROFILE = REPO_ROOT / ".github" / "android" / "pi-profile.yaml"
 
 PROJECT_DIR_PLACEHOLDER = "{PROJECT_DIR}/"
+
+# 工作区 agent/ 下 Git 忽略的本地缓存目录；点目录／点文件另按名字前缀处理。
+RESIDUE_DIR_NAMES = frozenset({"pytest-cache", "build-debug"})
 
 
 def parse_profile_lists(text: str) -> tuple[list[str], list[str]]:
@@ -117,6 +121,34 @@ def collect_references(interface: dict[str, object]) -> list[tuple[str, str]]:
     return refs
 
 
+def packaged_by(include_patterns: list[re.Pattern[str]], exclude_patterns: list[re.Pattern[str]], relative: str) -> bool:
+    """一个相对 assets 的路径按配方会不会进包：先被 include 覆盖，再没被 exclude 挖掉。"""
+    if not any(regex.match(relative) for regex in include_patterns):
+        return False
+    return not any(regex.match(relative) for regex in exclude_patterns)
+
+
+def residue_errors(agent_dir: Path, packaged) -> list[str]:
+    """开发残留不得进包。
+
+    工作区 agent/ 下 Git 忽略的本地状态（顶层点目录／点文件、pytest 缓存、本地构建产物）只在
+    开发机上有，CI 的干净检出里没有，所以不会有人为它们写 exclude；本机出包时就被 `agent/**`
+    一并打进 APK。2026-11-27 的正式包里就带着 `.mimosa/hook-state`（会话状态与源码基线）、
+    `pytest-cache`、`build-debug`。
+    """
+    if not agent_dir.is_dir():
+        return []
+    errors: list[str] = []
+    for entry in sorted(agent_dir.iterdir()):
+        is_dir = entry.is_dir()
+        if not (entry.name.startswith(".") or (is_dir and entry.name in RESIDUE_DIR_NAMES)):
+            continue
+        probe = f"agent/{entry.name}/probe" if is_dir else f"agent/{entry.name}"
+        if packaged(probe):
+            errors.append(f"开发残留会被打进 APK：agent/{entry.name}{'/' if is_dir else ''}（补进配方 exclude）")
+    return errors
+
+
 def main() -> int:
     if not PROFILE.is_file():
         print(f"[error] 找不到 Android 打包配方：{PROFILE.relative_to(REPO_ROOT)}")
@@ -141,15 +173,13 @@ def main() -> int:
         return 1
     interface = json.loads(interface_path.read_text(encoding="utf-8"))
 
-    include_patterns = [(pattern, glob_to_regex(pattern)) for pattern in include]
-    exclude_patterns = [(pattern, glob_to_regex(pattern)) for pattern in exclude]
+    include_patterns = [glob_to_regex(pattern) for pattern in include]
+    exclude_patterns = [glob_to_regex(pattern) for pattern in exclude]
 
     errors: list[str] = []
 
     def packaged(relative: str) -> bool:
-        if not any(regex.match(relative) for _, regex in include_patterns):
-            return False
-        return not any(regex.match(relative) for _, regex in exclude_patterns)
+        return packaged_by(include_patterns, exclude_patterns, relative)
 
     for purpose, relative in collect_references(interface):
         if not packaged(relative):
@@ -167,11 +197,14 @@ def main() -> int:
         if not (assets_dir / head).exists():
             errors.append(f"include: {pattern} 指向的 {head} 在仓库里不存在")
 
+    errors.extend(residue_errors(assets_dir / "agent", packaged))
+
     if errors:
         print(f"Android 打包配方校验失败（{PROFILE.relative_to(REPO_ROOT)}）：")
         for error in errors:
             print(f"  - {error}")
-        print("\n注：设备端只会把这些缺失报成 warning 并跳过，表现为对应选项/分片整体消失。")
+        if any(not error.startswith("开发残留") for error in errors):
+            print("\n注：设备端只会把这些缺失报成 warning 并跳过，表现为对应选项/分片整体消失。")
         return 1
 
     print(f"Android 打包配方校验通过：{len(include)} 条 include 覆盖了 interface.json 的加载期引用。")
