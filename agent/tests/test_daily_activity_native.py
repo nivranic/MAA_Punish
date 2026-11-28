@@ -22,6 +22,12 @@ TIERS = {"0-19": (0, 19), "20-39": (20, 39), "40-59": (40, 59),
          "60-79": (60, 79), "80-99": (80, 99), "100": (100, 200)}
 
 
+def _trace(tasker, job):
+    """失败时的现场：任务状态加节点名；拿不到详情（任务异常结束）也不让断言消息自己再抛。"""
+    detail = job.get()
+    return job.status, None if detail is None else [tasker.get_node_detail(i).name for i in detail.node_id_list]
+
+
 def native_resource(tmp_path, language="base"):
     Tasker.set_log_dir(tmp_path / "native")
     Tasker.set_debug_mode(False)
@@ -319,7 +325,8 @@ def test_reward_completion_requires_score_and_all_five_claimed(
                                              post_wait_freezes={"time": 0})
     try:
         job = tasker.post_task("任务", overrides).wait()
-        assert job.succeeded
+        # 2026-11-26 16:17 全量回归里入场测试的四个语言参数偶发同时 job.succeeded 为假；失败时把状态和节点名留下。
+        assert job.succeeded, _trace(tasker, job)
         names = [tasker.get_node_detail(i).name for i in job.get().node_id_list]
         assert names[:4] == ["任务", dp.ADMIT_NODE, "日常断点_领取任务", "每日任务"]
         assert ("任务失败优雅退出" not in names) is completes
@@ -389,7 +396,8 @@ def test_task_entry_requires_assistant_menu_and_profile_before_claiming(
         overrides["任务_领取"] = {"next": [], "pre_delay": 0, "post_delay": 0}
         overrides["任务失败优雅退出"] = {"next": [], "on_error": []}
         job = tasker.post_task("任务", overrides).wait()
-        assert job.succeeded
+        # 2026-11-26 16:17 全量回归里入场测试的四个语言参数偶发同时 job.succeeded 为假；失败时把状态和节点名留下。
+        assert job.succeeded, _trace(tasker, job)
         names = [tasker.get_node_detail(i).name for i in job.get().node_id_list]
         assert names[:3] == ["任务", dp.ADMIT_NODE, "日常断点_领取任务"]
         assert "空任务" not in names

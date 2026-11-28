@@ -121,7 +121,13 @@ def test_d08_map_settles_only_with_current_native_hud(tmp_path, monkeypatch, sce
     assert len(clicks) == {"real_hud": 2, "second_start": 3}.get(scene, 1), (clicks, names)
     assert 976 <= clicks[0][0] < 1232 and 564 <= clicks[0][1] < 707
     assert not ledger.exists()
-    assert job.succeeded and names[-3:] == FAILED, names
+    # 2026-11-26 16:32 全量回归里 nonzero_clock 场景偶发过一次 job.succeeded 为假，当时的断言消息
+    # 只有被截断的节点名；把每个节点的完成态、识别算法与动作一并留下，下次复现才有可定位的现场。
+    evidence = [(n.name, n.completed,
+                 n.recognition.algorithm if n.recognition else None,
+                 n.action.action if n.action else None,
+                 n.action.success if n.action else None) for n in nodes]
+    assert job.succeeded and names[-3:] == FAILED, (job.status, evidence)
     assert names.count(HUD) == int(had_hud)
     for n in nodes:
         if n.name == MAP:
