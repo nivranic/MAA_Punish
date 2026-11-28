@@ -53,5 +53,5 @@ MAA_Punish 通过 MaaFramework 的图像识别、Pipeline 与 Python 自定义�
 - 不为"留档"复制整份产物目录；要留证据就把关键日志/截图导到 `debug/` 顶层并带日期。
 - 交付说明加一行：`产物：本次 X GB，已清理 Y GB，保留 Z GB（原因）`。
 - 只删自己产生的目录；`debug/` 下无法确认归属的目录列出来问用户，不自行删除。
-- 取证工具的固定依赖不是产物，清理时不删：`build-a26r9/` 下的 `*.py`／`*.ps1` 取证脚本，以及 `debug/tools/`（scrcpy 便携包、页面模板）。`build-a26r9/` 名字虽匹配 `build-*`，但其中的脚本和设备日志留档不可重建（可重建的构建树是 `maafwapp/`），不得整体清。2026-11-27 按日期清理曾把 `debug/daily-20261112/device.py` 与 scrcpy 包一并带走，起跑与录像两条链在无人值守前失效。
+- 取证工具与测试的固定依赖不是产物，清理时不删：`build-a26r9/` 下的 `*.py`／`*.ps1` 取证脚本，`debug/tools/`（scrcpy 便携包、页面模板），以及 `debug/test-fixtures/`（真帧回放用例的本地夹具，Git 忽略、清单按哈希钉死；2026-11-28 发现它已不在，317 个真帧回放用例因此跳过，要重新采帧）。`build-a26r9/` 名字虽匹配 `build-*`，但其中的脚本和设备日志留档不可重建（可重建的构建树是 `maafwapp/`），不得整体清。2026-11-27 按日期清理曾把 `debug/daily-20261112/device.py` 与 scrcpy 包一并带走，起跑与录像两条链在无人值守前失效。
 - 完整判定标准见 `~/.agents/standards/artifact-hygiene.md`。
